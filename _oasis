@@ -1,0 +1,53 @@
+OASISFormat: 0.4
+Name:        pendulum
+Version:     0.01
+Synopsis:    implementation and experimentation for library or language pendulum
+Authors:     Remy El Sibaïe
+License:     LGPL
+Plugins:     META (0.4), DevFiles (0.4)
+BuildTools:  ocamlbuild
+
+
+
+Library "pendulum"
+  Path: src/core/
+  Modules:
+    Ast, Grc, Interp
+  BuildDepends:
+    ppx_deriving.std
+
+
+Executable "main"
+  Path:       src/
+  MainIs:     main.ml
+  CompiledObject: best
+  BuildDepends:
+    pendulum, unix
+    
+Executable "ppx_pendulum"
+  Path:           ./src/ppx
+  BuildDepends:
+    compiler-libs.common,
+    ppx_tools.metaquot,
+    pendulum
+  MainIs:         ppx_pendulum.ml
+  CompiledObject: best
+
+Executable test_lang_bin
+  Build$: flag(tests)
+  Path:	   tests/
+  MainIs:  test_lang.ml
+  CompiledObject: best
+  Install: false
+  BuildDepends:
+    oUnit, pendulum
+    
+Test test_ppx_protobuf
+  Command:        ocamlbuild -cflags '-ppx _build/src/ppx/ppx_pendulum.native -dsource' \
+                                         tests/ppx/test_ppx.byte
+  TestTools:      ppx_pendulum
+    
+Test "test_pendulum"
+  Run$:		flag(tests)
+  Command: 	$test_lang_bin
+  WorkingDirectory: tests/
