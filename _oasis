@@ -42,7 +42,7 @@ Executable test_lang_bin
   BuildDepends:
     oUnit, pendulum
     
-Test test_ppx_protobuf
+Test test_ppx_pendulum
   Command:        ocamlbuild -cflags '-ppx _build/src/ppx/ppx_pendulum.native -dsource' \
                                          tests/ppx/test_ppx.byte
   TestTools:      ppx_pendulum
