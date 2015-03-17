@@ -24,14 +24,32 @@ Executable "main"
   BuildDepends:
     pendulum, unix
     
+Library "ppx"
+  FindlibName: ppx
+  FindlibParent: pendulum
+  Path: src/ppx
+  Modules: Ppx_pendulum
+  XMETADescription: New-style (ppx) syntax extension
+  XMETARequires:    pendulum
+  XMETAExtraLines:  ppx = "ppx_pendulum"
+    
 Executable "ppx_pendulum"
-  Path:           ./src/ppx
+  Path:           src/ppx
   BuildDepends:
     compiler-libs.common,
     ppx_tools.metaquot,
-    pendulum
-  MainIs:         ppx_pendulum.ml
+  MainIs:         ppx_pendulum_ex.ml
   CompiledObject: best
+
+Executable "test_ppx"
+  Path: tests/ppx
+  Build$: flag(tests)
+  Install: false
+  CompiledObject: best
+  MainIs: test_ppx.ml
+  BuildTools: ppx_pendulum
+  BuildDepends: oUnit, pendulum
+
 
 Executable test_lang_bin
   Build$: flag(tests)
@@ -41,11 +59,6 @@ Executable test_lang_bin
   Install: false
   BuildDepends:
     oUnit, pendulum
-    
-Test test_ppx_pendulum
-  Command:        ocamlbuild -cflags '-ppx _build/src/ppx/ppx_pendulum.native -dsource' \
-                                         tests/ppx/test_ppx.byte
-  TestTools:      ppx_pendulum
     
 Test "test_pendulum"
   Run$:		flag(tests)
