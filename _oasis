@@ -7,7 +7,13 @@ License:     LGPL
 Plugins:     META (0.4), DevFiles (0.4)
 BuildTools:  ocamlbuild
 
+Flag all
+  Description: build and install everything
+  Default: false
 
+Flag ppx
+  Description: Build the ppx syntax extension
+  Default$: flag(all)
 
 Library "pendulum"
   Path: src/core/
@@ -24,31 +30,22 @@ Executable "main"
   BuildDepends:
     pendulum, unix
     
-Library "ppx"
-  FindlibName: ppx
-  FindlibParent: pendulum
-  Path: src/ppx
-  Modules: Ppx_pendulum
-  XMETADescription: New-style (ppx) syntax extension
-  XMETARequires:    pendulum
-  XMETAExtraLines:  ppx = "ppx_pendulum"
-    
 Executable "ppx_pendulum"
   Path:           src/ppx
   BuildDepends:
     compiler-libs.common,
     ppx_tools.metaquot,
-  MainIs:         ppx_pendulum_ex.ml
+  MainIs:         ppx_pendulum.ml
   CompiledObject: best
 
 Executable "test_ppx"
   Path: tests/ppx
-  Build$: flag(tests)
+  Build$: flag(tests) || flag(ppx)
   Install: false
   CompiledObject: best
   MainIs: test_ppx.ml
   BuildTools: ppx_pendulum
-  BuildDepends: oUnit, pendulum
+  BuildDepends: ppx_pendulum,oUnit, pendulum
 
 
 Executable test_lang_bin

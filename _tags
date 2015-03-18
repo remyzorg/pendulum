@@ -1,0 +1,5 @@
+
+<tests/ppx/*>: ppx_pendulum
+
+# OASIS_START
+# OASIS_STOP
