@@ -15,17 +15,11 @@ let lp = [%sync
    loop begin
      pause
    end
-
 ]
-let loop_pause () =
-  Ast.normalize @@
-  loop [
-    pause
-  ]
+
 
 
 let loop_emit_pause () =
-  Ast.normalize @@
   loop [
     emit "HOP";
     pause

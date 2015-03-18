@@ -1,5 +1,4 @@
 
-
 open Ast_mapper
 open Ast_helper
 open Asttypes
@@ -12,34 +11,83 @@ let syntax_error ~loc s = raise (Location.Error (
     Location.error ~loc ("[%sync] " ^ s)))
 
 
-let rec handle_expr ~loc e =
+let check_ident e =
+  match e.pexp_desc with
+  | Pexp_ident {txt = Lident s; loc} ->
+    {e with pexp_desc = Pexp_constant (Const_string (s, None))}
+  | _ -> syntax_error ~loc:e.pexp_loc "identifier expected"
+
+let rec handle_expr e =
   match e with
-  | [%expr nothing] -> ()
-  | [%expr pause] -> ()
-  | [%expr emit [%e? signal]] -> ()
-  | [%expr exit [%e? label]] -> ()
-  | [%expr atom [%e? e]] -> ()
+  (*Nothing*)
+  | [%expr nothing] ->
+    [%expr Nothing]
+  (*Pause*)
+  | [%expr pause] ->
+    [%expr Pause]
+
+  (*Emit*)
+  | [%expr emit [%e? signal]] ->
+    [%expr Emit [%e check_ident signal]]
+
+  (*Exit*)
+  | [%expr exit [%e? label]] ->
+    [%expr Emit [%e check_ident label]]
+
+  (*Atom*)
+  | [%expr atom [%e? e]] ->
+    [%expr Atom (fun () -> [%e e]; ())]
+
+  (*Loop*)
   | [%expr loop [%e? e]] ->
-    handle_expr ~loc e
+    [%expr Loop ([%e handle_expr e])]
+
+  (*Seq*)
   | [%expr [%e? e1]; [%e? e2]] ->
-    handle_expr ~loc e1; handle_expr ~loc e2
+    [%expr Seq ([%e handle_expr e1], [%e handle_expr e2])]
+
+  (*Par*)
   | [%expr [%e? e1] || [%e? e2]] ->
-    handle_expr ~loc e1; handle_expr ~loc e2
+    [%expr Par ([%e handle_expr e1], [%e handle_expr e2])]
+
+  (*Present*)
   | [%expr present [%e? signal] [%e? e1] [%e? e2]] ->
-    handle_expr ~loc e1; handle_expr ~loc e2
+    handle_expr e1; handle_expr e2
+
+  (*Suspend*)
   | [%expr suspend [%e? e] [%e? signal]] ->
-    handle_expr ~loc e
+    handle_expr e
+
+  (*Trap*)
   | [%expr trap [%e? label] [%e? e]] ->
-    handle_expr ~loc e
-  (* | [%expr ] *)
+    handle_expr e
 
+  (*Halt*)
+  | [%expr halt ] -> ()
 
-  | _ -> syntax_error ~loc "Syntax error"
+  (*Sustain*)
+  | [%expr sustain [%e? signal]] -> ()
+
+  (*Present*)
+  | [%expr present [%e? signal] [%e? e]] -> ()
+
+  (*Await*)
+  | [%expr await [%e? signal]] -> ()
+
+  (*Abort*)
+  | [%expr abort [%e? e][%e? signal]] -> ()
+
+  (*Loopeach*)
+  | [%expr loopeach [%e? e] [%e? signal]] -> ()
+
+  (*Every*)
+  | [%expr every [%e? e] [%e? signal]] -> ()
+
+  | _ -> syntax_error ~loc:e.pexp_loc "Syntax error"
 
 
 
 let extend_mapper argv =
-  (* Our getenv_mapper only overrides the handling of expressions in the default mapper. *)
   { default_mapper with
     expr = fun mapper expr ->
       match expr with

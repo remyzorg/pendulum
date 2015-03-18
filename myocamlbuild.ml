@@ -7,7 +7,7 @@
 open Ocamlbuild_plugin
 
 let () =
-  dispatch
+  dispatch @@ MyOCamlbuildBase.dispatch_combine [
     (fun hook ->
        dispatch_default hook;
        match hook with
@@ -23,7 +23,10 @@ let () =
 
          flag ["ocaml"; "compile"; "ppx_pendulum"] &
          S [A "-ppx"; A ("src/ppx/ppx_pendulum." ^ native_suffix)];
-
+         mark_tag_used("tests");
+         mark_tag_used("pkg_ppx_pendulum");
 
        | _ ->
-         ())
+         ());
+    dispatch_default
+  ]

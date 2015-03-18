@@ -47,7 +47,6 @@ Executable "test_ppx"
   BuildTools: ppx_pendulum
   BuildDepends: ppx_pendulum,oUnit, pendulum
 
-
 Executable test_lang_bin
   Build$: flag(tests)
   Path:	   tests/
@@ -60,4 +59,9 @@ Executable test_lang_bin
 Test "test_pendulum"
   Run$:		flag(tests)
   Command: 	$test_lang_bin
+  WorkingDirectory: tests/
+  
+Test "test_pendulum"
+  Run$:		flag(tests)
+  Command: 	$test_ppx
   WorkingDirectory: tests/

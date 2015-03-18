@@ -6,8 +6,8 @@ type label = Label of string [@@deriving show]
 
 type statement =
   | Loop of statement
-  | Seq of statement list
-  | Par of statement list
+  | Seq of statement * statement
+  | Par of statement * statement
   | Emit of signal
   | Nothing
   | Pause
@@ -22,8 +22,8 @@ type statement =
 
 type dstatement =
   | Loop of dstatement
-  | Seq of dstatement list
-  | Par of dstatement list
+  | Seq of dstatement * dstatement
+  | Par of dstatement * dstatement
   | Emit of signal
   | Nothing
   | Pause
@@ -32,7 +32,6 @@ type dstatement =
   | Exit of label
   | Present of signal * dstatement * dstatement
   | Atom of (unit -> unit)
-
   | Signal of signal * dstatement
 
   | Halt
@@ -89,8 +88,8 @@ let rec normalize : dstatement -> statement = function
   | Await s -> Await s
 
   | Loop st -> Loop (normalize st)
-  | Seq sts -> Seq (List.map normalize sts)
-  | Par sts -> Par (List.map normalize sts)
+  | Seq (st1, st2) -> Seq (normalize st1, normalize st2)
+  | Par (st1, st2) -> Par (normalize st1, normalize st2)
   | Suspend (st, s) -> Suspend (normalize st, s)
   | Present (s, st1, st2) -> Present (s, normalize st1, normalize st2)
   | Trap (lbl, st) -> Trap (lbl, normalize st)
@@ -100,14 +99,14 @@ let rec normalize : dstatement -> statement = function
   | Sustain s -> Loop (Emit s)
   | Present_then (s, st) -> Present (s, (normalize st), Nothing)
   | Await_imm s ->
-    Trap (trap_signal, (Loop (Seq [normalize (Present_then (s, (Exit trap_signal))); Pause])))
-  | Suspend_imm (st, s) -> Suspend (normalize (Present_then (s, Seq [Pause; st])), s)
-  | Abort (st, s) -> Trap (trap_signal, Par [Seq [normalize (Suspend_imm (st, s)); Exit trap_signal];
-                            Seq [normalize (Await s); Exit trap_signal]])
+    Trap (trap_signal, (Loop (Seq (normalize (Present_then (s, (Exit trap_signal))), Pause))))
+  | Suspend_imm (st, s) -> Suspend (normalize (Present_then (s, Seq (Pause, st))), s)
+  | Abort (st, s) -> Trap (trap_signal, Par (Seq (normalize (Suspend_imm (st, s)), Exit trap_signal),
+                            Seq (normalize (Await s), Exit trap_signal)))
   | Weak_abort (st, s) ->
-    Trap (trap_signal, Par [normalize st; Seq [normalize (Await s); Exit trap_signal]])
-  | Loop_each (st, s) -> Loop (normalize (Abort (Seq [st; Halt], s)))
-  | Every (s, st) -> Seq [normalize (Await s); normalize (Loop_each (st, s))]
+    Trap (trap_signal, Par (normalize st, Seq (normalize (Await s), Exit trap_signal)))
+  | Loop_each (st, s) -> Loop (normalize (Abort (Seq (st, Halt), s)))
+  | Every (s, st) -> Seq (normalize (Await s), normalize (Loop_each (st, s)))
 
 
 let (!+) a = incr a; !a
@@ -115,10 +114,10 @@ let (!+) a = incr a; !a
 
 let normalize_await : dstatement -> statement = function
   | Await s ->
-    Trap (trap_signal, (Loop (Seq [
-        Pause;
+    Trap (trap_signal, (Loop (Seq (
+        Pause,
         normalize (Present_then (s, (Exit trap_signal)))
-      ])))
+      ))))
   | _ -> assert false
 
 module Tagged = struct
@@ -179,23 +178,17 @@ module Tagged = struct
       match ast with
       | Loop t -> mk_tagged (Loop (visit env t)) !+id
 
-      | Seq [] -> mk_tagged Nothing !+id
-      | Seq [e] -> visit env e
-      | Seq (h :: t) ->
+      | Seq (st1, st2) ->
         let id = !+id in
-        let fs = visit env h in
-        let sn = visit env (Seq t) in
-        mk_tagged (Seq (fs, sn)) id
+        let f1 = visit env st1 in
+        let f2 = visit env st2 in
+        mk_tagged (Seq (f1, f2)) id
 
-
-
-      | Par [] -> mk_tagged Nothing !+id
-      | Par [e] -> visit env e
-      | Par (h :: t) ->
+      | Par (st1, st2) ->
         let id = !+id in
-        let fs = visit env h in
-        let sn = visit env (Par t) in
-        mk_tagged (Par (fs, sn)) id
+        let f1 = visit env st1 in
+        let f2 = visit env st2 in
+        mk_tagged (Par (f1, f2)) id
 
       | Emit s -> mk_tagged (Emit (rename env.signals s ast)) !+id
       | Nothing -> mk_tagged Nothing !+id
@@ -297,19 +290,18 @@ module Analysis = struct
 end
 
 
-let rec flatten : statement list -> statement list = function
-  | [] -> []
-  | (Seq l) :: t -> l @ flatten t
-  | st :: t -> st :: flatten t
-
 (* let rec flatten_par : statement list -> statement list = function *)
 (*   | [] -> [] *)
 (*   | (Par l) :: t -> l @ flatten_par t *)
 (*   | st :: t -> st :: flatten_par t *)
 
+let list_to_seq l =
+  let rec step match l with
+  | [] -> []
+  |
 
-let (//) a b = Par [a; b]
-let (!!) l = Seq l
+let (//) a b = Par (a, b)
+let (!!) l =
 let loop_each r p = Loop_each (p, r)
 let loop l = Loop (Seq l)
 let atom f = Atom f
