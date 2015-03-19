@@ -20,31 +20,33 @@ type statement =
   | Await of signal
 [@@deriving show]
 
-type dstatement =
-  | Loop of dstatement
-  | Seq of dstatement * dstatement
-  | Par of dstatement * dstatement
+module Derived = struct
+  type statement =
+  | Loop of statement
+  | Seq of statement * statement
+  | Par of statement * statement
   | Emit of signal
   | Nothing
   | Pause
-  | Suspend of dstatement * signal
-  | Trap of label * dstatement
+  | Suspend of statement * signal
+  | Trap of label * statement
   | Exit of label
-  | Present of signal * dstatement * dstatement
+  | Present of signal * statement * statement
   | Atom of (unit -> unit)
-  | Signal of signal * dstatement
+  | Signal of signal * statement
 
   | Halt
   | Sustain of signal
-  | Present_then of signal * dstatement
+  | Present_then of signal * statement
   | Await of signal
   | Await_imm of signal
-  | Suspend_imm of dstatement * signal
-  | Abort of dstatement * signal
-  | Weak_abort of dstatement * signal
-  | Loop_each of dstatement * signal
-  | Every of signal * dstatement
-[@@deriving show]
+  | Suspend_imm of statement * signal
+  | Abort of statement * signal
+  | Weak_abort of statement * signal
+  | Loop_each of statement * signal
+  | Every of signal * statement
+      [@@deriving show]
+end
 
 
 type error = Unbound_identifier of string * statement
@@ -79,7 +81,9 @@ module StringMap = Map.Make(struct
 
 let trap_signal = Label "Trap"
 
-let rec normalize : dstatement -> statement = function
+let rec normalize : Derived.statement -> statement =
+  let open Derived in
+  function
   | Emit ds -> Emit ds
   | Exit lbl -> Exit lbl
   | Pause -> Pause
@@ -112,7 +116,9 @@ let rec normalize : dstatement -> statement = function
 let (!+) a = incr a; !a
 
 
-let normalize_await : dstatement -> statement = function
+let normalize_await : Derived.statement -> statement =
+  let open Derived in
+  function
   | Await s ->
     Trap (trap_signal, (Loop (Seq (
         Pause,
@@ -295,15 +301,18 @@ end
 (*   | (Par l) :: t -> l @ flatten_par t *)
 (*   | st :: t -> st :: flatten_par t *)
 
+open Derived
 let list_to_seq l =
-  let rec step match l with
-  | [] -> []
-  |
+  let rec step l = match l with
+  | [] -> Nothing
+  | [e] -> e
+  | h :: t -> (Seq (h, step t))
+  in step l
 
 let (//) a b = Par (a, b)
-let (!!) l =
+let (!!) l = list_to_seq l
 let loop_each r p = Loop_each (p, r)
-let loop l = Loop (Seq l)
+let loop l = Loop (!! l)
 let atom f = Atom f
 let await a = Await a
 let emit a = Emit a

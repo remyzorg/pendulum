@@ -7,35 +7,38 @@ module IntMap : Map.S with type key = int
 module StringMap : Map.S with type key = string
 module SignalSet : Set.S with type elt = signal
 
-type dstatement =
-  | Loop of dstatement
-  | Seq of dstatement list
-  | Par of dstatement list
+module Derived : sig
+  type statement =
+  | Loop of statement
+  | Seq of statement * statement
+  | Par of statement * statement
   | Emit of signal
   | Nothing
   | Pause
-  | Suspend of dstatement * signal
-  | Trap of label * dstatement
+  | Suspend of statement * signal
+  | Trap of label * statement
   | Exit of label
-  | Present of signal * dstatement * dstatement
+  | Present of signal * statement * statement
   | Atom of (unit -> unit)
-  | Signal of signal * dstatement
+  | Signal of signal * statement
   | Halt
   | Sustain of signal
-  | Present_then of signal * dstatement
+  | Present_then of signal * statement
   | Await of signal
   | Await_imm of signal
-  | Suspend_imm of dstatement * signal
-  | Abort of dstatement * signal
-  | Weak_abort of dstatement * signal
-  | Loop_each of dstatement * signal
-  | Every of signal * dstatement
-[@@deriving show]
+  | Suspend_imm of statement * signal
+  | Abort of statement * signal
+  | Weak_abort of statement * signal
+  | Loop_each of statement * signal
+  | Every of signal * statement
+      [@@deriving show]
+
+end
 
 type statement =
   | Loop of statement
-  | Seq of statement list
-  | Par of statement list
+  | Seq of statement * statement
+  | Par of statement * statement
   | Emit of signal
   | Nothing
   | Pause
@@ -89,16 +92,15 @@ module Analysis : sig
   val blocking : Tagged.t -> bool
 end
 
-val flatten : statement list -> statement list
-val normalize : dstatement -> statement
-val (//) : dstatement -> dstatement -> dstatement
-val (!!) : dstatement list -> dstatement
-val loop_each : signal -> dstatement -> dstatement
-val loop: dstatement list -> dstatement
-val atom: (unit -> unit) -> dstatement
-val await : signal -> dstatement
-val trap : string -> dstatement -> dstatement
-val emit : signal -> dstatement
-val pause : dstatement
-val exit_l : string -> dstatement
-val abort : signal -> dstatement -> dstatement
+val normalize : Derived.statement -> statement
+val (//) : Derived.statement -> Derived.statement -> Derived.statement
+val (!!) : Derived.statement list -> Derived.statement
+val loop_each : signal -> Derived.statement -> Derived.statement
+val loop: Derived.statement list -> Derived.statement
+val atom: (unit -> unit) -> Derived.statement
+val await : signal -> Derived.statement
+val trap : string -> Derived.statement -> Derived.statement
+val emit : signal -> Derived.statement
+val pause : Derived.statement
+val exit_l : string -> Derived.statement
+val abort : signal -> Derived.statement -> Derived.statement

@@ -3,39 +3,43 @@ open OUnit
 
 
 open Ast
+open Ast.Derived
 open Grc
 
 
+let loop_emit_pause =
+  loop [
+    pause
+  ]
 
-let () =
-  Format.printf "Tests @\n"
-
-
-let lp = [%sync
+let test_loop_pause ctx = assert_equal [%sync
    loop begin
      pause
    end
-]
+] loop_emit_pause
 
 
+let suite =
+"suite">:::
 
-let loop_emit_pause () =
-  loop [
-    emit "HOP";
-    pause
+ ["test1">:: test_loop_pause;
+
   ]
+
+let _ =
+  run_test_tt_main suite
 
 
 let loop_par_emit () =
   Ast.normalize @@
   Signal ("a",
-          Loop (Seq [
+          Loop (!! [
               Pause;
               emit "a";
               Signal ("a", emit "a")
             ])
           //
-          Loop (Seq [
+          Loop (!! [
               await "a";
               Atom (fun _ -> Format.printf "Hello")
             ]))

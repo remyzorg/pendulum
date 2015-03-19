@@ -3,12 +3,9 @@ open OUnit
 
 
 open Ast
+open Ast.Derived
 open Grc
 
-
-
-let () =
-  Format.printf "Tests @\n"
 
 
 
@@ -30,13 +27,13 @@ let loop_emit_pause () =
 let loop_par_emit () =
   Ast.normalize @@
   Signal ("a",
-          Loop (Seq [
+          Loop (!! [
               Pause;
               emit "a";
               Signal ("a", emit "a")
             ])
           //
-          Loop (Seq [
+          Loop (!! [
               await "a";
               Atom (fun _ -> Format.printf "Hello")
             ]))

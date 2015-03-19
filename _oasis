@@ -59,9 +59,9 @@ Executable test_lang_bin
 Test "test_pendulum"
   Run$:		flag(tests)
   Command: 	$test_lang_bin
-  WorkingDirectory: tests/
+  WorkingDirectory: tests
   
-Test "test_pendulum"
+Test "test_ppx"
   Run$:		flag(tests)
   Command: 	$test_ppx
-  WorkingDirectory: tests/
+  WorkingDirectory: tests/ppx

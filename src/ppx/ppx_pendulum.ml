@@ -19,69 +19,60 @@ let check_ident e =
 
 let rec handle_expr e =
   match e with
-  (*Nothing*)
   | [%expr nothing] ->
     [%expr Nothing]
-  (*Pause*)
+
   | [%expr pause] ->
     [%expr Pause]
 
-  (*Emit*)
   | [%expr emit [%e? signal]] ->
     [%expr Emit [%e check_ident signal]]
 
-  (*Exit*)
   | [%expr exit [%e? label]] ->
-    [%expr Emit [%e check_ident label]]
+    [%expr Exit [%e check_ident label]]
 
-  (*Atom*)
   | [%expr atom [%e? e]] ->
     [%expr Atom (fun () -> [%e e]; ())]
 
-  (*Loop*)
   | [%expr loop [%e? e]] ->
     [%expr Loop ([%e handle_expr e])]
 
-  (*Seq*)
   | [%expr [%e? e1]; [%e? e2]] ->
     [%expr Seq ([%e handle_expr e1], [%e handle_expr e2])]
 
-  (*Par*)
   | [%expr [%e? e1] || [%e? e2]] ->
     [%expr Par ([%e handle_expr e1], [%e handle_expr e2])]
 
-  (*Present*)
   | [%expr present [%e? signal] [%e? e1] [%e? e2]] ->
-    handle_expr e1; handle_expr e2
+    [%expr Present ([%e check_ident signal], [%e handle_expr e1], [%e handle_expr e2])]
 
-  (*Suspend*)
   | [%expr suspend [%e? e] [%e? signal]] ->
-    handle_expr e
+    [%expr Suspend ([%e handle_expr e], [%e check_ident signal])]
 
-  (*Trap*)
   | [%expr trap [%e? label] [%e? e]] ->
-    handle_expr e
+    [%expr Trap (Label [%e check_ident label], [%e handle_expr e])]
 
-  (*Halt*)
-  | [%expr halt ] -> ()
+  | [%expr halt ] ->
+    [%expr Halt]
 
-  (*Sustain*)
-  | [%expr sustain [%e? signal]] -> ()
+  | [%expr sustain [%e? signal]] ->
+    [%expr Sustain ([%e check_ident signal])]
 
-  (*Present*)
-  | [%expr present [%e? signal] [%e? e]] -> ()
+  | [%expr present [%e? signal] [%e? e]] ->
+    [%expr Present_then
+        ([%e check_ident signal], [%e handle_expr e])]
 
-  (*Await*)
-  | [%expr await [%e? signal]] -> ()
+  | [%expr await [%e? signal]] ->
+    [%expr Await [%e check_ident signal]]
 
-  (*Abort*)
-  | [%expr abort [%e? e][%e? signal]] -> ()
+  | [%expr abort [%e? e] [%e? signal]] ->
+    [%expr Abort ([%e handle_expr e], [%e check_ident signal])]
 
-  (*Loopeach*)
-  | [%expr loopeach [%e? e] [%e? signal]] -> ()
+  | [%expr loopeach [%e? e] [%e? signal]] ->
+    [%expr Loop_each ([%e handle_expr e], [%e check_ident signal])]
 
-  (*Every*)
-  | [%expr every [%e? e] [%e? signal]] -> ()
+  | [%expr every [%e? e] [%e? signal]] ->
+    [%expr Every ([%e check_ident signal], [%e handle_expr e])]
 
   | _ -> syntax_error ~loc:e.pexp_loc "Syntax error"
 
@@ -96,7 +87,8 @@ let extend_mapper argv =
           (* Should have name "getenv". *)
           Pexp_extension ({ txt = "sync"; loc }, pe)} ->
         begin match pe with
-        | PStr [{ pstr_desc = Pstr_eval (e, _)}] -> handle_expr ~loc e; [%expr ()]
+        | PStr [{ pstr_desc = Pstr_eval (e, _)}] ->
+          [%expr Derived.([%e handle_expr e])]
         | _ ->
           raise (Location.Error (
             Location.error ~loc "[%sync] is only on expressions"))
