@@ -18,6 +18,31 @@ let test_loop_pause ctx = assert_equal [%sync
    end
 ] loop_emit_pause
 
+let test_loop_par_emit ctx =
+  assert_equal
+  Signal ("a",
+          Loop (!! [
+              Pause;
+              emit "a";
+              Signal ("a", emit "a")
+            ])
+          //
+          Loop (!! [
+              await "a";
+            ]))
+    [%sync
+        loop begin
+          pause;
+          emit a;
+          signal a (
+            emit a
+          )
+        end
+      ||
+        loop begin
+          await a
+        end
+    ]
 
 let suite =
 "suite">:::
@@ -30,19 +55,8 @@ let _ =
   run_test_tt_main suite
 
 
-let loop_par_emit () =
-  Ast.normalize @@
-  Signal ("a",
-          Loop (!! [
-              Pause;
-              emit "a";
-              Signal ("a", emit "a")
-            ])
-          //
-          Loop (!! [
-              await "a";
-              Atom (fun _ -> Format.printf "Hello")
-            ]))
+
+
 
 
 let loop_present_trap () =

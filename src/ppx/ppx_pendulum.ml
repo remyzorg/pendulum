@@ -46,6 +46,9 @@ let rec handle_expr e =
   | [%expr present [%e? signal] [%e? e1] [%e? e2]] ->
     [%expr Present ([%e check_ident signal], [%e handle_expr e1], [%e handle_expr e2])]
 
+  | [%expr signal [%e? signal] [%e? e]] ->
+    [%expr Signal ([%e check_ident signal], [%e handle_expr e])]
+
   | [%expr suspend [%e? e] [%e? signal]] ->
     [%expr Suspend ([%e handle_expr e], [%e check_ident signal])]
 
@@ -74,7 +77,7 @@ let rec handle_expr e =
   | [%expr every [%e? e] [%e? signal]] ->
     [%expr Every ([%e check_ident signal], [%e handle_expr e])]
 
-  | _ -> syntax_error ~loc:e.pexp_loc "Syntax error"
+  | _ -> syntax_error ~loc:e.pexp_loc "Syntax error : pendulum keyword expected"
 
 
 
