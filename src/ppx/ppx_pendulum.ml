@@ -15,6 +15,8 @@ let check_ident e =
   match e.pexp_desc with
   | Pexp_ident {txt = Lident s; loc} ->
     {e with pexp_desc = Pexp_constant (Const_string (s, None))}
+  | Pexp_construct ({txt = Lident s; loc}, None) ->
+    {e with pexp_desc = Pexp_constant (Const_string (s, None))}
   | _ -> syntax_error ~loc:e.pexp_loc "identifier expected"
 
 let rec handle_expr e =
@@ -29,7 +31,7 @@ let rec handle_expr e =
     [%expr Emit [%e check_ident signal]]
 
   | [%expr exit [%e? label]] ->
-    [%expr Exit [%e check_ident label]]
+    [%expr Exit (Label([%e check_ident label]))]
 
   | [%expr atom [%e? e]] ->
     [%expr Atom (fun () -> [%e e]; ())]
@@ -77,7 +79,7 @@ let rec handle_expr e =
   | [%expr every [%e? e] [%e? signal]] ->
     [%expr Every ([%e check_ident signal], [%e handle_expr e])]
 
-  | _ -> syntax_error ~loc:e.pexp_loc "Syntax error : pendulum keyword expected"
+  | e -> syntax_error ~loc:e.pexp_loc "Syntax error : pendulum keyword expected"
 
 
 
