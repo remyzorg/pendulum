@@ -5,11 +5,16 @@ open Asttypes
 open Parsetree
 open Longident
 
-
+open Pendulum
 
 let syntax_error ~loc s = raise (Location.Error (
     Location.error ~loc ("[%sync] " ^ s)))
 
+let check_ident_string e =
+  match e.pexp_desc with
+  | Pexp_ident {txt = Lident s; loc} -> s
+  | Pexp_construct ({txt = Lident s; loc}, None) -> s
+  | _ -> syntax_error ~loc:e.pexp_loc "identifier expected"
 
 let check_ident e =
   match e.pexp_desc with
@@ -18,6 +23,72 @@ let check_ident e =
   | Pexp_construct ({txt = Lident s; loc}, None) ->
     {e with pexp_desc = Pexp_constant (Const_string (s, None))}
   | _ -> syntax_error ~loc:e.pexp_loc "identifier expected"
+
+
+let rec ast_of_syntax e =
+  let open Ast in
+  let open Ast.Derived in
+  match e with
+  | [%expr nothing] ->
+    Nothing
+
+  | [%expr pause] ->
+    Pause
+
+  | [%expr emit [%e? signal]] ->
+    Emit (check_ident_string signal)
+
+  | [%expr exit [%e? label]] ->
+    Exit (Label(check_ident_string label))
+
+  | [%expr atom [%e? e]] ->
+    Atom (fun () -> ())
+
+  | [%expr loop [%e? e]] ->
+    Loop (ast_of_syntax e)
+
+  | [%expr [%e? e1]; [%e? e2]] ->
+    Seq (ast_of_syntax e1, ast_of_syntax e2)
+
+  | [%expr [%e? e1] || [%e? e2]] ->
+    Par (ast_of_syntax e1, ast_of_syntax e2)
+
+  | [%expr present [%e? signal] [%e? e1] [%e? e2]] ->
+    Present (check_ident_string signal, ast_of_syntax e1, ast_of_syntax e2)
+
+  | [%expr signal [%e? signal] [%e? e]] ->
+    Signal (check_ident_string signal, ast_of_syntax e)
+
+  | [%expr suspend [%e? e] [%e? signal]] ->
+    Suspend (ast_of_syntax e, check_ident_string signal)
+
+  | [%expr trap [%e? label] [%e? e]] ->
+    Trap (Label (check_ident_string label), ast_of_syntax e)
+
+  | [%expr halt ] ->
+    Halt
+
+  | [%expr sustain [%e? signal]] ->
+    Sustain (check_ident_string signal)
+
+  | [%expr present [%e? signal] [%e? e]] ->
+    Present_then
+      (check_ident_string signal, ast_of_syntax e)
+
+  | [%expr await [%e? signal]] ->
+    Await (check_ident_string signal)
+
+  | [%expr abort [%e? e] [%e? signal]] ->
+    Abort (ast_of_syntax e, check_ident_string signal)
+
+  | [%expr loopeach [%e? e] [%e? signal]] ->
+    Loop_each (ast_of_syntax e, check_ident_string signal)
+
+  | [%expr every [%e? e] [%e? signal]] ->
+    Every (check_ident_string signal, ast_of_syntax e)
+
+  | e -> syntax_error ~loc:e.pexp_loc "Syntax error : pendulum keyword expected"
+
 
 let rec handle_expr e =
   match e with

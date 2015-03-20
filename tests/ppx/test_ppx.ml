@@ -2,8 +2,8 @@
 open OUnit
 
 
-open Ast
-open Ast.Derived
+open Pendulum.Ast
+open Pendulum.Ast.Derived
 open Grc
 
 
@@ -63,25 +63,25 @@ let suite =
 
 
 
-let abro a b r o =
-  loop_each r @@
-    await a
-    // !![await b; emit o]
+(* let abro a b r o = *)
+(*   loop_each r @@ *)
+(*     await a *)
+(*     // !![await b; emit o] *)
 
 
-let trap_par_loop =
-  Ast.normalize @@
+(* let trap_par_loop = *)
+(*   Ast.normalize @@ *)
 
-  trap "T" (
-    loop [
-      Present_then ("out", exit_l "T");
-      pause;
-    ] //
-    loop [
-      Present_then ("hop", emit "out");
-      pause;
-    ]
-  )
+(*   trap "T" ( *)
+(*     loop [ *)
+(*       Present_then ("out", exit_l "T"); *)
+(*       pause; *)
+(*     ] // *)
+(*     loop [ *)
+(*       Present_then ("hop", emit "out"); *)
+(*       pause; *)
+(*     ] *)
+(*   ) *)
 
 
 (*

@@ -17,6 +17,7 @@ Flag ppx
 
 Library "pendulum"
   Path: src/core/
+  Pack: true
   Modules:
     Ast, Grc, Interp
   BuildDepends:
@@ -35,6 +36,7 @@ Executable "ppx_pendulum"
   BuildDepends:
     compiler-libs.common,
     ppx_tools.metaquot,
+    pendulum
   MainIs:         ppx_pendulum.ml
   CompiledObject: best
 
