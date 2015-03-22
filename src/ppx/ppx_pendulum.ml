@@ -25,70 +25,137 @@ let check_ident e =
   | _ -> syntax_error ~loc:e.pexp_loc "identifier expected"
 
 
-let rec ast_of_syntax e =
+let ast_of_syntax r e =
+  let rec visit e =
+    let open Ast in
+    let open Ast.Derived in
+    match e with
+    | [%expr nothing] ->
+      Nothing
+
+    | [%expr pause] ->
+      Pause
+
+    | [%expr emit [%e? signal]] ->
+      Emit (check_ident_string signal)
+
+    | [%expr exit [%e? label]] ->
+      Exit (Label(check_ident_string label))
+
+    | [%expr atom [%e? e]] ->
+      Atom (fun () -> r := e; ())
+
+    | [%expr loop [%e? e]] ->
+      Loop (visit e)
+
+    | [%expr [%e? e1]; [%e? e2]] ->
+      Seq (visit e1, visit e2)
+
+    | [%expr [%e? e1] || [%e? e2]] ->
+      Par (visit e1, visit e2)
+
+    | [%expr present [%e? signal] [%e? e1] [%e? e2]] ->
+      Present (check_ident_string signal, visit e1, visit e2)
+
+    | [%expr signal [%e? signal] [%e? e]] ->
+      Signal (check_ident_string signal, visit e)
+
+    | [%expr suspend [%e? e] [%e? signal]] ->
+      Suspend (visit e, check_ident_string signal)
+
+    | [%expr trap [%e? label] [%e? e]] ->
+      Trap (Label (check_ident_string label), visit e)
+
+    | [%expr halt ] ->
+      Halt
+
+    | [%expr sustain [%e? signal]] ->
+      Sustain (check_ident_string signal)
+
+    | [%expr present [%e? signal] [%e? e]] ->
+      Present_then
+        (check_ident_string signal, visit e)
+
+    | [%expr await [%e? signal]] ->
+      Await (check_ident_string signal)
+
+    | [%expr abort [%e? e] [%e? signal]] ->
+      Abort (visit e, check_ident_string signal)
+
+    | [%expr loopeach [%e? e] [%e? signal]] ->
+      Loop_each (visit e, check_ident_string signal)
+
+    | [%expr every [%e? e] [%e? signal]] ->
+      Every (check_ident_string signal, visit e)
+
+    | e -> syntax_error ~loc:e.pexp_loc "Syntax error : pendulum keyword expected"
+  in visit e
+
+let rec ast_expr_of_ast r e =
   let open Ast in
   let open Ast.Derived in
-  match e with
-  | [%expr nothing] ->
-    Nothing
+  let rec visit e =
+    match e with
+    | Nothing ->
+      [%expr Nothing]
 
-  | [%expr pause] ->
-    Pause
+    | Pause ->
+      [%expr Pause]
 
-  | [%expr emit [%e? signal]] ->
-    Emit (check_ident_string signal)
+    | Emit signal ->
+      [%expr Emit [%e signal]]
 
-  | [%expr exit [%e? label]] ->
-    Exit (Label(check_ident_string label))
+    | Exit (Label(label)) ->
+      [%expr Exit (Label([%e label]))]
 
-  | [%expr atom [%e? e]] ->
-    Atom (fun () -> ())
+    | Atom f ->
+      let e = f (); !r in
+      [%expr Atom (fun () -> [%e e]; ())]
 
-  | [%expr loop [%e? e]] ->
-    Loop (ast_of_syntax e)
+    | Loop e ->
+      [%expr Loop ([%e visit e])]
 
-  | [%expr [%e? e1]; [%e? e2]] ->
-    Seq (ast_of_syntax e1, ast_of_syntax e2)
+    | Seq (e1, e2) ->
+      [%expr Seq ([%e visit e1], [%e visit e2])]
 
-  | [%expr [%e? e1] || [%e? e2]] ->
-    Par (ast_of_syntax e1, ast_of_syntax e2)
+    | Par (e1, e2) ->
+      [%expr Par ([%e visit e1], [%e visit e2])]
 
-  | [%expr present [%e? signal] [%e? e1] [%e? e2]] ->
-    Present (check_ident_string signal, ast_of_syntax e1, ast_of_syntax e2)
+    | Present (signal, e1, e2) ->
+      [%expr Present ([%e signal], [%e visit e1], [%e visit e2])]
 
-  | [%expr signal [%e? signal] [%e? e]] ->
-    Signal (check_ident_string signal, ast_of_syntax e)
+    | Signal (signal, e) ->
+      [%expr Signal ([%e signal], [%e visit e])]
 
-  | [%expr suspend [%e? e] [%e? signal]] ->
-    Suspend (ast_of_syntax e, check_ident_string signal)
+    | Suspend (e, signal) ->
+      [%expr Suspend ([%e visit e], [%e visit signal])]
 
-  | [%expr trap [%e? label] [%e? e]] ->
-    Trap (Label (check_ident_string label), ast_of_syntax e)
+    | Trap (Label label, e) ->
+      [%expr Trap (Label [%e label], [%e visit e])]
 
-  | [%expr halt ] ->
-    Halt
+    | Halt ->
+      [%expr Halt]
 
-  | [%expr sustain [%e? signal]] ->
-    Sustain (check_ident_string signal)
+    | Sustain signal ->
+      [%expr Sustain ([%e signal])]
 
-  | [%expr present [%e? signal] [%e? e]] ->
-    Present_then
-      (check_ident_string signal, ast_of_syntax e)
+    | Present_then (signal, e) ->
+      [%expr Present_then ([%e signal], [%e visit e])]
 
-  | [%expr await [%e? signal]] ->
-    Await (check_ident_string signal)
+    | Await signal ->
+      [%expr Await [%e signal]]
 
-  | [%expr abort [%e? e] [%e? signal]] ->
-    Abort (ast_of_syntax e, check_ident_string signal)
+    | Abort (e, signal) ->
+      [%expr Abort ([%e visit e], [%e signal])]
 
-  | [%expr loopeach [%e? e] [%e? signal]] ->
-    Loop_each (ast_of_syntax e, check_ident_string signal)
+    | Loop_each (e, signal) ->
+      [%expr Loop_each ([%e visit e], [%e signal])]
 
-  | [%expr every [%e? e] [%e? signal]] ->
-    Every (check_ident_string signal, ast_of_syntax e)
+    | Every (signal, e) ->
+      [%expr Every ([%e signal], [%e visit e])]
 
-  | e -> syntax_error ~loc:e.pexp_loc "Syntax error : pendulum keyword expected"
-
+    | e -> syntax_error ~loc:e.pexp_loc "Syntax error : pendulum keyword expected"
+  in visit e
 
 let rec handle_expr e =
   match e with
