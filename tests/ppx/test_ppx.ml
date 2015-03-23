@@ -2,8 +2,7 @@
 open OUnit
 
 
-open Pendulum.Ast
-open Pendulum.Ast.Derived
+open Pendulum.Runtime_ast
 open Grc
 
 

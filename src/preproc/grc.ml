@@ -42,7 +42,7 @@ module Selection_tree = struct
 
   let of_ast ast =
     let rec visit : Tagged.t -> t = fun tagged ->
-      match tagged.st with
+      match tagged.st.content with
       | Emit _ | Nothing | Exit _ | Atom _ -> mk_tree Bottom tagged.id
       | Pause -> mk_tree Pause tagged.id
 
@@ -103,7 +103,7 @@ module Flowgraph = struct
 
   type action =
     | Emit of string [@printer fun fmt -> Format.fprintf fmt "%s"]
-    | Atom of (unit -> unit)
+    | Atom of Parsetree.expression
     | Enter of int
     | Exit of int
     | Finish
@@ -257,18 +257,18 @@ let memo_rec :
 let surface h =
   let open Tagged in let open Flowgraph in
   let surface surface env p pause endp =
-    match p.st with
+    match p.st.content with
     | Pause -> enter_node p pause
 
     | Await s ->
       enter_node p @@
-      test_node (Signal s) (
+      test_node (Signal s.content) (
         exit_node p endp,
         pause
       )
 
     | Emit s ->
-      Call (Emit s) >> endp
+      Call (Emit s.content) >> endp
     | Nothing -> endp
     | Atom f -> Call(Atom f) >> endp
 
@@ -286,7 +286,7 @@ let surface h =
     | Present (s, q, r) ->
       let end_pres = exit_node p endp in
       enter_node p
-      @@ test_node (Signal s) (
+      @@ test_node (Signal s.content) (
         surface env q pause end_pres,
         surface env r pause end_pres
       )
@@ -306,14 +306,15 @@ let surface h =
       )
 
     | Exit (Label s) ->
-      begin try StringMap.find s env.exits
-        with Not_found -> error (Unbound_label s)
+      begin try StringMap.find s.content env.exits
+        with Not_found -> error (Unbound_label s.content)
       end
 
     | Trap (Label s, q) ->
       let end_trap = exit_node p endp in
       enter_node p
-      @@ surface {env with exits = (StringMap.add s end_trap env.exits)} q pause end_trap
+      @@ surface {env with exits =
+                             (StringMap.add s.content end_trap env.exits)} q pause end_trap
   in
   memo_rec h surface
 
@@ -321,14 +322,14 @@ let surface h =
 let depth h surface =
   let open Tagged in let open Flowgraph in
   let depth depth env p pause endp =
-    match p.st with
+    match p.st.content with
     | Emit s -> endp
     | Nothing -> endp
 
     | Pause -> (Call (Exit p.id)) >> endp
 
     | Await s ->
-      test_node (Signal s) (
+      test_node (Signal s.content) (
         exit_node p endp,
         pause
       )
@@ -373,13 +374,13 @@ let depth h surface =
 
     | Signal (s,q) -> depth env q pause @@ exit_node p endp
     | Suspend (q, s) ->
-      test_node (Signal s) (
+      test_node (Signal s.content) (
         pause,
         depth env q pause (Call(Exit p.id) >> endp))
 
     | Trap (Label s, q) ->
       let end_trap = exit_node p endp in
-      depth {env with exits = StringMap.add s end_trap env.exits} q pause end_trap
+      depth {env with exits = StringMap.add s.content end_trap env.exits} q pause end_trap
   in memo_rec h depth
 
 

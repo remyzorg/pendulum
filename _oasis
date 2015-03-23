@@ -15,28 +15,35 @@ Flag ppx
   Description: Build the ppx syntax extension
   Default$: flag(all)
 
-Library "pendulum"
-  Path: src/core/
+Library "pendulum_preproc"
+  Path: src/preproc/
   Pack: true
-  Modules:
-    Ast, Grc, Interp
+  Modules: Ast, Grc
   BuildDepends:
+    compiler-libs.common,
+    ppx_tools.metaquot,
     ppx_deriving.std
 
+Library "pendulum"
+  Path: src/runtime/
+  Pack: true
+  Modules: Interp, Runtime_ast
+  BuildDepends: ppx_deriving
 
-Executable "main"
-  Path:       src/
-  MainIs:     main.ml
-  CompiledObject: best
-  BuildDepends:
-    pendulum, unix
+
+#Executable "main"
+#  Path:       src/
+#  MainIs:     main.ml
+#  CompiledObject: best
+#  BuildDepends:
+#    pendulum, unix
     
 Executable "ppx_pendulum"
   Path:           src/ppx
   BuildDepends:
     compiler-libs.common,
     ppx_tools.metaquot,
-    pendulum
+    pendulum_preproc
   MainIs:         ppx_pendulum.ml
   CompiledObject: best
 
@@ -47,7 +54,7 @@ Executable "test_ppx"
   CompiledObject: best
   MainIs: test_ppx.ml
   BuildTools: ppx_pendulum
-  BuildDepends: ppx_pendulum,oUnit, pendulum
+  BuildDepends: oUnit, pendulum
 
 Executable test_lang_bin
   Build$: flag(tests)

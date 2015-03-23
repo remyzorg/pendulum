@@ -1,15 +1,15 @@
 
 
-open Ast
+(* open Ast *)
 
 
-let p =
-  Loop (
-    Atom (fun () -> Format.printf "Hello")
-  )
+(* let p = *)
+(*   Loop ( *)
+(*     Atom (fun () -> Format.printf "Hello") *)
+(*   ) *)
 
-let rec instant : Ast.statement -> Ast.statement -> Ast.statement =
-  fun p k -> assert false
+(* let rec instant : Ast.statement -> Ast.statement -> Ast.statement = *)
+(*   fun p k -> assert false *)
 
   (* match p with *)
   (* | Nothing | Seq [] -> End *)

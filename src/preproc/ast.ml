@@ -1,10 +1,21 @@
 
 
-type signal = string [@@deriving show]
-type label = Label of string [@@deriving show]
+type 'a location = {
+  loc : Location.t [@printer Location.print_loc] ;
+  content : 'a;
+}[@@deriving show]
 
+type ident = string location [@@deriving show]
 
-type statement =
+type signal = ident [@@deriving show]
+type label = Label of ident [@@deriving show]
+
+let dummy_loc = Location.none
+let mk_loc ?(loc=dummy_loc) content = {loc; content}
+
+type statement = statement_tree location
+[@@deriving show]
+and statement_tree =
   | Loop of statement
   | Seq of statement * statement
   | Par of statement * statement
@@ -15,13 +26,16 @@ type statement =
   | Trap of label * statement
   | Exit of label
   | Present of signal * statement * statement
-  | Atom of (unit -> unit)
+  | Atom of Parsetree.expression [@printer Printast.expression 0]
   | Signal of signal * statement
   | Await of signal
 [@@deriving show]
 
+
+
 module Derived = struct
-  type statement =
+  type statement = statement_tree location
+  and statement_tree =
   | Loop of statement
   | Seq of statement * statement
   | Par of statement * statement
@@ -32,7 +46,7 @@ module Derived = struct
   | Trap of label * statement
   | Exit of label
   | Present of signal * statement * statement
-  | Atom of (unit -> unit)
+  | Atom of Parsetree.expression [@printer Printast.expression 0]
   | Signal of signal * statement
 
   | Halt
@@ -61,10 +75,10 @@ let print_error fmt e =
                                        (show_statement p)
     end
 
-module SignalSet = Set.Make (struct
-    type t = signal
-    let compare = compare
-  end)
+
+let syntax_error ~loc s = raise (Location.Error (
+    Location.error ~loc ("[%sync] " ^ s)))
+
 
 module IntMap = Map.Make(struct
     type t = int
@@ -79,59 +93,75 @@ module StringMap = Map.Make(struct
 
 
 
-let trap_signal = Label "Trap"
+let trap_signal = Label  (mk_loc "Trap")
 
-let rec normalize : Derived.statement -> statement =
-  let open Derived in
-  function
-  | Emit ds -> Emit ds
-  | Exit lbl -> Exit lbl
-  | Pause -> Pause
-  | Nothing -> Nothing
-  | Atom f -> Atom f
-  | Await s -> Await s
+let rec normalize : Derived.statement -> statement = fun st ->
+  let mkl stmt = mk_loc ~loc:st.loc stmt in
+  mkl begin match st.content with
+    | Derived.Emit ds -> Emit ds
+    | Derived.Exit lbl -> Exit lbl
+    | Derived.Pause -> Pause
+    | Derived.Nothing -> Nothing
+    | Derived.Atom f -> Atom f
+    | Derived.Await s -> Await s
 
-  | Loop st -> Loop (normalize st)
-  | Seq (st1, st2) -> Seq (normalize st1, normalize st2)
-  | Par (st1, st2) -> Par (normalize st1, normalize st2)
-  | Suspend (st, s) -> Suspend (normalize st, s)
-  | Present (s, st1, st2) -> Present (s, normalize st1, normalize st2)
-  | Trap (lbl, st) -> Trap (lbl, normalize st)
-  | Signal (s, st) -> Signal (s, normalize st)
+    | Derived.Loop st -> Loop (normalize st)
+    | Derived.Seq (st1, st2) -> Seq (normalize st1, normalize st2)
+    | Derived.Par (st1, st2) -> Par (normalize st1, normalize st2)
+    | Derived.Suspend (st, s) -> Suspend (normalize st, s)
+    | Derived.Present (s, st1, st2) -> Present (s, normalize st1, normalize st2)
+    | Derived.Trap (lbl, st) -> Trap (lbl, normalize st)
+    | Derived.Signal (s, st) -> Signal (s, normalize st)
 
-  | Halt -> Loop Pause
-  | Sustain s -> Loop (Emit s)
-  | Present_then (s, st) -> Present (s, (normalize st), Nothing)
-  | Await_imm s ->
-    Trap (trap_signal, (Loop (Seq (normalize (Present_then (s, (Exit trap_signal))), Pause))))
-  | Suspend_imm (st, s) -> Suspend (normalize (Present_then (s, Seq (Pause, st))), s)
-  | Abort (st, s) -> Trap (trap_signal, Par (Seq (normalize (Suspend_imm (st, s)), Exit trap_signal),
-                            Seq (normalize (Await s), Exit trap_signal)))
-  | Weak_abort (st, s) ->
-    Trap (trap_signal, Par (normalize st, Seq (normalize (Await s), Exit trap_signal)))
-  | Loop_each (st, s) -> Loop (normalize (Abort (Seq (st, Halt), s)))
-  | Every (s, st) -> Seq (normalize (Await s), normalize (Loop_each (st, s)))
+    | Derived.Halt -> Loop (mkl Pause)
+    | Derived.Sustain s -> Loop (mkl @@ Emit s)
+    | Derived.Present_then (s, st) -> Present (s, (normalize st), mk_loc Nothing)
+    | Derived.Await_imm s ->
+      Trap (trap_signal,
+            (mkl @@ Loop (
+                mkl @@ Seq (
+                  normalize Derived.(
+                      mkl @@ Present_then (s, (mkl @@ Exit trap_signal))),
+                  mkl Pause))))
+    | Derived.Suspend_imm (st, s) -> Suspend (normalize Derived.(
+        mkl @@ Present_then (s, mkl @@ Seq (mkl Pause, st))), s)
+    | Derived.Abort (st, s) ->
+      Trap (trap_signal,
+            mkl @@ Par (
+              mkl @@ Seq (normalize (mkl@@ Derived.Suspend_imm (st, s)),
+                          mkl@@ Exit trap_signal),
+              mkl@@ Seq (normalize (mkl @@ Derived.Await s), mkl @@ Exit trap_signal)))
+    | Derived.Weak_abort (st, s) ->
+      Trap (trap_signal, mkl @@ Par
+              (normalize st,
+               mkl @@ Seq (normalize (mkl @@ Derived.Await s), mkl @@ Exit trap_signal)))
+    | Derived.Loop_each (st, s) ->
+      Loop (normalize Derived.(mkl @@ Abort (mkl @@ Seq (st, mkl Halt), s)))
+    | Derived.Every (s, st) -> Seq (normalize (mkl @@ Derived.Await s), normalize
+                                      (mkl @@ Derived.Loop_each (st, s)))
+  end
 
 
 let (!+) a = incr a; !a
 
 
-let normalize_await : Derived.statement -> statement =
-  let open Derived in
-  function
-  | Await s ->
-    Trap (trap_signal, (Loop (Seq (
-        Pause,
-        normalize (Present_then (s, (Exit trap_signal)))
-      ))))
-  | _ -> assert false
+(* let normalize_await : Derived.statement -> statement = *)
+(*   let open Derived in *)
+(*   function *)
+(*   | Await s -> *)
+(*     Trap (trap_signal, (Loop (Seq ( *)
+(*         Pause, *)
+(*         normalize (Present_then (s, (Exit trap_signal))) *)
+(*       )))) *)
+(*   | _ -> assert false *)
 
 module Tagged = struct
+
 
   type t = {id : int; st : tagged}
   [@@deriving show]
 
-  and tagged =
+  and tagged_ast =
     | Loop of t
     | Seq of t * t
     | Par of t * t
@@ -142,12 +172,14 @@ module Tagged = struct
     | Trap of label * t
     | Exit of label
     | Present of signal * t * t
-    | Atom of (unit -> unit)
+    | Atom of Parsetree.expression [@printer Printast.expression 0]
     | Signal of signal * t
     | Await of signal
   [@@deriving show]
+  and tagged = tagged_ast location
 
-  let mk_tagged st id = {id = id; st = st}
+  let mk_tagged ?(loc = dummy_loc) content id =
+    {id; st = {loc ; content}}
 
   type env = {
     labels : int StringMap.t;
@@ -156,16 +188,19 @@ module Tagged = struct
 
   let empty_env = {labels = StringMap.empty; signals = StringMap.empty}
 
-  let add_env env s = StringMap.(match find s env with
-      | exception Not_found -> add s 0 env, s
-      | i -> add s (i + 1) env, Format.sprintf "%s%d" s (i + 1))
+  let add_env env s = StringMap.(match find s.content env with
+      | exception Not_found -> add s.content 0 env, s
+      | i -> add s.content (i + 1) env, {s with content = Format.sprintf "%s%d" s.content (i + 1)})
 
-  let rename env s p = StringMap.(match find s env with
+  let rename env s p =
+
+    StringMap.(match find s.content env with
       | exception Not_found ->
         StringMap.iter (fun a b -> Format.printf "%s %d @\n" a b) env;
-        error @@ Unbound_identifier (s,  p)
+        error @@ Unbound_identifier (s.content,  p)
       | 0 -> s
-      | i -> Format.sprintf "%s%d" s i)
+      | i -> {s with content = Format.sprintf "%s%d" s.content i}
+      )
 
 
   let create_env sigs = {
@@ -179,9 +214,9 @@ module Tagged = struct
   let rec of_ast ?env:(env=[]) ast =
     let id = ref 0 in
     let env = create_env env in
-
     let rec visit : env -> statement -> t = fun env ast ->
-      match ast with
+      let mk_tagged tagged = mk_tagged ~loc:ast.loc tagged in
+      match ast.content with
       | Loop t -> mk_tagged (Loop (visit env t)) !+id
 
       | Seq (st1, st2) ->
@@ -224,7 +259,7 @@ module Tagged = struct
 
 let print_to_dot fmt tagged =
   let open Format in
-  let rec visit x = match x.st with
+  let rec visit x = match x.st.content with
     | Loop st ->
       fprintf fmt "N%d [label=\"%d loop\"];@\n" x.id x.id;
       fprintf fmt "N%d -> N%d ;@\n" x.id st.id;
@@ -241,31 +276,31 @@ let print_to_dot fmt tagged =
       fprintf fmt "N%d -> N%d ;@\n" x.id st2.id;
       visit st1;
       visit st2;
-    | Emit s -> fprintf fmt "N%d [label=\"%d emit(%s)\"];@\n"  x.id x.id s
+    | Emit s -> fprintf fmt "N%d [label=\"%d emit(%s)\"];@\n"  x.id x.id s.content
     | Nothing  ->
       fprintf fmt "N%d [label=\"%d nothing\"]; @\n" x.id x.id
     | Pause  ->
       fprintf fmt "N%d [label=\"%d pause\"]; @\n" x.id x.id
     | Suspend (st, s) ->
-      fprintf fmt "N%d [label=\"%d suspend(%s)\"]; @\n" x.id x.id s;
+      fprintf fmt "N%d [label=\"%d suspend(%s)\"]; @\n" x.id x.id s.content;
       fprintf fmt "N%d -> N%d ;@\n" x.id st.id;
       visit st
     | Trap (Label s, st) ->
-      fprintf fmt "N%d [label=\" %d trap(%s)\"]; @\n" x.id x.id s;
+      fprintf fmt "N%d [label=\" %d trap(%s)\"]; @\n" x.id x.id s.content;
       fprintf fmt "N%d -> N%d ;@\n" x.id st.id;
       visit st
-    | Exit (Label s) -> fprintf fmt "N%d [label=\"%d exit(%s)\"]; @\n" x.id x.id s
+    | Exit (Label s) -> fprintf fmt "N%d [label=\"%d exit(%s)\"]; @\n" x.id x.id s.content
     | Atom f -> fprintf fmt "N%d [label=\"%d atom\"]; @\n" x.id x.id
     | Present (s, st1, st2) ->
-      fprintf fmt "N%d [label=\"%d present(%s)\"]; @\n" x.id x.id s;
+      fprintf fmt "N%d [label=\"%d present(%s)\"]; @\n" x.id x.id s.content;
       fprintf fmt "N%d -> N%d ;@\n" x.id st1.id;
       fprintf fmt "N%d -> N%d ;@\n" x.id st2.id;
       visit st1;
       visit st2;
     | Await s ->
-      fprintf fmt "N%d [label=\"%d await(%s)\"]; @\n" x.id x.id s
+      fprintf fmt "N%d [label=\"%d await(%s)\"]; @\n" x.id x.id s.content
     | Signal (s, st) ->
-      fprintf fmt "N%d [label=\"%d signal(%s)\"]; @\n" x.id x.id s;
+      fprintf fmt "N%d [label=\"%d signal(%s)\"]; @\n" x.id x.id s.content;
       fprintf fmt "N%d -> N%d ;@\n" x.id st.id;
       visit st
   in
@@ -279,7 +314,7 @@ end
 module Analysis = struct
   let rec blocking t =
     let open Tagged in
-    match t.st with
+    match t.st.content with
      | Loop t -> blocking t
      | Seq (t1,t2) -> blocking t1 || blocking t2
      | Par (t1,t2) -> blocking t1 || blocking t2
@@ -302,21 +337,21 @@ end
 (*   | st :: t -> st :: flatten_par t *)
 
 open Derived
-let list_to_seq l =
-  let rec step l = match l with
-  | [] -> Nothing
-  | [e] -> e
-  | h :: t -> (Seq (h, step t))
-  in step l
+(* let list_to_seq l = *)
+(*   let rec step l = match l with *)
+(*   | [] -> mk_loc Nothing *)
+(*   | [e] -> e *)
+(*   | h :: t -> (mk_loc @@ Seq (h, step t)) *)
+(*   in step l *)
 
-let (//) a b = Par (a, b)
-let (!!) l = list_to_seq l
-let loop_each r p = Loop_each (p, r)
-let loop l = Loop (!! l)
-let atom f = Atom f
-let await a = Await a
-let emit a = Emit a
-let pause = Pause
-let trap s st = Trap (Label s, st)
-let exit_l s = Exit (Label s)
-let abort s p = Abort (p ,s)
+(* let (//) a b = mk_loc @@ Par (a, b) *)
+(* let (!!) l = list_to_seq l *)
+(* let loop_each r p = mk_loc @@ Loop_each (p, r) *)
+(* let loop l = mk_loc @@ Loop (!! l) *)
+(* let atom f = mk_loc @@ Atom f *)
+(* let await a = mk_loc @@ Await a *)
+(* let emit a = mk_loc @@ Emit a *)
+(* let pause = Pause *)
+(* let trap s st = Trap (Label s, st) *)
+(* let exit_l s = Exit (Label s) *)
+(* let abort s p = Abort (p ,s) *)

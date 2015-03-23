@@ -5,31 +5,25 @@ open Asttypes
 open Parsetree
 open Longident
 
-open Pendulum
+open Pendulum_preproc
 
 let syntax_error ~loc s = raise (Location.Error (
     Location.error ~loc ("[%sync] " ^ s)))
 
+
 let check_ident_string e =
+  let open Ast in
   match e.pexp_desc with
-  | Pexp_ident {txt = Lident s; loc} -> s
-  | Pexp_construct ({txt = Lident s; loc}, None) -> s
-  | _ -> syntax_error ~loc:e.pexp_loc "identifier expected"
-
-let check_ident e =
-  match e.pexp_desc with
-  | Pexp_ident {txt = Lident s; loc} ->
-    {e with pexp_desc = Pexp_constant (Const_string (s, None))}
-  | Pexp_construct ({txt = Lident s; loc}, None) ->
-    {e with pexp_desc = Pexp_constant (Const_string (s, None))}
+  | Pexp_ident {txt = Lident s; loc}
+  | Pexp_construct ({txt = Lident s; loc}, None) -> {loc; content = s}
   | _ -> syntax_error ~loc:e.pexp_loc "identifier expected"
 
 
-let ast_of_syntax r e =
+let ast_of_expr e =
   let rec visit e =
     let open Ast in
     let open Ast.Derived in
-    match e with
+    mk_loc ~loc:e.pexp_loc @@ match e with
     | [%expr nothing] ->
       Nothing
 
@@ -43,7 +37,7 @@ let ast_of_syntax r e =
       Exit (Label(check_ident_string label))
 
     | [%expr atom [%e? e]] ->
-      Atom (fun () -> r := e; ())
+      Atom e
 
     | [%expr loop [%e? e]] ->
       Loop (visit e)
@@ -91,11 +85,17 @@ let ast_of_syntax r e =
     | e -> syntax_error ~loc:e.pexp_loc "Syntax error : pendulum keyword expected"
   in visit e
 
-let rec ast_expr_of_ast r e =
+
+let string_const ident =
+  let open Ast in
+  Exp.constant ~loc:ident.loc (Const_string (ident.content, None))
+
+
+let rec expr_of_ast e =
   let open Ast in
   let open Ast.Derived in
   let rec visit e =
-    match e with
+    begin match e.content with
     | Nothing ->
       [%expr Nothing]
 
@@ -103,14 +103,13 @@ let rec ast_expr_of_ast r e =
       [%expr Pause]
 
     | Emit signal ->
-      [%expr Emit [%e signal]]
+      [%expr Emit [%e string_const signal]]
 
     | Exit (Label(label)) ->
-      [%expr Exit (Label([%e label]))]
+      [%expr Exit (Label([%e string_const label]))]
 
     | Atom f ->
-      let e = f (); !r in
-      [%expr Atom (fun () -> [%e e]; ())]
+      [%expr Atom [%e f]]
 
     | Loop e ->
       [%expr Loop ([%e visit e])]
@@ -122,104 +121,41 @@ let rec ast_expr_of_ast r e =
       [%expr Par ([%e visit e1], [%e visit e2])]
 
     | Present (signal, e1, e2) ->
-      [%expr Present ([%e signal], [%e visit e1], [%e visit e2])]
+      [%expr Present ([%e string_const signal], [%e visit e1], [%e visit e2])]
 
     | Signal (signal, e) ->
-      [%expr Signal ([%e signal], [%e visit e])]
+      [%expr Signal ([%e string_const signal], [%e visit e])]
 
     | Suspend (e, signal) ->
-      [%expr Suspend ([%e visit e], [%e visit signal])]
+      [%expr Suspend ([%e visit e], [%e string_const signal])]
 
     | Trap (Label label, e) ->
-      [%expr Trap (Label [%e label], [%e visit e])]
+      [%expr Trap (Label [%e string_const label], [%e visit e])]
 
     | Halt ->
       [%expr Halt]
 
     | Sustain signal ->
-      [%expr Sustain ([%e signal])]
+      [%expr Sustain ([%e string_const signal])]
 
     | Present_then (signal, e) ->
-      [%expr Present_then ([%e signal], [%e visit e])]
+      [%expr Present_then ([%e string_const signal], [%e visit e])]
 
     | Await signal ->
-      [%expr Await [%e signal]]
+      [%expr (Await [%e string_const signal])]
 
     | Abort (e, signal) ->
-      [%expr Abort ([%e visit e], [%e signal])]
+      [%expr Abort ([%e visit e], [%e string_const signal])]
 
     | Loop_each (e, signal) ->
-      [%expr Loop_each ([%e visit e], [%e signal])]
+      [%expr Loop_each ([%e visit e], [%e string_const signal])]
 
     | Every (signal, e) ->
-      [%expr Every ([%e signal], [%e visit e])]
+      [%expr Every ([%e string_const signal], [%e visit e])]
 
-    | e -> syntax_error ~loc:e.pexp_loc "Syntax error : pendulum keyword expected"
+    | _ -> syntax_error ~loc:e.loc "Syntax error : pendulum keyword expected"
+    end  [@metaloc e.loc]
   in visit e
-
-let rec handle_expr e =
-  match e with
-  | [%expr nothing] ->
-    [%expr Nothing]
-
-  | [%expr pause] ->
-    [%expr Pause]
-
-  | [%expr emit [%e? signal]] ->
-    [%expr Emit [%e check_ident signal]]
-
-  | [%expr exit [%e? label]] ->
-    [%expr Exit (Label([%e check_ident label]))]
-
-  | [%expr atom [%e? e]] ->
-    [%expr Atom (fun () -> [%e e]; ())]
-
-  | [%expr loop [%e? e]] ->
-    [%expr Loop ([%e handle_expr e])]
-
-  | [%expr [%e? e1]; [%e? e2]] ->
-    [%expr Seq ([%e handle_expr e1], [%e handle_expr e2])]
-
-  | [%expr [%e? e1] || [%e? e2]] ->
-    [%expr Par ([%e handle_expr e1], [%e handle_expr e2])]
-
-  | [%expr present [%e? signal] [%e? e1] [%e? e2]] ->
-    [%expr Present ([%e check_ident signal], [%e handle_expr e1], [%e handle_expr e2])]
-
-  | [%expr signal [%e? signal] [%e? e]] ->
-    [%expr Signal ([%e check_ident signal], [%e handle_expr e])]
-
-  | [%expr suspend [%e? e] [%e? signal]] ->
-    [%expr Suspend ([%e handle_expr e], [%e check_ident signal])]
-
-  | [%expr trap [%e? label] [%e? e]] ->
-    [%expr Trap (Label [%e check_ident label], [%e handle_expr e])]
-
-  | [%expr halt ] ->
-    [%expr Halt]
-
-  | [%expr sustain [%e? signal]] ->
-    [%expr Sustain ([%e check_ident signal])]
-
-  | [%expr present [%e? signal] [%e? e]] ->
-    [%expr Present_then
-        ([%e check_ident signal], [%e handle_expr e])]
-
-  | [%expr await [%e? signal]] ->
-    [%expr Await [%e check_ident signal]]
-
-  | [%expr abort [%e? e] [%e? signal]] ->
-    [%expr Abort ([%e handle_expr e], [%e check_ident signal])]
-
-  | [%expr loopeach [%e? e] [%e? signal]] ->
-    [%expr Loop_each ([%e handle_expr e], [%e check_ident signal])]
-
-  | [%expr every [%e? e] [%e? signal]] ->
-    [%expr Every ([%e check_ident signal], [%e handle_expr e])]
-
-  | e -> syntax_error ~loc:e.pexp_loc "Syntax error : pendulum keyword expected"
-
-
 
 let extend_mapper argv =
   { default_mapper with
@@ -231,7 +167,7 @@ let extend_mapper argv =
           Pexp_extension ({ txt = "sync"; loc }, pe)} ->
         begin match pe with
         | PStr [{ pstr_desc = Pstr_eval (e, _)}] ->
-          [%expr Derived.([%e handle_expr e])]
+          [%expr ([%e expr_of_ast @@ ast_of_expr e])]
         | _ ->
           raise (Location.Error (
             Location.error ~loc "[%sync] is only on expressions"))
@@ -243,4 +179,4 @@ let extend_mapper argv =
 
 
 
-let () = register "sync" extend_mapper
+let () = register "pendulum" extend_mapper

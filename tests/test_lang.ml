@@ -2,22 +2,19 @@
 open OUnit
 
 
-open Ast
-open Ast.Derived
-open Grc
+open Runtime_ast
 
 
 
 
 let loop_pause () =
-  Ast.normalize @@
+
   loop [
     pause
   ]
 
 
 let loop_emit_pause () =
-  Ast.normalize @@
   loop [
     emit "HOP";
     pause
@@ -25,7 +22,6 @@ let loop_emit_pause () =
 
 
 let loop_par_emit () =
-  Ast.normalize @@
   Signal ("a",
           Loop (!! [
               Pause;
@@ -40,7 +36,6 @@ let loop_par_emit () =
 
 
 let loop_present_trap () =
-  Ast.normalize @@
   trap "a" (
     loop [
       Present_then ("OUT", exit_l "a");
@@ -57,8 +52,6 @@ let abro a b r o =
 
 
 let trap_par_loop =
-  Ast.normalize @@
-
   trap "T" (
     loop [
       Present_then ("out", exit_l "T");
