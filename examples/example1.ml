@@ -1,9 +1,5 @@
 
 
-
-
-
-
 let submit = Dom.submit "Send"
 let input_name = Dom.input ~hint:"Your name..."
 let input_message = Dom.input ~hint:"Say something..."
@@ -49,3 +45,47 @@ let () =
     Up.new_message,
     Down.new_message
   )
+
+
+(* ============================================================= *)
+
+
+
+
+
+
+
+let message_list = div []
+let submit = Dom.submit "Send"
+let input_name = Dom.input ~hint:"Your name..."
+let input_message = Dom.input ~hint:"Say something..."
+
+
+let listener =
+    [%sync
+       output message;
+       every timer.seconds(2) begin
+         emit message (Url.get ("/messages"))
+       end
+    ]
+
+
+
+let m_mlist = [%sync
+  every newmsgs (msq, auth) begin
+    emit !append (div [h1 [auth]; msg])
+  end
+  ||
+  every submit.click begin
+     emit !append (div [h1 [input_name#value]; input_message#value])
+  end
+]
+
+let () =
+  Sync.attach mlist m_mlist
+
+let form = Dom.form [
+    input_name;
+    input_message;
+    submit
+  ]
