@@ -50,34 +50,29 @@ let () =
 (* ============================================================= *)
 
 
+let newmsg_up = Eliom_react.Up.create (Eliom_parameter.ocaml ("","") Json.t<string>)
+let newmsg_down = Eliom_react.Up.create (Eliom_parameter.ocaml ("", "") Json.t<string>
 
 
-
-
+{client{
 
 let message_list = div []
 let submit = Dom.submit "Send"
 let input_name = Dom.input ~hint:"Your name..."
 let input_message = Dom.input ~hint:"Say something..."
 
-
-let listener =
-    [%sync
-       output message;
-       every timer.seconds(2) begin
-         emit message (Url.get ("/messages"))
-       end
-    ]
-
-
+let newmsg_up = Sync.of_react %newmsg_up
+let newmsg_down = Sync.of_react %newmsg_down
 
 let m_mlist = [%sync
-  every newmsgs (msq, auth) begin
+  every newmsgs_up (msg, auth) begin
     emit !append (div [h1 [auth]; msg])
   end
-  ||
-  every submit.click begin
-     emit !append (div [h1 [input_name#value]; input_message#value])
+]
+
+let m_submit = [%sync
+  every !click begin
+    emit newmsg_down (input_name#value, input_message#value)
   end
 ]
 
@@ -89,3 +84,5 @@ let form = Dom.form [
     input_message;
     submit
   ]
+
+}}
