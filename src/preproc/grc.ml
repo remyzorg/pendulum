@@ -405,3 +405,47 @@ let flowgraph p =
 
 let of_ast p =
   Selection_tree.of_ast, flowgraph p
+
+
+module Eval = struct
+
+  type env = {
+    select : (int, Selection_tree.t) Hashtbl.t;
+    signals : (string, unit) Hashtbl.t;
+    mutable finished : bool;
+  }
+
+  exception Finish_exn
+
+  let action select env a =
+    Flowgraph.(Selection_tree.(Hashtbl.(
+        match a with
+        | Emit s -> Hashtbl.add env.signals s ()
+        | Atom _ -> assert false
+        | Enter i -> Primitive.(i |> find env.select |> enter)
+        | Exit i -> Primitive.(i |> find env.select |> exit)
+        | Finish -> raise Finish_exn
+        | SetFinish b -> env.finished <- b
+      )))
+
+  let test_value select env test =
+    Flowgraph.(Selection_tree.(
+        match test with
+        | Signal s -> Hashtbl.mem env.signals s
+        | Selection i -> (Hashtbl.find env.select i).status
+        | Finished -> env.finished
+      ))
+
+  (* let  *)
+
+  (* let eval_par select env test *)
+
+  (* let rec eval_step select env grc = *)
+  (*   Flowgraph.(Selection_tree.( *)
+  (*       match grc with *)
+  (*       | Node (node, t) -> eval_step select env t *)
+  (*       | Node_bin (node, t1, t2) ->  *)
+  (*       | Leaf node -> *)
+  (*     )) *)
+
+end

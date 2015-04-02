@@ -90,7 +90,6 @@ let string_const ident =
   let open Ast in
   Exp.constant ~loc:ident.loc (Const_string (ident.content, None))
 
-
 let rec expr_of_ast e =
   let open Ast in
   let open Ast.Derived in
@@ -161,19 +160,18 @@ let extend_mapper argv =
   { default_mapper with
     expr = fun mapper expr ->
       match expr with
-      (* Is this an extension node? *)
-      | { pexp_desc =
-          (* Should have name "getenv". *)
-          Pexp_extension ({ txt = "sync"; loc }, pe)} ->
+      | { pexp_desc = Pexp_extension ({ txt = "sync" as ext; loc }, pe)}
+      | { pexp_desc = Pexp_extension ({ txt = "sync_ast" as ext; loc }, pe)} ->
         begin match pe with
-        | PStr [{ pstr_desc = Pstr_eval (e, _)}] ->
-          [%expr ([%e expr_of_ast @@ ast_of_expr e])]
-        | _ ->
-          raise (Location.Error (
-            Location.error ~loc "[%sync] is only on expressions"))
-
+          | PStr [{ pstr_desc = Pstr_eval (e, _)}] ->
+            if ext = "sync_ast" then
+              [%expr ([%e expr_of_ast @@ ast_of_expr e])]
+            else
+              [%expr ([%e expr_of_ast @@ ast_of_expr e])]
+          | _ ->
+            raise (Location.Error (
+                Location.error ~loc "[%sync] is only on expressions"))
         end
-      (* Delegate to the default mapper. *)
       | x -> default_mapper.expr mapper x;
   }
 

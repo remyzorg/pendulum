@@ -46,6 +46,7 @@ let () =
     Down.new_message
   )
 
+let append n s = React.map (fun v -> n.append s) s
 
 (* ============================================================= *)
 
@@ -67,17 +68,16 @@ let newmsg_down = Sync.of_react %newmsg_down
 let m_mlist = [%sync
   every newmsgs_up (msg, auth) begin
     emit !append (div [h1 [auth]; msg])
-  end
-]
+  end]
 
 let m_submit = [%sync
   every !click begin
     emit newmsg_down (input_name#value, input_message#value)
-  end
-]
+  end]
 
 let () =
-  Sync.attach mlist m_mlist
+  Sync.attach mlist m_mlist;
+  Sync.attach m_submit
 
 let form = Dom.form [
     input_name;

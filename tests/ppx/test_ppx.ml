@@ -7,43 +7,43 @@ open Grc
 
 
 
-let test_loop_pause ctx = assert_equal [%sync loop begin pause end]
+let test_loop_pause ctx = assert_equal [%sync_ast loop begin pause end]
     (loop [pause])
 
 
-let test_seq ctx = assert_equal [%sync pause; pause; emit a]
+let test_seq ctx = assert_equal [%sync_ast pause; pause; emit a]
     (Seq(Pause, Seq(Pause, Emit "a")))
 
 
 let test_par ctx = assert_equal
-    [%sync emit a || emit b || emit c]
+    [%sync_ast emit a || emit b || emit c]
     (Par (Emit "a", Par (Emit "b", Emit "c")))
 
 
 let test_loop_par_emit_await ctx = assert_equal
     (Signal ("a", Loop (!! [Pause; emit "a"; Signal ("a", emit "a")])
                   // Loop (!! [await "a";])))
-    [%sync signal a begin loop begin pause;
+    [%sync_ast signal a begin loop begin pause;
                emit a; signal a (emit a) end ||
                           loop (await a) end]
 
 
 let test_halt_exit_trap ctx = assert_equal
-  [%sync trap a begin halt || exit a end]
+  [%sync_ast trap a begin halt || exit a end]
   (Trap (Label "a", Par (Halt, Exit (Label "a"))))
 
 
 let test_presentthen ctx = assert_equal
-  [%sync trap a (loop (present OUT (exit a); pause))]
+  [%sync_ast trap a (loop (present OUT (exit a); pause))]
   (trap "a" (loop [Present_then ("OUT", exit_l "a"); pause]))
 
 let test_abro ctx = assert_equal
-    [%sync loopeach (await a || await b; emit o;) r]
+    [%sync_ast loopeach (await a || await b; emit o;) r]
     (loop_each "r" @@ !![await "a" // await "b"; emit "o"])
 
 
 let test_every ctx = assert_equal
-    [%sync every (await a || await b; emit o;) r]
+    [%sync_ast every (await a || await b; emit o;) r]
     (Every ("r", !![await "a" // await "b"; emit "o"]))
 
 
