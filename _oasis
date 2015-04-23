@@ -20,6 +20,7 @@ Library "pendulum_preproc"
   Pack: true
   Modules: Ast, Grc
   BuildDepends:
+    unix,
     compiler-libs.common,
     ppx_tools.metaquot,
     ppx_deriving.std

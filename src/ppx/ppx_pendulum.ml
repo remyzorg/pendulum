@@ -18,6 +18,18 @@ let check_ident_string e =
   | Pexp_construct ({txt = Lident s; loc}, None) -> {loc; content = s}
   | _ -> syntax_error ~loc:e.pexp_loc "identifier expected"
 
+let pop_signals_decl e =
+  let rec aux sigs e =
+    match e with
+    | [%expr input [%e ?e]; [%e ?e2] ]
+    | [%expr output [%e ?e]; [%e ?e2]] ->
+      let ident = check_ident_string e in
+      aux (ident :: sigs) e2
+    | e -> e, sigs
+  in
+  aux [] e
+
+
 
 let ast_of_expr e =
   let rec visit e =
@@ -156,18 +168,47 @@ let rec expr_of_ast e =
     end  [@metaloc e.loc]
   in visit e
 
+
+let print_to_dot loc =
+  let open Location in
+  let n = ref 0 in
+  fun e ->
+    let name = Filename.(basename @@ chop_extension @@
+                         loc.loc_start.Lexing.pos_fname) in
+    let fgname = (name ^ "_fg") in
+    let tagname = (name ^ "_tast") in
+    Format.printf "FILE HERE : |%s| |%n|" name (incr n; !n);
+    let c_tagged = open_out (tagname ^ ".dot") in
+    let c_flowgraph = open_out (fgname ^ ".dot")in
+    let fmt_tagged = Format.formatter_of_out_channel c_tagged in
+    let fmt_flowgraph = Format.formatter_of_out_channel c_flowgraph in
+    Ast.Tagged.print_to_dot fmt_tagged e;
+    Grc.Flowgraph.print_to_dot fmt_flowgraph (Grc.flowgraph e);
+    close_out c_flowgraph; close_out c_tagged;
+    ignore @@ Sys.command (Format.sprintf "dot -Tpdf %s.dot -o %s.pdf" tagname tagname);
+    ignore @@ Sys.command (Format.sprintf "dot -Tpdf %s.dot -o %s.pdf" fgname fgname);
+    Unix.unlink (tagname ^ ".dot");
+    Unix.unlink (fgname ^ ".dot")
+
+
 let extend_mapper argv =
   { default_mapper with
     expr = fun mapper expr ->
       match expr with
-      | { pexp_desc = Pexp_extension ({ txt = "sync" as ext; loc }, pe)}
-      | { pexp_desc = Pexp_extension ({ txt = "sync_ast" as ext; loc }, pe)} ->
+      | { pexp_desc = Pexp_extension ({ txt = ext; loc }, pe)}
+        when ext = "sync" || ext = "sync_ast" || ext = "to_dot_grc" ->
         begin match pe with
           | PStr [{ pstr_desc = Pstr_eval (e, _)}] ->
-            if ext = "sync_ast" then
-              [%expr ([%e expr_of_ast @@ ast_of_expr e])]
-            else
-              [%expr ([%e expr_of_ast @@ ast_of_expr e])]
+            let decls, e = pop_signals_decl e in
+            begin match ext with
+              | "sync_ast" -> [%expr ([%e expr_of_ast @@ ast_of_expr e])]
+              | "to_dot_grc" ->
+                let e = ast_of_expr e in
+                print_to_dot loc Ast.(Tagged.of_ast decls @@ Ast.normalize @@ e);
+                [%expr ([%e expr_of_ast e])]
+              | "sync" -> [%expr ([%e Sync2ml.generate @@ ast_of_expr e])]
+              | _ -> assert false
+            end
           | _ ->
             raise (Location.Error (
                 Location.error ~loc "[%sync] is only on expressions"))

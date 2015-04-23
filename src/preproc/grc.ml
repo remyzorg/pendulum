@@ -404,7 +404,7 @@ let flowgraph p =
 
 
 let of_ast p =
-  Selection_tree.of_ast, flowgraph p
+  Selection_tree.of_ast p, flowgraph p
 
 
 module Eval = struct

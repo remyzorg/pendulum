@@ -75,6 +75,19 @@ let m_submit = [%sync
     emit newmsg_down (input_name#value, input_message#value)
   end]
 
+
+let xhr u =
+  let m = [%sync
+    output a;
+    signal v (
+      await v;
+      emit a v;
+    )
+  ] in
+  XmlHttpRequest.get u (fun s -> Sync.set_present "v" s)
+
+
+
 let () =
   Sync.attach mlist m_mlist;
   Sync.attach m_submit

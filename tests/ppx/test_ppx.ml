@@ -47,6 +47,18 @@ let test_every ctx = assert_equal
     (Every ("r", !![await "a" // await "b"; emit "o"]))
 
 
+let cyclic_grc ctx = assert_equal
+  [%to_dot_grc
+    (nothing
+     ||
+     present I begin
+       present S pause pause
+     end
+    );
+    emit S]
+  (Seq(Par (Nothing, Present_then ("I", Present ("S", Pause, Pause ))), Emit "S"))
+
+
 let suite =
   "Test_ppx_pendulum_syntax">::: [
     "every">:: test_every;
@@ -54,9 +66,11 @@ let suite =
     "halt_exit_trap">:: test_halt_exit_trap;
     "loop_par_emit_await">:: test_loop_par_emit_await;
     "loop_pause">:: test_loop_pause;
-    "par">:: test_seq;
+    "par">:: test_par;
     "seq">:: test_seq;
+    "cyclic">:: cyclic_grc;
   ] |> run_test_tt_main
+
 
 
 

@@ -106,7 +106,7 @@ module Analysis : sig
   val blocking : Tagged.t -> bool
 end
 
-(* val normalize : Derived.statement -> statement *)
+val normalize : Derived.statement -> statement
 (* val (//) : Derived.statement -> Derived.statement -> Derived.statement *)
 (* val (!!) : Derived.statement list -> Derived.statement *)
 (* val loop_each : signal -> Derived.statement -> Derived.statement *)
