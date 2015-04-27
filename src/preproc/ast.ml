@@ -63,16 +63,16 @@ module Derived = struct
 end
 
 
-type error = Unbound_identifier of string * statement
-exception Error of error
-let error e = raise @@ Error e
+type error = Unbound_identifier of string | Syntax
+exception Error of Location.t * error
+let error ~loc e = raise (Error (loc, e))
 
 let print_error fmt e =
   let open Format in
   fprintf fmt "%s"
     begin match e with
-      | Unbound_identifier (s, p) -> sprintf "unbound signal %s in %s" s
-                                       (show_statement p)
+      | Unbound_identifier s -> sprintf "unbound signal %s" s
+      | Syntax -> "Syntax error"
     end
 
 
@@ -197,7 +197,7 @@ module Tagged = struct
     StringMap.(match find s.content env with
       | exception Not_found ->
         StringMap.iter (fun a b -> Format.printf "%s %d @\n" a b) env;
-        error @@ Unbound_identifier (s.content,  p)
+        error ~loc:p.loc @@ Unbound_identifier s.content
       | 0 -> s
       | i -> {s with content = Format.sprintf "%s%d" s.content i}
       )

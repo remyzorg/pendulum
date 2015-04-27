@@ -64,10 +64,13 @@ module Derived : sig
 end
 
 
-type error = Unbound_identifier of string * statement
-exception Error of error
-val error : error -> exn
+type error =
+  | Unbound_identifier of string
+  | Syntax
+exception Error of Location.t * error
+val error : loc:Location.t -> error -> 'a
 val print_error : Format.formatter -> error -> unit
+val syntax_error : loc:Location.t -> string -> 'a
 
 
 module Tagged : sig

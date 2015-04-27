@@ -49,6 +49,7 @@ let test_every ctx = assert_equal
 
 let cyclic_grc ctx = assert_equal
   [%to_dot_grc
+    input I, S;
     (nothing
      ||
      present I begin
