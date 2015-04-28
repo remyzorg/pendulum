@@ -59,6 +59,17 @@ let cyclic_grc ctx = assert_equal
     emit S]
   (Seq(Par (Nothing, Present_then ("I", Present ("S", Pause, Pause ))), Emit "S"))
 
+let cyclic_grc ctx = assert_equal
+  [%sync
+    input I, S;
+    (nothing
+     ||
+     present I begin
+       present S pause pause
+     end
+    );
+    emit S]
+  (Seq(Par (Nothing, Present_then ("I", Present ("S", Pause, Pause ))), Emit "S"))
 
 let suite =
   "Test_ppx_pendulum_syntax">::: [

@@ -89,7 +89,7 @@ let print_to_dot loc =
     (* let cwd = Sys.getcwd () in *)
     (* Format.printf "FILE HERE : |%s| |%n| |%s|" name (incr n; !n) cwd; *)
     let c_tagged = open_out (tagname ^ ".dot") in
-    let c_flowgraph = open_out (fgname ^ ".dot")in
+    let c_flowgraph = open_out (fgname ^ ".dot") in
     let fmt_tagged = Format.formatter_of_out_channel c_tagged in
     let fmt_flowgraph = Format.formatter_of_out_channel c_flowgraph in
     Ast.Tagged.print_to_dot fmt_tagged e;

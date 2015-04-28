@@ -128,17 +128,25 @@ let extend_mapper argv =
                   | "to_dot_grc" ->
                     let e = ast_of_expr e in
                     Pendulum_misc.print_to_dot loc Ast.(Tagged.of_ast ~env e);
-                    [%expr ([%e Pendulum_misc.expr_of_ast e])]
-                  | "sync" -> [%expr ([%e Sync2ml.generate @@ ast_of_expr e])]
+                    [%expr [%e Pendulum_misc.expr_of_ast e]]
+                  | "sync" ->
+                    let ast = ast_of_expr e in
+                    let tast = Ast.Tagged.of_ast ~env ast in
+                    let () = Sync2ml.generate tast in
+                    [%expr [%e Pendulum_misc.expr_of_ast ast]]
                   | _ -> assert false
                 end
               | _ ->
                 raise (Location.Error (
                     Location.error ~loc "[%sync] is only on expressions"))
             end
-          with Ast.Error (loc, e) ->
+          with
+          | Ast.Error (loc, e) ->
             raise (Location.Error (
                 Location.error ~loc (Format.asprintf "[%%sync] : %a" Ast.print_error e)))
+          | Sync2ml.Error (loc, e) ->
+            raise (Location.Error (
+                Location.error ~loc (Format.asprintf "[%%sync] : %a" Sync2ml.print_error e)))
         end
       | x -> default_mapper.expr mapper x;
   }

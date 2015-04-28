@@ -45,17 +45,17 @@ let check_causality_cycles grc =
     | Node_bin (n, t1, t2) ->
       let m = visit_node m fg n in
       ignore @@ visit_fg m t1;
-      ignore @@ visit_fg m t2
+      ignore @@ visit_fg m t2; ()
     | Node (n, t) ->
       ignore @@ visit_fg (visit_node m fg n) t
-    | Leaf n -> ignore @@ visit_node m fg n
+    | Leaf n -> ignore @@ visit_node m fg n; ()
   in
   visit_fg StringMap.empty fg
 
 
 
-let generate dast =
-  let ast = Ast.(Tagged.of_ast dast) in
-  let _selection_tree, _control_flowgraph = Grc.of_ast ast in
-  assert false
+let generate tast =
+  let _selection_tree, control_flowgraph as grc = Grc.of_ast tast in
+  check_causality_cycles grc;
+  ()
   (* ml_of_grc control_flowgraph selection_tree *)

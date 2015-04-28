@@ -15,7 +15,7 @@ https://github.com/ocsigen/lwt/blob/master/_tags#L14
 
 # Esterel Semantic
 
-Solution à l'extrusion de portée : *connecion code*
+Solution à l'extrusion de portée : *connecon code*
 
 # GRC intermediate format
 
