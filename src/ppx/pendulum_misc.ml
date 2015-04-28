@@ -28,6 +28,8 @@ let rec expr_of_ast e =
     | Emit signal ->
       [%expr Emit [%e string_const signal]]
 
+    | Exit (Label label) ->
+      [%expr Exit (Label [%e string_const label])]
 
     | Loop e ->
       [%expr Loop ([%e visit e])]
@@ -97,3 +99,9 @@ let print_to_dot loc =
     ignore @@ Sys.command (Format.sprintf "dot -Tpdf %s.dot -o %s.pdf" fgname fgname);
     Unix.unlink (tagname ^ ".dot");
     Unix.unlink (fgname ^ ".dot")
+
+
+module StringMap = Map.Make(struct
+    type t = string
+    let compare = compare
+  end)

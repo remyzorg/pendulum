@@ -1,40 +1,60 @@
 (* generating the ocaml code from ast *)
 
 
+open Pendulum_misc
+open Pendulum_preproc
 
+type error = Cyclic_causality of Grc.Flowgraph.t
+exception Error of Location.t * error
+let error ~loc e = raise (Error (loc, e))
+
+let print_error fmt e =
+  let open Format in
+  fprintf fmt "%s"
+    begin match e with
+      | Cyclic_causality fg -> "Cyclic causality"
+    end
 
 
 let rec ml_of_grc e =
-  let open Pendulum_preproc in
   let rec visit e =
     assert false
   in visit e
 
 
-let emit_reference grc =
-  let open Pendulum_preproc.Grc.Flowgraph in
-  let h = Hashtbl.create 17 in
+let check_causality_cycles grc =
+  let open Grc.Flowgraph in
   let st, fg = grc in
-  let visit_node fg nd =
+  let visit_node m fg nd =
     match nd with
     | Test (Signal s) ->
-      let prev = try Hashtbl.find h s with
+      let prev = try StringMap.find s m with
         | Not_found -> []
-      in Hashtbl.replace h s (fg :: prev)
-    | _ -> ()
+      in
+      StringMap.add s (fg :: prev) m
+    | Call(Emit s) ->
+      begin match StringMap.find s m with
+        | h :: fgs -> error ~loc:Ast.dummy_loc @@ Cyclic_causality h
+        | [] -> m
+        | exception Not_found -> m
+      end
+    | _ -> m
   in
-  let rec visit_fg fg =
+  let rec visit_fg m fg =
     match fg with
-    | Node_bin (n, t1, t2) -> visit_node fg n; visit_fg t1; visit_fg t2
-    | Node (n, t) -> visit_node fg n; visit_fg t
-    | Leaf n -> visit_node fg n
+    | Node_bin (n, t1, t2) ->
+      let m = visit_node m fg n in
+      ignore @@ visit_fg m t1;
+      ignore @@ visit_fg m t2
+    | Node (n, t) ->
+      ignore @@ visit_fg (visit_node m fg n) t
+    | Leaf n -> ignore @@ visit_node m fg n
   in
-  visit_fg fg
+  visit_fg StringMap.empty fg
 
 
 
 let generate dast =
-  let open Pendulum_preproc in
   let ast = Ast.(Tagged.of_ast dast) in
   let _selection_tree, _control_flowgraph = Grc.of_ast ast in
   assert false
