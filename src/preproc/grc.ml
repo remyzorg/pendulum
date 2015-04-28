@@ -199,7 +199,7 @@ module Flowgraph = struct
         let id = begin match fg with
           | Node_bin (n, fg1, fg2) ->
             let my_id = id () in
-            let shape = match n with Test _ | Sync _ -> "[style = dotted]" | _ -> "" in
+            let shape = match n with Test _ | Sync _ -> "[style = dashed]" | _ -> "" in
             fprintf fmt "N%d [%s label=<%a>]; @\n" my_id (style_of_node n) pp_node n ;
             let fg1_id, fg2_id = visit fg1, visit fg2 in
             fprintf fmt "N%d -> N%d;@\n" my_id fg1_id;

@@ -1,6 +1,4 @@
 
-
-
 module Selection_tree : sig
 
   type t

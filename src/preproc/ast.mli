@@ -15,25 +15,6 @@ module StringMap : Map.S with type key = string
 val dummy_loc : Location.t
 val mk_loc : ?loc:Location.t -> 'a -> 'a location
 
-type statement = statement_tree location
-[@@deriving show]
-and statement_tree =
-  | Loop of statement
-  | Seq of statement * statement
-  | Par of statement * statement
-  | Emit of signal
-  | Nothing
-  | Pause
-  | Suspend of statement * signal
-  | Trap of label * statement
-  | Exit of label
-  | Present of signal * statement * statement
-  | Atom of Parsetree.expression [@printer Printast.expression 0]
-  | Signal of signal * statement
-  | Await of signal
-[@@deriving show]
-
-
 module Derived : sig
   type statement = statement_tree location
   and statement_tree =
@@ -63,7 +44,6 @@ module Derived : sig
       [@@deriving show]
 end
 
-
 type error =
   | Unbound_identifier of string
   | Syntax
@@ -71,7 +51,6 @@ exception Error of Location.t * error
 val error : loc:Location.t -> error -> 'a
 val print_error : Format.formatter -> error -> unit
 val syntax_error : loc:Location.t -> string -> 'a
-
 
 module Tagged : sig
   type t = {id : int; st : tagged}
@@ -100,7 +79,7 @@ module Tagged : sig
     signals : int StringMap.t;
   }
 
-  val of_ast : ?env:string list -> statement -> t
+  val of_ast : ?env:string list -> Derived.statement -> t
 
   val print_to_dot : Format.formatter -> t -> unit
 end
@@ -108,16 +87,3 @@ end
 module Analysis : sig
   val blocking : Tagged.t -> bool
 end
-
-val normalize : Derived.statement -> statement
-(* val (//) : Derived.statement -> Derived.statement -> Derived.statement *)
-(* val (!!) : Derived.statement list -> Derived.statement *)
-(* val loop_each : signal -> Derived.statement -> Derived.statement *)
-(* val loop: Derived.statement list -> Derived.statement *)
-(* val atom: (unit -> unit) -> Derived.statement *)
-(* val await : signal -> Derived.statement *)
-(* val trap : string -> Derived.statement -> Derived.statement *)
-(* val emit : signal -> Derived.statement *)
-(* val pause : Derived.statement *)
-(* val exit_l : string -> Derived.statement *)
-(* val abort : signal -> Derived.statement -> Derived.statement *)

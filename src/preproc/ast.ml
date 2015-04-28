@@ -13,26 +13,6 @@ type label = Label of ident [@@deriving show]
 let dummy_loc = Location.none
 let mk_loc ?(loc=dummy_loc) content = {loc; content}
 
-type statement = statement_tree location
-[@@deriving show]
-and statement_tree =
-  | Loop of statement
-  | Seq of statement * statement
-  | Par of statement * statement
-  | Emit of signal
-  | Nothing
-  | Pause
-  | Suspend of statement * signal
-  | Trap of label * statement
-  | Exit of label
-  | Present of signal * statement * statement
-  | Atom of Parsetree.expression [@printer Printast.expression 0]
-  | Signal of signal * statement
-  | Await of signal
-[@@deriving show]
-
-
-
 module Derived = struct
   type statement = statement_tree location
   and statement_tree =
@@ -90,73 +70,11 @@ module StringMap = Map.Make(struct
     let compare = compare
   end)
 
-
-
-
 let trap_signal = Label  (mk_loc "Trap")
-
-let rec normalize : Derived.statement -> statement = fun st ->
-  let mkl stmt = mk_loc ~loc:st.loc stmt in
-  mkl begin match st.content with
-    | Derived.Emit ds -> Emit ds
-    | Derived.Exit lbl -> Exit lbl
-    | Derived.Pause -> Pause
-    | Derived.Nothing -> Nothing
-    | Derived.Atom f -> Atom f
-    | Derived.Await s -> Await s
-
-    | Derived.Loop st -> Loop (normalize st)
-    | Derived.Seq (st1, st2) -> Seq (normalize st1, normalize st2)
-    | Derived.Par (st1, st2) -> Par (normalize st1, normalize st2)
-    | Derived.Suspend (st, s) -> Suspend (normalize st, s)
-    | Derived.Present (s, st1, st2) -> Present (s, normalize st1, normalize st2)
-    | Derived.Trap (lbl, st) -> Trap (lbl, normalize st)
-    | Derived.Signal (s, st) -> Signal (s, normalize st)
-
-    | Derived.Halt -> Loop (mkl Pause)
-    | Derived.Sustain s -> Loop (mkl @@ Emit s)
-    | Derived.Present_then (s, st) -> Present (s, (normalize st), mk_loc Nothing)
-    | Derived.Await_imm s ->
-      Trap (trap_signal,
-            (mkl @@ Loop (
-                mkl @@ Seq (
-                  normalize Derived.(
-                      mkl @@ Present_then (s, (mkl @@ Exit trap_signal))),
-                  mkl Pause))))
-    | Derived.Suspend_imm (st, s) -> Suspend (normalize Derived.(
-        mkl @@ Present_then (s, mkl @@ Seq (mkl Pause, st))), s)
-    | Derived.Abort (st, s) ->
-      Trap (trap_signal,
-            mkl @@ Par (
-              mkl @@ Seq (normalize (mkl@@ Derived.Suspend_imm (st, s)),
-                          mkl@@ Exit trap_signal),
-              mkl@@ Seq (normalize (mkl @@ Derived.Await s), mkl @@ Exit trap_signal)))
-    | Derived.Weak_abort (st, s) ->
-      Trap (trap_signal, mkl @@ Par
-              (normalize st,
-               mkl @@ Seq (normalize (mkl @@ Derived.Await s), mkl @@ Exit trap_signal)))
-    | Derived.Loop_each (st, s) ->
-      Loop (normalize Derived.(mkl @@ Abort (mkl @@ Seq (st, mkl Halt), s)))
-    | Derived.Every (s, st) -> Seq (normalize (mkl @@ Derived.Await s), normalize
-                                      (mkl @@ Derived.Loop_each (st, s)))
-  end
-
-
 let (!+) a = incr a; !a
 
 
-(* let normalize_await : Derived.statement -> statement = *)
-(*   let open Derived in *)
-(*   function *)
-(*   | Await s -> *)
-(*     Trap (trap_signal, (Loop (Seq ( *)
-(*         Pause, *)
-(*         normalize (Present_then (s, (Exit trap_signal))) *)
-(*       )))) *)
-(*   | _ -> assert false *)
-
 module Tagged = struct
-
 
   type t = {id : int; st : tagged}
   [@@deriving show]
@@ -190,17 +108,16 @@ module Tagged = struct
 
   let add_env env s = StringMap.(match find s.content env with
       | exception Not_found -> add s.content 0 env, s
-      | i -> add s.content (i + 1) env, {s with content = Format.sprintf "%s%d" s.content (i + 1)})
+      | i -> add s.content (i + 1) env,
+             {s with content = Format.sprintf "%s%d" s.content (i + 1)})
 
   let rename env s p =
-
     StringMap.(match find s.content env with
       | exception Not_found ->
         StringMap.iter (fun a b -> Format.printf "%s %d @\n" a b) env;
         error ~loc:p.loc @@ Unbound_identifier s.content
       | 0 -> s
-      | i -> {s with content = Format.sprintf "%s%d" s.content i}
-      )
+      | i -> {s with content = Format.sprintf "%s%d" s.content i})
 
 
   let create_env sigs = {
@@ -214,46 +131,89 @@ module Tagged = struct
   let rec of_ast ?env:(env=[]) ast =
     let id = ref 0 in
     let env = create_env env in
-    let rec visit : env -> statement -> t = fun env ast ->
+    let rec visit : env -> Derived.statement -> t = fun env ast ->
       let mk_tagged tagged = mk_tagged ~loc:ast.loc tagged in
+      let mkl stmt = mk_loc ~loc:ast.loc stmt in
       match ast.content with
-      | Loop t -> mk_tagged (Loop (visit env t)) !+id
+      | Derived.Loop t -> mk_tagged (Loop (visit env t)) !+id
 
-      | Seq (st1, st2) ->
+      | Derived.Seq (st1, st2) ->
         let id = !+id in
         let f1 = visit env st1 in
         let f2 = visit env st2 in
         mk_tagged (Seq (f1, f2)) id
 
-      | Par (st1, st2) ->
+      | Derived.Par (st1, st2) ->
         let id = !+id in
         let f1 = visit env st1 in
         let f2 = visit env st2 in
         mk_tagged (Par (f1, f2)) id
 
-      | Emit s -> mk_tagged (Emit (rename env.signals s ast)) !+id
-      | Nothing -> mk_tagged Nothing !+id
-      | Pause -> mk_tagged Pause !+id
+      | Derived.Emit s -> mk_tagged (Emit (rename env.signals s ast)) !+id
+      | Derived.Nothing -> mk_tagged Nothing !+id
+      | Derived.Pause -> mk_tagged Pause !+id
 
-      | Await s -> mk_tagged (Await (rename env.signals s ast)) !+id
+      | Derived.Await s -> mk_tagged (Await (rename env.signals s ast)) !+id
 
-      | Suspend (t, s) ->
+      | Derived.Suspend (t, s) ->
         mk_tagged (Suspend (visit env t, rename env.signals s ast)) !+id
 
-      | Trap (Label s, t) ->
+      | Derived.Trap (Label s, t) ->
         let labels, s = add_env env.labels s in
         mk_tagged (Trap (Label s, visit {env with labels} t)) !+id
 
-      | Exit (Label s) -> mk_tagged (Exit (Label (rename env.labels s ast))) !+id
-      | Present (s, t1, t2) ->
+      | Derived.Exit (Label s) -> mk_tagged (Exit (Label (rename env.labels s ast))) !+id
+      | Derived.Present (s, t1, t2) ->
         mk_tagged (Present(
             rename env.signals s ast, visit env t1, visit env t2))
           !+id
-      | Atom f -> mk_tagged (Atom f) !+id
+      | Derived.Atom f -> mk_tagged (Atom f) !+id
 
-      | Signal (s,t) ->
+      | Derived.Signal (s,t) ->
         let signals, s = add_env env.signals s in
         mk_tagged (Signal (s, visit {env with signals} t)) !+id
+
+
+      | Derived.Halt -> mk_tagged (Loop (mk_tagged Pause !+id)) !+id
+      | Derived.Sustain s -> mk_tagged (Loop (mk_tagged (Emit s) !+id)) !+id
+      | Derived.Present_then (s, st) -> mk_tagged (Present (s, (visit env st), mk_tagged Nothing !+id) ) !+id
+      | Derived.Await_imm s ->
+        mk_tagged (Trap (trap_signal,
+              mk_tagged (Loop (
+                  mk_tagged (Seq (
+                    visit env Derived.(mkl @@ Present_then (s, mkl @@ Exit trap_signal)),
+                    mk_tagged Pause !+id)) !+id)) !+id)) !+id
+      | Derived.Suspend_imm (st, s) ->
+        mk_tagged (Suspend (visit env Derived.(
+          mkl @@ Present_then (s, mkl @@ Seq (mkl Pause, st))), s)) !+id
+      | Derived.Abort (st, s) ->
+        mk_tagged (Trap (trap_signal, mk_tagged (
+            Par (mk_tagged (
+              Seq (visit env (mkl @@ Derived.Suspend_imm (st, s)),
+                   mk_tagged (Exit trap_signal) !+id)
+              ) !+id,
+                mk_tagged (Seq (visit env (mkl @@ Derived.Await s), mk_tagged (Exit trap_signal) !+id)) !+id)
+          ) !+id)) !+id
+      | Derived.Weak_abort (st, s) ->
+        mk_tagged (Trap (trap_signal, mk_tagged (
+            Par (visit env st, mk_tagged (
+                Seq (visit env (mkl @@ Derived.Await s), mk_tagged (Exit trap_signal) !+id))
+                   !+id)) !+id)) !+id
+      | Derived.Loop_each (st, s) ->
+        mk_tagged (Loop (
+            visit env Derived.(mkl @@ Abort (mkl @@ Seq (st, mkl Halt), s)))
+          ) !+id
+      | Derived.Every (s, st) -> mk_tagged (Seq (visit env (mkl @@ Derived.Await s), visit env
+                                        (mkl @@ Derived.Loop_each (st, s)))) !+id
+
+
+
+
+
+
+
+
+
     in
     visit env ast
 

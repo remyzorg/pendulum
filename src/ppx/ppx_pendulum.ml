@@ -78,6 +78,7 @@ let ast_of_expr e =
       Present (check_ident_string signal, visit e1, visit e2)
 
     | [%expr signal [%e? signal] [%e? e]] ->
+
       Signal (check_ident_string signal, visit e)
 
     | [%expr suspend [%e? e] [%e? signal]] ->
@@ -116,17 +117,17 @@ let extend_mapper argv =
   { default_mapper with
     expr = fun mapper expr ->
       match expr with
-      | { pexp_desc = Pexp_extension ({ txt = ext; loc }, pe)}
+      | { pexp_desc = Pexp_extension ({ txt = ext; loc }, e)}
         when ext = "sync" || ext = "sync_ast" || ext = "to_dot_grc" ->
         begin try
-            begin match pe with
+            begin match e with
               | PStr [{ pstr_desc = Pstr_eval (e, _)}] ->
                 let e, env = pop_signals_decl e in
                 begin match ext with
                   | "sync_ast" -> [%expr ([%e Pendulum_misc.expr_of_ast @@ ast_of_expr e])]
                   | "to_dot_grc" ->
                     let e = ast_of_expr e in
-                    Pendulum_misc.print_to_dot loc Ast.(Tagged.of_ast ~env @@ Ast.normalize @@ e);
+                    Pendulum_misc.print_to_dot loc Ast.(Tagged.of_ast ~env e);
                     [%expr ([%e Pendulum_misc.expr_of_ast e])]
                   | "sync" -> [%expr ([%e Sync2ml.generate @@ ast_of_expr e])]
                   | _ -> assert false
@@ -141,7 +142,5 @@ let extend_mapper argv =
         end
       | x -> default_mapper.expr mapper x;
   }
-
-
 
 let () = register "pendulum" extend_mapper
