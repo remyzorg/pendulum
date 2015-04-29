@@ -3,9 +3,6 @@ open OUnit
 
 
 open Pendulum.Runtime_ast
-open Grc
-
-
 
 let test_loop_pause ctx = assert_equal [%sync_ast loop begin pause end]
     (loop [pause])

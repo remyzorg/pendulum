@@ -132,8 +132,10 @@ let extend_mapper argv =
                   | "sync" ->
                     let ast = ast_of_expr e in
                     let tast = Ast.Tagged.of_ast ~env ast in
-                    let () = Sync2ml.generate tast in
-                    [%expr [%e Pendulum_misc.expr_of_ast ast]]
+                    let () = try Sync2ml.generate tast with
+                      | Sync2ml.Error(loc, e) ->
+                        Format.eprintf "[%%sync] %a\n" Sync2ml.print_error e
+                    in [%expr [%e Pendulum_misc.expr_of_ast ast]]
                   | _ -> assert false
                 end
               | _ ->
@@ -144,9 +146,9 @@ let extend_mapper argv =
           | Ast.Error (loc, e) ->
             raise (Location.Error (
                 Location.error ~loc (Format.asprintf "[%%sync] : %a" Ast.print_error e)))
-          | Sync2ml.Error (loc, e) ->
-            raise (Location.Error (
-                Location.error ~loc (Format.asprintf "[%%sync] : %a" Sync2ml.print_error e)))
+          (* | Sync2ml.Error (loc, e) -> *)
+          (*   raise (Location.Error ( *)
+          (*       Location.error ~loc (Format.asprintf "[%%sync] : %a" Sync2ml.print_error e))) *)
         end
       | x -> default_mapper.expr mapper x;
   }

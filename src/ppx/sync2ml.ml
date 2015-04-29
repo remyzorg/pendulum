@@ -56,6 +56,19 @@ let check_causality_cycles grc =
 
 let generate tast =
   let _selection_tree, control_flowgraph as grc = Grc.of_ast tast in
+  let open Grc.Flowgraph in
   check_causality_cycles grc;
+  let visit_node = function
+    | Call a -> assert false
+    | Test tv -> assert false
+    | Sync (i1, i2) -> assert false
+    | Fork -> assert false
+    | Dep -> assert false
+  in
+  let rec visit_fg = function
+    | Node_bin (nd, t1, t2) -> assert false
+    | Node (nd, t) -> assert false
+    | Leaf nd -> assert false
+  in
   ()
   (* ml_of_grc control_flowgraph selection_tree *)
