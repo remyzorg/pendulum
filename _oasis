@@ -18,7 +18,7 @@ Flag ppx
 Library "pendulum_preproc"
   Path: src/preproc/
   Pack: true
-  Modules: Ast, Grc
+  Modules: Ast, Grc, Utils
   BuildDepends:
     unix,
     compiler-libs.common,

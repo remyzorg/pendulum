@@ -32,7 +32,7 @@ let loop_par_emit () =
           //
           Loop (!! [
               await "a";
-              Atom (fun _ -> Format.printf "Hello")
+              Atom
             ]))
 
 

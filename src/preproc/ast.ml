@@ -137,6 +137,12 @@ module Tagged = struct
       match ast.content with
       | Derived.Loop t -> mk_tagged (Loop (visit env t)) !+id
 
+      (* | (Derived.Par (n, st) *)
+      (*   | Derived.Par (st, n) *)
+      (*   | Derived.Seq (st, n) *)
+      (*   | Derived.Seq (n, st)) when n.content = Nothing -> *)
+      (*   visit env st *)
+
       | Derived.Seq (st1, st2) ->
         let id = !+id in
         let f1 = visit env st1 in

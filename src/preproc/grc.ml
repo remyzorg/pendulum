@@ -300,10 +300,21 @@ let surface h =
           (pause, exit_node p endp)
           in Hashtbl.add env.synctbl (q.id, r.id) n; n
       in
-      binary_node (Call(Enter p.id)) (
+      enter_node p @@
+      binary_node Fork (
         surface env q syn syn,
         surface env r syn syn
       )
+
+      (* binary_node Fork ( *)
+      (*   test_node (Selection q.id) ( *)
+      (*     surface env q syn syn, *)
+      (*     syn *)
+      (*   ), *)
+      (*   test_node (Selection r.id) ( *)
+      (*     surface env r syn syn, *)
+      (*     syn) *)
+      (* ) *)
 
     | Exit (Label s) ->
       begin try StringMap.find s.content env.exits

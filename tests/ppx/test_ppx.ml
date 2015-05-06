@@ -45,7 +45,7 @@ let test_every ctx = assert_equal
 
 
 let cyclic_grc ctx = assert_equal
-  [%to_dot_grc
+  [%sync_ast
     input I, S;
     (nothing
      ||
@@ -56,17 +56,25 @@ let cyclic_grc ctx = assert_equal
     emit S]
   (Seq(Par (Nothing, Present_then ("I", Present ("S", Pause, Pause ))), Emit "S"))
 
-let cyclic_grc ctx = assert_equal
-  [%sync
-    input I, S;
-    (nothing
-     ||
-     present I begin
-       present S pause pause
-     end
-    );
-    emit S]
-  (Seq(Par (Nothing, Present_then ("I", Present ("S", Pause, Pause ))), Emit "S"))
+let par_deps ctx = assert_equal
+    [%sync
+      input S1, S2;
+      present S1 (emit S2)
+      ||
+      present S2 (atom begin
+          print_string "42";
+        end);
+    ] (Par (Present_then ("S1", emit "S2"), Present_then ("S2", Atom)))
+
+let par_deps ctx = assert_equal
+    [%to_dot_grc
+      input S1, S2;
+      present S1 (emit S2)
+      ||
+      present S2 (atom begin
+          print_string "42";
+        end);
+    ] (Par (Present_then ("S1", emit "S2"), Present_then ("S2", Atom)))
 
 let suite =
   "Test_ppx_pendulum_syntax">::: [

@@ -15,7 +15,7 @@ type statement =
   | Trap of label * statement
   | Exit of label
   | Present of signal * statement * statement
-  | Atom of (unit -> unit)
+  | Atom (* of (unit -> unit) *)
   | Signal of signal * statement
 
   | Halt
@@ -43,7 +43,7 @@ let (//) a b =  Par (a, b)
 let (!!) l = list_to_seq l
 let loop_each r p =  Loop_each (p, r)
 let loop l =  Loop (!! l)
-let atom f =  Atom f
+let atom = Atom
 let await a =  Await a
 let emit a =  Emit a
 let pause = Pause

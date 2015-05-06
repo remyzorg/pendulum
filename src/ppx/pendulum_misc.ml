@@ -34,6 +34,9 @@ let rec expr_of_ast e =
     | Loop e ->
       [%expr Loop ([%e visit e])]
 
+    | Atom _ ->
+      [%expr Atom ]
+
     | Seq (e1, e2) ->
       [%expr Seq ([%e visit e1], [%e visit e2])]
 
@@ -99,9 +102,3 @@ let print_to_dot loc =
     ignore @@ Sys.command (Format.sprintf "dot -Tpdf %s.dot -o %s.pdf" fgname fgname);
     Unix.unlink (tagname ^ ".dot");
     Unix.unlink (fgname ^ ".dot")
-
-
-module StringMap = Map.Make(struct
-    type t = string
-    let compare = compare
-  end)
