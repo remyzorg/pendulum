@@ -162,7 +162,7 @@ module Flowgraph = struct
   module Fgtbl = Hashtbl.Make(struct
       type t = flowgraph
       let hash = Hashtbl.hash
-      let equal = (=)
+      let equal = (==)
     end)
 
   let (>>) s c = Node (s, c)

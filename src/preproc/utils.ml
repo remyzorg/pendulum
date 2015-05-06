@@ -35,3 +35,10 @@ module Queue = struct
     | h :: t, b -> Some (h, (t, b))
     | [], b -> dequeue (List.rev b, [])
 end
+
+module Option = struct
+
+  let map f v =
+    match v with None -> None | Some v -> Some (f v)
+
+end
