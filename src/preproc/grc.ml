@@ -157,14 +157,12 @@ module Flowgraph = struct
       let equal = (==)
     end)
 
-
-  (* let binary_node s (c1, c2) = Node_bin (s, c1, c2) *)
-
   let test_node t (c1, c2) = if c1 == c2 then c1 else
       Test (t, c1, c2)
 
-  let exit_node p next = Call (Exit p.Tagged.id, next)
-  let enter_node p next = Call (Enter p.Tagged.id, next)
+  let (>>) s c = Call (s, c)
+  let exit_node p next = Exit p.Tagged.id >> next
+  let enter_node p next = Enter p.Tagged.id >> next
 
   let style_of_node = function
     | Call (a, _) -> "shape=oval" ^ begin match a with
@@ -261,9 +259,9 @@ let surface h =
         pause
       )
 
-    | Emit s -> Call (Emit s.content, endp)
+    | Emit s -> Emit s.content >> endp
     | Nothing -> endp
-    | Atom f -> Call(Atom f, endp)
+    | Atom f -> Atom f >> endp
 
     | Suspend (q, _)
     | Signal (_, q) ->
@@ -320,7 +318,7 @@ let depth h surface =
     | Emit s -> endp
     | Nothing -> endp
 
-    | Pause -> Call (Exit p.id, endp)
+    | Pause -> Exit p.id >> endp
 
     | Await s ->
       test_node (Signal s.content) (
@@ -370,7 +368,7 @@ let depth h surface =
     | Suspend (q, s) ->
       test_node (Signal s.content) (
         pause,
-        depth env q pause (Call (Exit p.id, endp))
+        depth env q pause (Exit p.id >> endp)
       )
 
     | Trap (Label s, q) ->
