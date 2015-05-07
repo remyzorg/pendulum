@@ -19,25 +19,19 @@ module Flowgraph : sig
     | Atom of Parsetree.expression
     | Enter of int
     | Exit of int
-    | Finish
-    | SetFinish of bool
 
   type test_value =
     | Signal of string [@printer fun fmt -> Format.fprintf fmt "%s"]
     | Selection of int
     | Finished
 
-  type node =
-    | Call of action
-    | Test of test_value
-    | Sync of int * int
-    | Fork
-    | Dep
-
   type t =
-    | Node_bin of node * t * t
-    | Node of node * t
-    | Leaf of node
+    | Call of action * t
+    | Test of test_value * t * t (* then * else *)
+    | Fork of t * t * t (* left * right * sync *)
+    | Sync of (int * int) * t * t
+    | Pause
+    | Finish
 
   val print_to_dot : Format.formatter -> t -> unit
 

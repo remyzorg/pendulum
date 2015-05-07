@@ -106,8 +106,6 @@ module Flowgraph = struct
     | Atom of Parsetree.expression
     | Enter of int
     | Exit of int
-    | Finish
-    | SetFinish of bool
 
   let pp_action fmt a =
     Format.(fprintf fmt "%s" begin
@@ -116,8 +114,6 @@ module Flowgraph = struct
         | Atom _ -> "atom"
         | Enter i -> sprintf "enter %d" i
         | Exit i -> sprintf "exit %d" i
-        | Finish -> "finish"
-        | SetFinish b -> sprintf "set_finish %B" b
       end)
 
 
@@ -134,28 +130,24 @@ module Flowgraph = struct
         | Finished -> fprintf fmt "finished"
       end)
 
-
-  type node =
-    | Call of action
-    | Test of test_value
-    | Sync of int * int
-    | Fork
-    | Dep
-
-  let pp_node fmt node =
-    Format.(begin
-        match node with
-        | Call a -> fprintf fmt "%a" pp_action a
-        | Test tv -> fprintf fmt "test <B>%a</B>  " pp_test_value tv
-        | Sync (i1, i2) -> fprintf fmt "sync(%d, %d)" i1 i2
-        | Fork -> fprintf fmt "fork"
-        | Dep -> fprintf fmt "dep"
-      end)
-
   type t =
-    | Node_bin of node * t * t
-    | Node of node * t
-    | Leaf of node
+    | Call of action * t
+    | Test of test_value * t * t (* then * else *)
+    | Fork of t * t * t (* left * right * sync *)
+    | Sync of (int * int) * t * t
+    | Pause
+    | Finish
+
+  let pp_node fmt t =
+    Format.(begin
+        match t with
+        | Call (a, _) -> fprintf fmt "%a" pp_action a
+        | Test (tv, _, _) -> fprintf fmt "test <B>%a</B>  " pp_test_value tv
+        | Sync ((i1, i2), _, _) -> fprintf fmt "sync(%d, %d)" i1 i2
+        | Fork (_, _, _) -> fprintf fmt "fork"
+        | Pause -> fprintf fmt "pause"
+        | Finish -> fprintf fmt "finish"
+      end)
 
   type flowgraph = t
 
@@ -165,28 +157,27 @@ module Flowgraph = struct
       let equal = (==)
     end)
 
-  let (>>) s c = Node (s, c)
 
-  let binary_node s (c1, c2) = Node_bin (s, c1, c2)
+  (* let binary_node s (c1, c2) = Node_bin (s, c1, c2) *)
 
   let test_node t (c1, c2) = if c1 == c2 then c1 else
-      Node_bin ((Test t), c1, c2)
+      Test (t, c1, c2)
 
-  let exit_node p next = Call (Exit p.Tagged.id) >> next
-  let enter_node p next = Call (Enter p.Tagged.id) >> next
+  let exit_node p next = Call (Exit p.Tagged.id, next)
+  let enter_node p next = Call (Enter p.Tagged.id, next)
 
   let style_of_node = function
-    | Call a -> "shape=oval" ^ begin match a with
+    | Call (a, _) -> "shape=oval" ^ begin match a with
         | Emit s ->", fontcolor=blue, "
         | Atom _ -> ", "
         | Enter i -> ", fontcolor=darkgreen, "
         | Exit i -> ", fontcolor=red, "
-        | Finish -> ", fontcolor=red, "
-        | SetFinish b -> if b then ", fontcolor=darkgreen, " else ", fontcolor=red, "
       end
-    | Test tv -> "shape=box, "
-    | Sync (i1, i2) -> "shape=invtrapezium"
-    | Fork | Dep -> ""
+    | Test _ -> "shape=box, "
+    | Sync _ -> "shape=invtrapezium"
+    | Finish -> ", fontcolor=red, "
+    | Pause -> ", fontcolor=darkgreen, "
+    | Fork _ -> ""
 
 
   let print_to_dot fmt fg =
@@ -197,24 +188,27 @@ module Flowgraph = struct
       try Fgtbl.find h fg with
       | Not_found ->
         let id = begin match fg with
-          | Node_bin (n, fg1, fg2) ->
+          | Call (action, t) ->
             let my_id = id () in
-            let shape = match n with Test _ | Sync _ -> "[style = dashed]" | _ -> "" in
-            fprintf fmt "N%d [%s label=<%a>]; @\n" my_id (style_of_node n) pp_node n ;
-            let fg1_id, fg2_id = visit fg1, visit fg2 in
+            fprintf fmt "N%d [%slabel=<%a>]; @\n" my_id (style_of_node fg) pp_node fg;
+            let fg_id = visit t in
+            fprintf fmt "N%d -> N%d ;@\n" my_id fg_id;
+            my_id
+
+          | Test (_, t1, t2) | Fork (t1, t2, _) | Sync (_, t1, t2) ->
+            let my_id = id () in
+            let shape = match fg with Test _ | Sync _ -> "[style = dashed]" | _ -> "" in
+            fprintf fmt "N%d [%s label=<%a>]; @\n" my_id (style_of_node fg) pp_node fg;
+            let fg1_id, fg2_id = visit t1, visit t2 in
             fprintf fmt "N%d -> N%d;@\n" my_id fg1_id;
             fprintf fmt "N%d -> N%d %s;@\n" my_id fg2_id shape;
             my_id
-          | Node (n, fg) ->
+
+          | Pause | Finish ->
             let my_id = id () in
-            fprintf fmt "N%d [%slabel=<%a>]; @\n" my_id (style_of_node n) pp_node n;
-            let fg_id = visit fg in
-            fprintf fmt "N%d -> N%d ;@\n" my_id fg_id;
+            fprintf fmt "N%d [shape = none, label=<%a>]; @\n" my_id pp_node fg;
             my_id
-          | Leaf n ->
-            let my_id = id () in
-            fprintf fmt "N%d [shape = none, label=<%a>]; @\n" my_id pp_node n;
-            my_id
+
         end
         in Fgtbl.add h fg id; id
     in
@@ -267,10 +261,9 @@ let surface h =
         pause
       )
 
-    | Emit s ->
-      Call (Emit s.content) >> endp
+    | Emit s -> Call (Emit s.content, endp)
     | Nothing -> endp
-    | Atom f -> Call(Atom f) >> endp
+    | Atom f -> Call(Atom f, endp)
 
     | Suspend (q, _)
     | Signal (_, q) ->
@@ -296,25 +289,15 @@ let surface h =
     | Par (q, r) ->
       let syn = try Hashtbl.find env.synctbl (q.id, r.id) with
         | Not_found ->
-          let n = binary_node (Sync(q.id, r.id))
-          (pause, exit_node p endp)
+          let n = Sync ((q.id, r.id), pause, exit_node p endp)
           in Hashtbl.add env.synctbl (q.id, r.id) n; n
       in
       enter_node p @@
-      binary_node Fork (
+      Fork (
         surface env q syn syn,
-        surface env r syn syn
+        surface env r syn syn,
+        syn
       )
-
-      (* binary_node Fork ( *)
-      (*   test_node (Selection q.id) ( *)
-      (*     surface env q syn syn, *)
-      (*     syn *)
-      (*   ), *)
-      (*   test_node (Selection r.id) ( *)
-      (*     surface env r syn syn, *)
-      (*     syn) *)
-      (* ) *)
 
     | Exit (Label s) ->
       begin try StringMap.find s.content env.exits
@@ -337,7 +320,7 @@ let depth h surface =
     | Emit s -> endp
     | Nothing -> endp
 
-    | Pause -> (Call (Exit p.id)) >> endp
+    | Pause -> Call (Exit p.id, endp)
 
     | Await s ->
       test_node (Signal s.content) (
@@ -362,18 +345,18 @@ let depth h surface =
     | Par (q, r) ->
       let syn = try Hashtbl.find env.synctbl (q.id, r.id) with
         | Not_found ->
-          let n = binary_node (Sync(q.id, r.id))
-          (pause, exit_node p endp)
+          let n = Sync ((q.id, r.id), pause, exit_node p endp)
           in Hashtbl.add env.synctbl (q.id, r.id) n; n
       in
-      binary_node Fork (
+      Fork (
         test_node (Selection q.id) (
           depth env q syn syn,
           syn
         ),
         test_node (Selection r.id) (
           depth env r syn syn,
-          syn)
+          syn),
+        syn
       )
 
     | Present (s, q, r) ->
@@ -387,7 +370,8 @@ let depth h surface =
     | Suspend (q, s) ->
       test_node (Signal s.content) (
         pause,
-        depth env q pause (Call(Exit p.id) >> endp))
+        depth env q pause (Call (Exit p.id, endp))
+      )
 
     | Trap (Label s, q) ->
       let end_trap = exit_node p endp in
@@ -399,64 +383,18 @@ let flowgraph p =
   let open Flowgraph in
   let open Tagged in
   let env = {under_suspend = false; exits = StringMap.empty; synctbl = Hashtbl.create 17} in
-  let set_finish = Leaf (Call (SetFinish true)) in
-  let set_not_finish = Leaf (Call (SetFinish false)) in
   let depthtbl, surftbl = Hashtbl.create 30, Hashtbl.create 30 in
 
   let surface = surface surftbl in
 
-  let s = surface env p set_not_finish set_finish in
-  let d = depth depthtbl surface env p set_not_finish set_finish in
+  let s = surface env p Pause Finish in
+  let d = depth depthtbl surface env p Pause Finish in
 
   test_node Finished (
-    Leaf(Call(Finish)),
+    Finish,
     test_node (Selection p.id) (d, s)
   )
 
 
 let of_ast p =
   Selection_tree.of_ast p, flowgraph p
-
-
-module Eval = struct
-
-  type env = {
-    select : (int, Selection_tree.t) Hashtbl.t;
-    signals : (string, unit) Hashtbl.t;
-    mutable finished : bool;
-  }
-
-  exception Finish_exn
-
-  let action select env a =
-    Flowgraph.(Selection_tree.(Hashtbl.(
-        match a with
-        | Emit s -> Hashtbl.add env.signals s ()
-        | Atom _ -> assert false
-        | Enter i -> Primitive.(i |> find env.select |> enter)
-        | Exit i -> Primitive.(i |> find env.select |> exit)
-        | Finish -> raise Finish_exn
-        | SetFinish b -> env.finished <- b
-      )))
-
-  let test_value select env test =
-    Flowgraph.(Selection_tree.(
-        match test with
-        | Signal s -> Hashtbl.mem env.signals s
-        | Selection i -> (Hashtbl.find env.select i).status
-        | Finished -> env.finished
-      ))
-
-  (* let  *)
-
-  (* let eval_par select env test *)
-
-  (* let rec eval_step select env grc = *)
-  (*   Flowgraph.(Selection_tree.( *)
-  (*       match grc with *)
-  (*       | Node (node, t) -> eval_step select env t *)
-  (*       | Node_bin (node, t1, t2) ->  *)
-  (*       | Leaf node -> *)
-  (*     )) *)
-
-end

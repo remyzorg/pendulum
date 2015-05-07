@@ -89,8 +89,6 @@ let print_to_dot loc =
                          loc.loc_start.Lexing.pos_fname) ^ ("_" ^ (string_of_int !n)) in
     let fgname = (name ^ "_fg") in
     let tagname = (name ^ "_tast") in
-    (* let cwd = Sys.getcwd () in *)
-    (* Format.printf "FILE HERE : |%s| |%n| |%s|" name (incr n; !n) cwd; *)
     let c_tagged = open_out (tagname ^ ".dot") in
     let c_flowgraph = open_out (fgname ^ ".dot") in
     let fmt_tagged = Format.formatter_of_out_channel c_tagged in
