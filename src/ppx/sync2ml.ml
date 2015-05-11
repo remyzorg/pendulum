@@ -63,6 +63,47 @@ module FgEmitsTbl = Hashtbl.Make(struct
       fg == fg' && stop = stop' && s = s'
   end)
 
+let emits =
+  let open Grc.Flowgraph in
+  let emittbl = FgEmitsTbl.create 17 in
+  let rec aux fg stop s =
+    match fg with
+    | Call (Emit s', t) when s = s' ->
+      FgEmitsTbl.add emittbl (fg, stop, s) true;
+      true
+    | Sync((i1, i2) as stop', _, _) when stop' = stop ->
+      FgEmitsTbl.add emittbl (fg, stop, s) false;
+      false
+
+    | Call (_, t) ->
+      let res = aux t stop s in
+      FgEmitsTbl.add emittbl (fg, stop, s) res;
+      res
+    | Test (_, t1, t2) | Fork (t1, t2, _) | Sync (_ , t1, t2) ->
+      let res = aux t1 stop s || aux t2 stop s in
+      FgEmitsTbl.add emittbl (fg, stop, s) res;
+      res
+    | Pause | Finish -> false
+  in
+  fun fg stop s ->
+    try FgEmitsTbl.find emittbl (fg, stop, s) with
+    | Not_found -> aux fg stop s
+
+
+let rec interleave fg =
+  let open Grc.Flowgraph in
+  let rec sequence_of_fork fg1 fg2 stop =
+    match fg1, fg2 with
+    | Test (Signal s, t1, t2), fg2 -> assert false
+    | Call (action, t), fg2 -> assert false
+      (* Call (action, sequence_of_fork f fg2 stop) *)
+  in
+  let visit fg =
+    assert false
+  in
+  visit fg
+
+
 
 type ml_test_expr =
   | MLsig of string

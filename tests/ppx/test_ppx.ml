@@ -71,9 +71,10 @@ let par_deps ctx = assert_equal
       input S1, S2;
       present S1 (emit S2)
       ||
-      present S2 (atom begin
-          print_string "42";
-        end);
+      present S2 begin
+        atom (print_string "42");
+        pause;
+      end;
     ] (Par (Present_then ("S1", emit "S2"), Present_then ("S2", Atom)))
 
 let suite =
