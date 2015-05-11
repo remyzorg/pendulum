@@ -135,7 +135,8 @@ let extend_mapper argv =
                     let () = try Sync2ml.generate tast with
                       | Sync2ml.Error(loc, e) ->
                         Format.eprintf "[%%sync] %a\n" Sync2ml.print_error e
-                    in [%expr [%e Pendulum_misc.expr_of_ast ast]]
+                    in
+                    [%expr [%e Pendulum_misc.expr_of_ast ast]]
                   | _ -> assert false
                 end
               | _ ->

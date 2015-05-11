@@ -1,9 +1,7 @@
 (* generating the ocaml code from ast *)
 
 
-open Pendulum_misc
-open Pendulum_preproc
-open Pendulum_preproc.Utils
+open Utils
 
 type error = Cyclic_causality of Grc.Flowgraph.t
 exception Error of Location.t * error
@@ -89,13 +87,37 @@ let emits =
     try FgEmitsTbl.find emittbl (fg, stop, s) with
     | Not_found -> aux fg stop s
 
+let children fg t1 t2 =
+  let open Grc.Flowgraph in
+  match fg with
+  | Sync (ids, _, _) -> Sync (ids, t1, t2)
+  | Test (tv, _, _) -> Test (tv, t1, t2)
+  | Fork (_, _, sync) -> Fork (t1, t2, sync)
+  | Call (a, _) -> Call(a, t1)
+  | Pause | Finish -> fg
+
+let rec find_and_replace fg elt replf =
+  let open Grc.Flowgraph in
+  if fg == elt then true, replf fg
+  else match fg with
+    | Call (a, t) ->
+      let res, t = find_and_replace t elt replf in
+      res, children fg t t
+    | Sync(_ , t1, t2) | Test (_, t1, t2) | Fork (t1, t2, _)->
+      let res1, t1 = find_and_replace t1 elt replf in
+      let res2, t2 = find_and_replace t2 elt replf in
+      res1 || res2, children fg t1 t2
+    | Pause | Finish -> false, fg
+
+
 
 let rec interleave fg =
   let open Grc.Flowgraph in
-  let rec sequence_of_fork fg1 fg2 stop =
+  let rec _sequence_of_fork fg1 fg2 stop =
     match fg1, fg2 with
     | Test (Signal s, t1, t2), fg2 -> assert false
     | Call (action, t), fg2 -> assert false
+    | _ -> assert false
       (* Call (action, sequence_of_fork f fg2 stop) *)
   in
   let visit fg =
