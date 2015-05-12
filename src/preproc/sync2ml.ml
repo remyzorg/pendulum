@@ -109,6 +109,14 @@ let rec find_and_replace fg elt replf =
       res1 || res2, children fg t1 t2
     | Pause | Finish -> false, fg
 
+(* let rec replace_join (fg1 : Grc.Flowgraph.t) fg2 repl = *)
+(*   let open Grc.Flowgraph in *)
+(*   let res, fg2 = find_and_replace fg2 fg1 repl in *)
+(*   if res then replf fg1, fg2 *)
+(*   else match fg1 with *)
+(*     | Call(a, t) -> *)
+(*       let  *)
+
 
 
 let rec interleave fg =
