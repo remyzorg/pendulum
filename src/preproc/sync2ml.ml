@@ -109,13 +109,19 @@ let rec find_and_replace fg elt replf =
       res1 || res2, children fg t1 t2
     | Pause | Finish -> false, fg
 
-(* let rec replace_join (fg1 : Grc.Flowgraph.t) fg2 repl = *)
-(*   let open Grc.Flowgraph in *)
-(*   let res, fg2 = find_and_replace fg2 fg1 repl in *)
-(*   if res then replf fg1, fg2 *)
-(*   else match fg1 with *)
-(*     | Call(a, t) -> *)
-(*       let  *)
+let rec replace_join (fg1 : Grc.Flowgraph.t) fg2 replf =
+  let open Grc.Flowgraph in
+  let res, fg2 = find_and_replace fg2 fg1 replf in
+  if res then replf fg1, fg2
+  else match fg1 with
+    | Call(a, t) ->
+      let fg1, fg2 = replace_join t fg2 replf in
+      Call (a, fg1), fg2
+    | Sync(_ , t1, t2) | Test (_, t1, t2) | Fork (t1, t2, _) ->
+      let t1, fg = replace_join t1 fg2 replf in
+      let t2, fg = replace_join t2 fg2 replf in
+      children fg1 t1 t2, fg2
+    | Pause | Finish -> fg1, fg2
 
 
 
