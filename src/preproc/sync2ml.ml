@@ -69,7 +69,7 @@ let emits =
     | Call (Emit s', t) when s = s' ->
       FgEmitsTbl.add emittbl (fg, stop, s) true;
       true
-    | Sync((i1, i2) as stop', _, _) when stop' = stop ->
+    | fg when fg == stop ->
       FgEmitsTbl.add emittbl (fg, stop, s) false;
       false
 
@@ -123,14 +123,26 @@ let rec replace_join (fg1 : Grc.Flowgraph.t) fg2 replf =
       children fg1 t1 t2, fg2
     | Pause | Finish -> fg1, fg2
 
-
-
 let rec interleave fg =
   let open Grc.Flowgraph in
-  let rec _sequence_of_fork fg1 fg2 stop =
+  let rec sequence_of_fork (stop: Grc.Flowgraph.t) fg2 fg1 =
     match fg1, fg2 with
-    | Test (Signal s, t1, t2), fg2 -> assert false
-    | Call (action, t), fg2 -> assert false
+    | fg1, fg2 when fg1 == fg2 -> fg1
+    | fg1, fg2 when fg1 == stop -> fg2
+    | fg1, fg2 when fg2 == stop -> fg1
+    | Test (Signal s, t1, t2), fg2 ->
+      if emits fg2 stop s then match fg2 with
+        | Call (a, t) -> Call (a, sequence_of_fork stop fg1 t)
+        | Pause | Finish -> assert false
+        | Sync(_, t1, t2) | Test (_, t1, t2) ->
+          let t1, t2 = replace_join t1 t2 (sequence_of_fork stop fg1) in
+          children fg2 t1 t2
+        | Fork (t1, t2, _) ->
+          let fg2 = sequence_of_fork t1 t2 stop in
+          sequence_of_fork fg1 fg2 stop
+      else
+        replace_join t1 t2 (fun elm -> sequence_of_fork stop fg2)
+    | Call (action, t), fg2 -> Call (action, sequence_of_fork stop t fg2)
     | _ -> assert false
       (* Call (action, sequence_of_fork f fg2 stop) *)
   in
