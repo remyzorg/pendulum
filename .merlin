@@ -2,7 +2,9 @@ S src/**
 S tests
 B _build
 B _build/src
-B _build/src/lang
+B _build/src/ppx
+B _build/src/preproc
+B _build/src/runtime
 B _build/tests
 
 PKG oUnit

@@ -80,6 +80,15 @@ let rec expr_of_ast e =
     end  [@metaloc e.loc]
   in visit e
 
+let print_to_dot_one name ext f e =
+  let full_name = (name ^ ext) in
+  let c = open_out (full_name ^ ".dot") in
+  let fmt = Format.formatter_of_out_channel c in
+  f fmt e;
+  close_out c;
+  ignore @@ Sys.command (Format.sprintf "dot -Tpdf %s.dot -o %s.pdf" full_name full_name);
+  (Unix.unlink (full_name ^ ".dot"))
+
 
 let print_to_dot loc =
   let open Location in
@@ -91,30 +100,9 @@ let print_to_dot loc =
         |> basename
       ) ^ ("_" ^ (string_of_int !n))
     in
-    let fgname = (name ^ "_fg") in
-    let interfgname = (name ^ "_interfg") in
-    let tagname = (name ^ "_tast") in
-
-    let c_tagged = open_out (tagname ^ ".dot") in
-    let c_flowgraph = open_out (fgname ^ ".dot") in
-    let c_inter_flowgraph = open_out (interfgname ^ ".dot") in
-
-    let fmt_tagged = Format.formatter_of_out_channel c_tagged in
-    let fmt_flowgraph = Format.formatter_of_out_channel c_flowgraph in
-    let fmt_interleaved_flowgraph =
-      Format.formatter_of_out_channel c_inter_flowgraph
-    in
-
-    Ast.Tagged.print_to_dot fmt_tagged e;
+    print_to_dot_one name "_tagged" Ast.Tagged.print_to_dot e;
     let fg = Grc.flowgraph e in
-    Grc.Flowgraph.print_to_dot fmt_flowgraph fg;
-    Grc.Flowgraph.print_to_dot fmt_interleaved_flowgraph (Sync2ml.interleave fg);
+    print_to_dot_one name "_fg" Grc.Flowgraph.print_to_dot fg
+    (* ; print_to_dot_one name "_interfg" Grc.Flowgraph.print_to_dot (Sync2ml.interleave fg) *)
 
-    close_out c_flowgraph; close_out c_tagged; close_out c_inter_flowgraph;
-    ignore @@ Sys.command (Format.sprintf "dot -Tpdf %s.dot -o %s.pdf" tagname tagname);
-    ignore @@ Sys.command (Format.sprintf "dot -Tpdf %s.dot -o %s.pdf" fgname fgname);
-    ignore @@ Sys.command (Format.sprintf "dot -Tpdf %s.dot -o %s.pdf" interfgname interfgname);
-    Unix.unlink (tagname ^ ".dot");
-    Unix.unlink (fgname ^ ".dot");
-    Unix.unlink (interfgname ^ ".dot")
 

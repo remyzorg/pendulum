@@ -130,8 +130,9 @@ let extend_mapper argv =
                     begin try
                         Pendulum_misc.print_to_dot loc Ast.(Tagged.of_ast ~env e);
                       with
-                      | Sync2ml.Error(loc, e) ->
-                        Format.eprintf "[%%sync] %a\n" Sync2ml.print_error e
+                      | Sync2ml.Error(_, e) ->
+                        raise (Location.Error (
+                            Location.error ~loc (Format.asprintf "[%%sync] : %a" Sync2ml.print_error e)))
                     end; [%expr [%e Pendulum_misc.expr_of_ast e]]
                   | "sync" ->
                     let ast = ast_of_expr e in
