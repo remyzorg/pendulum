@@ -3,7 +3,9 @@
 
 open Utils
 
-type error = Cyclic_causality of Grc.Flowgraph.t
+type error =
+  | Cyclic_causality of Grc.Flowgraph.t
+  | Par_leads_to_finish of Grc.Flowgraph.t
 exception Error of Location.t * error
 let error ~loc e = raise (Error (loc, e))
 
@@ -12,6 +14,7 @@ let print_error fmt e =
   fprintf fmt "%s"
     begin match e with
       | Cyclic_causality fg -> "Cyclic causality"
+      | Par_leads_to_finish fg -> "Par leads to pause or exit"
     end
 
 
@@ -55,7 +58,7 @@ let check_causality_cycles grc =
   visit StringMap.empty fg
 
 module FgEmitsTbl = Hashtbl.Make(struct
-    type t = Grc.Flowgraph.t * (int * int) * string
+    type t = Grc.Flowgraph.t * Grc.Flowgraph.t * string
     let hash = Hashtbl.hash
     let equal (fg, stop, s) (fg', stop', s') =
       fg == fg' && stop = stop' && s = s'
@@ -126,26 +129,34 @@ let rec replace_join (fg1 : Grc.Flowgraph.t) fg2 replf =
 
 let rec interleave fg =
   let open Grc.Flowgraph in
-  let rec sequence_of_fork (stop: Grc.Flowgraph.t) fg2 fg1 =
+  let rec sequence_of_fork (stop: Grc.Flowgraph.t) fg1 fg2 =
     match fg1, fg2 with
     | fg1, fg2 when fg1 == fg2 -> fg1
     | fg1, fg2 when fg1 == stop -> fg2
     | fg1, fg2 when fg2 == stop -> fg1
+    (* | (Pause | Finish), (Pause | Finish) -> assert false (\* TODO: Raise exn *\) *)
+    | (Pause | Finish), _ | _, (Finish | Pause) -> assert false (* TODO: Raise exn *)
     | Test (Signal s, t1, t2), fg2 ->
       if emits fg2 stop s then match fg2 with
-        | Call (a, t) -> Call (a, sequence_of_fork stop fg1 t)
-        | Pause | Finish -> assert false
+        | Call (a, t) -> Call (a, sequence_of_fork stop t fg1)
+        | Pause | Finish -> assert false (* TODO: Raise exn *)
         | Sync(_, t1, t2) | Test (_, t1, t2) ->
           let t1, t2 = replace_join t1 t2 (sequence_of_fork stop fg1) in
           children fg2 t1 t2
-        | Fork (t1, t2, _) ->
-          let fg2 = sequence_of_fork t1 t2 stop in
-          sequence_of_fork fg1 fg2 stop
+        | Fork (t1, t2, sync) ->
+          let fg2 = sequence_of_fork stop t1 t2 in
+          sequence_of_fork sync fg1 fg2
       else
-        replace_join t1 t2 (fun elm -> sequence_of_fork stop fg2)
+        let t1, t2 = replace_join t1 t2 (sequence_of_fork stop fg2) in
+        children fg1 t1 t2
     | Call (action, t), fg2 -> Call (action, sequence_of_fork stop t fg2)
-    | _ -> assert false
-      (* Call (action, sequence_of_fork f fg2 stop) *)
+    | (Fork (t1, t2, sync) as fg1), (_ as fg2)
+    | (_ as fg2), (Fork (t1, t2, sync) as fg1) ->
+      let fg1 = sequence_of_fork sync t1 t2 in
+      sequence_of_fork stop fg1 fg2
+    | Sync (_, t1, t2), fg2 | Test (_, t1, t2), fg2 ->
+      let t1, t2 = replace_join t1 t2 (sequence_of_fork stop fg2) in
+      children fg1 t1 t2
   in
   let visit fg =
     assert false
