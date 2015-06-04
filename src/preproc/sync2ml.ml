@@ -134,8 +134,10 @@ let rec interleave fg =
     | fg1, fg2 when fg1 == fg2 -> fg1
     | fg1, fg2 when fg1 == stop -> fg2
     | fg1, fg2 when fg2 == stop -> fg1
-    (* | (Pause | Finish), (Pause | Finish) -> assert false (\* TODO: Raise exn *\) *)
-    | (Pause | Finish), _ | _, (Finish | Pause) -> assert false (* TODO: Raise exn *)
+
+    | (Pause | Finish), _ | _, (Finish | Pause) ->
+      error ~loc:Ast.dummy_loc (Par_leads_to_finish fg)
+
     | Test (Signal s, t1, t2), fg2 ->
       if emits fg2 stop s then match fg2 with
         | Call (a, t) -> Call (a, sequence_of_fork stop t fg1)
@@ -149,17 +151,28 @@ let rec interleave fg =
       else
         let t1, t2 = replace_join t1 t2 (sequence_of_fork stop fg2) in
         children fg1 t1 t2
-    | Call (action, t), fg2 -> Call (action, sequence_of_fork stop t fg2)
-    | (Fork (t1, t2, sync) as fg1), (_ as fg2)
-    | (_ as fg2), (Fork (t1, t2, sync) as fg1) ->
+
+    | Call (action, t), fg2 ->
+      Call (action, sequence_of_fork stop t fg2)
+
+    | (Fork (t1, t2, sync)), (_ as fg2)
+    | (_ as fg2), (Fork (t1, t2, sync)) ->
       let fg1 = sequence_of_fork sync t1 t2 in
       sequence_of_fork stop fg1 fg2
+
     | Sync (_, t1, t2), fg2 | Test (_, t1, t2), fg2 ->
       let t1, t2 = replace_join t1 t2 (sequence_of_fork stop fg2) in
       children fg1 t1 t2
   in
-  let visit fg =
-    assert false
+
+  let rec visit (fg: Grc.Flowgraph.t) =
+    match fg with
+    | Call (a, t) -> Call (a, visit t)
+    | Test (tv, t1, t2) -> Test (tv, visit t1, visit t2)
+    | Fork (t1, t2, sync) -> sequence_of_fork (visit t1) (visit t2) sync
+    | Sync ((i1, i2), t1, t2) -> Sync ((i1, i2), visit t1, visit t2)
+    | Pause -> Pause
+    | Finish -> Finish
   in
   visit fg
 
@@ -188,6 +201,7 @@ let (++) c1 c2 = Capp (c1, c2)
 let generate tast =
   let _selection_tree, control_flowgraph as grc = Grc.of_ast tast in
   let open Grc.Flowgraph in
-  check_causality_cycles grc;
+  let _deps = check_causality_cycles grc in
+  let _interleaved_grc = interleave control_flowgraph in
   ()
   (* ml_of_grc control_flowgraph selection_tree *)

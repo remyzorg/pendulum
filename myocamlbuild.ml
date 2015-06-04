@@ -23,10 +23,12 @@ let () =
 
          flag ["ocaml"; "compile"; "ppx_pendulum"] &
          S [A "-ppx"; A ("src/ppx/ppx_pendulum." ^ native_suffix)];
-         S [A "-dsource"];
+         ignore(S [A "-dsource"]);
 
          mark_tag_used("tests");
          mark_tag_used("pkg_ppx_pendulum");
+         mark_tag_used("pkg_ppx_deriving.std");
+         mark_tag_used("pkg_ppx_deriving");
 
        | _ ->
          ());

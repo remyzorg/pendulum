@@ -85,18 +85,36 @@ let print_to_dot loc =
   let open Location in
   let n = ref 0 in
   fun e ->
-    let name = Filename.(basename @@ chop_extension @@
-                         loc.loc_start.Lexing.pos_fname) ^ ("_" ^ (string_of_int !n)) in
+    let name = Filename.(
+        loc.loc_start.Lexing.pos_fname
+        |> chop_extension
+        |> basename
+      ) ^ ("_" ^ (string_of_int !n))
+    in
     let fgname = (name ^ "_fg") in
+    let interfgname = (name ^ "_interfg") in
     let tagname = (name ^ "_tast") in
+
     let c_tagged = open_out (tagname ^ ".dot") in
     let c_flowgraph = open_out (fgname ^ ".dot") in
+    let c_inter_flowgraph = open_out (interfgname ^ ".dot") in
+
     let fmt_tagged = Format.formatter_of_out_channel c_tagged in
     let fmt_flowgraph = Format.formatter_of_out_channel c_flowgraph in
+    let fmt_interleaved_flowgraph =
+      Format.formatter_of_out_channel c_inter_flowgraph
+    in
+
     Ast.Tagged.print_to_dot fmt_tagged e;
-    Grc.Flowgraph.print_to_dot fmt_flowgraph (Grc.flowgraph e);
-    close_out c_flowgraph; close_out c_tagged;
+    let fg = Grc.flowgraph e in
+    Grc.Flowgraph.print_to_dot fmt_flowgraph fg;
+    Grc.Flowgraph.print_to_dot fmt_interleaved_flowgraph (Sync2ml.interleave fg);
+
+    close_out c_flowgraph; close_out c_tagged; close_out c_inter_flowgraph;
     ignore @@ Sys.command (Format.sprintf "dot -Tpdf %s.dot -o %s.pdf" tagname tagname);
     ignore @@ Sys.command (Format.sprintf "dot -Tpdf %s.dot -o %s.pdf" fgname fgname);
+    ignore @@ Sys.command (Format.sprintf "dot -Tpdf %s.dot -o %s.pdf" interfgname interfgname);
     Unix.unlink (tagname ^ ".dot");
-    Unix.unlink (fgname ^ ".dot")
+    Unix.unlink (fgname ^ ".dot");
+    Unix.unlink (interfgname ^ ".dot")
+

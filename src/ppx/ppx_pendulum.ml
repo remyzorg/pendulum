@@ -127,8 +127,12 @@ let extend_mapper argv =
                   | "sync_ast" -> [%expr ([%e Pendulum_misc.expr_of_ast @@ ast_of_expr e])]
                   | "to_dot_grc" ->
                     let e = ast_of_expr e in
-                    Pendulum_misc.print_to_dot loc Ast.(Tagged.of_ast ~env e);
-                    [%expr [%e Pendulum_misc.expr_of_ast e]]
+                    begin try
+                        Pendulum_misc.print_to_dot loc Ast.(Tagged.of_ast ~env e);
+                      with
+                      | Sync2ml.Error(loc, e) ->
+                        Format.eprintf "[%%sync] %a\n" Sync2ml.print_error e
+                    end; [%expr [%e Pendulum_misc.expr_of_ast e]]
                   | "sync" ->
                     let ast = ast_of_expr e in
                     let tast = Ast.Tagged.of_ast ~env ast in

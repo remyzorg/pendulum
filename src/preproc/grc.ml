@@ -154,7 +154,7 @@ module Flowgraph = struct
   module Fgtbl = Hashtbl.Make(struct
       type t = flowgraph
       let hash = Hashtbl.hash
-      let equal = (==)
+      let equal = (=)
     end)
 
   let test_node t (c1, c2) = if c1 == c2 then c1 else
