@@ -108,7 +108,6 @@ let children fg t1 t2 =
   | Pause | Finish -> fg
 
 let rec find_and_replace fg elt replf =
-
   let open Grc.Flowgraph in
   if fg == elt then true, replf fg
   else match fg with
@@ -121,7 +120,7 @@ let rec find_and_replace fg elt replf =
       res1 || res2, children fg t1 t2
     | Pause | Finish -> false, fg
 
-let rec replace_join (fg1 : Grc.Flowgraph.t) fg2 replf =
+let rec replace_join fg1 fg2 replf =
   let open Grc.Flowgraph in
   let res, fg2 = find_and_replace fg2 fg1 replf in
   if res then replf fg1, fg2
@@ -130,8 +129,8 @@ let rec replace_join (fg1 : Grc.Flowgraph.t) fg2 replf =
       let fg1, fg2 = replace_join t fg2 replf in
       Call (a, fg1), fg2
     | Sync(_ , t1, t2) | Test (_, t1, t2) | Fork (t1, t2, _) ->
-      let t1, fg = replace_join t1 fg2 replf in
-      let t2, fg = replace_join t2 fg2 replf in
+      let t1, _ = replace_join t1 fg2 replf in
+      let t2, _ = replace_join t2 fg2 replf in
       children fg1 t1 t2, fg2
     | Pause | Finish -> fg1, fg2
 
@@ -156,11 +155,13 @@ let rec interleave fg =
       try Fgtbl2.find fork_tbl (fg2, fg1) with | Not_found ->
         let fg = match fg1, fg2 with
           | fg1, fg2 when fg1 == fg2 -> fg1
-          | fg1, fg2 when fork_id fg1 = fork_id fg2 && fork_id fg1 = fork_id stop ->
-            fg1
-
-          | fg1, fg2 when fork_id fg1 = fork_id stop ->
-            sequence_of_fork stop fg2 fg1
+          | fg1, fg2 when
+              fork_id fg1 = fork_id fg2 &&
+              fork_id fg1 = fork_id stop
+            -> fg1
+          | fg1, fg2 when
+              fork_id fg1 = fork_id stop
+            -> sequence_of_fork stop fg2 fg1
 
           | (Pause | Finish), _ ->
             Format.printf "left is wrong@\n";
@@ -171,28 +172,34 @@ let rec interleave fg =
 
           | Test (Signal s, t1, t2), fg2 ->
             if emits fg2 stop s then match fg2 with
-              | Call (a, t) -> Call (a, sequence_of_fork stop t fg1)
+              | Call (a, t) -> assert false
+                (* Call (a, sequence_of_fork stop t fg1) *)
               | Pause | Finish -> assert false (* TODO: Raise exn *)
               | Sync(_, t1, t2) -> assert false
-              | Test (_, t1, t2) ->
-                let t1, t2 = replace_join t1 t2 (sequence_of_fork stop fg1) in
-                children fg2 t1 t2
-              | Fork (t1, t2, sync) ->
-                let fg2 = sequence_of_fork stop t1 t2 in
-                sequence_of_fork sync fg1 fg2
+              | Test (_, t1, t2) -> assert false
+                (* let t1, t2 = replace_join t1 t2 (sequence_of_fork stop fg1) in *)
+                (* children fg2 t1 t2 *)
+              | Fork (t1, t2, sync) -> assert false
+                (* let fg2 = sequence_of_fork stop t1 t2 in *)
+                (* sequence_of_fork sync fg1 fg2 *)
             else
-              let t1, t2 = replace_join t1 t2 (sequence_of_fork stop fg2) in
+              let t1, t2 = replace_join t1 t2 (fun x -> sequence_of_fork stop x fg2) in
               children fg1 t1 t2
 
           | Call (action, t), fg2 ->
             Call (action, sequence_of_fork stop fg2 t)
 
           | (Fork (t1, t2, sync)), (_ as fg2)
-          | (_ as fg2), (Fork (t1, t2, sync)) ->
-            let fg1 = sequence_of_fork sync t1 t2 in
-            sequence_of_fork stop fg1 fg2
+          | (_ as fg2), (Fork (t1, t2, sync)) -> assert false
+            (* let fg1 = sequence_of_fork sync t1 t2 in *)
+            (* sequence_of_fork stop fg1 fg2 *)
 
-          | Sync (_, t1, t2), fg2 | Test (_, t1, t2), fg2 ->
+          | Sync (_, t1, t2), fg2 -> assert false
+            (* Format.printf "====@\n"; *)
+            (* let t1, t2 = replace_join t1 t2 (sequence_of_fork stop fg2) in *)
+            (* children fg1 t1 t2 *)
+
+          | Test (_, t1, t2), fg2 ->
             let t1, t2 = replace_join t1 t2 (sequence_of_fork stop fg2) in
             children fg1 t1 t2
         in
