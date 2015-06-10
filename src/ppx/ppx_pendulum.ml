@@ -124,7 +124,8 @@ let extend_mapper argv =
               | PStr [{ pstr_desc = Pstr_eval (e, _)}] ->
                 let e, env = pop_signals_decl e in
                 begin match ext with
-                  | "sync_ast" -> [%expr ([%e Pendulum_misc.expr_of_ast @@ ast_of_expr e])]
+                  | "sync_ast" ->
+                    [%expr ([%e Pendulum_misc.expr_of_ast @@ ast_of_expr e])]
                   | "to_dot_grc" ->
                     let e = ast_of_expr e in
                     begin try
@@ -132,7 +133,8 @@ let extend_mapper argv =
                       with
                       | Sync2ml.Error(_, e) ->
                         raise (Location.Error (
-                            Location.error ~loc (Format.asprintf "[%%sync] : %a" Sync2ml.print_error e)))
+                            Location.error ~loc (Format.asprintf "[%%sync] : %a"
+                                                   Sync2ml.print_error e)))
                     end; [%expr [%e Pendulum_misc.expr_of_ast e]]
                   | "sync" ->
                     let ast = ast_of_expr e in

@@ -14,6 +14,7 @@ end
 
 module Flowgraph : sig
 
+
   type action =
     | Emit of string [@printer fun fmt -> Format.fprintf fmt "%s"]
     | Atom of Parsetree.expression
@@ -33,7 +34,14 @@ module Flowgraph : sig
     | Pause
     | Finish
 
+  type flowgraph = t
+
+  module Fgtbl : Hashtbl.S with type key = flowgraph
+
+
   val print_to_dot : Format.formatter -> t -> unit
+  val pp : Format.formatter -> t -> unit
+
 
 end
 

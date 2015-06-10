@@ -14,7 +14,7 @@ let print_error fmt e =
   fprintf fmt "%s"
     begin match e with
       | Cyclic_causality fg -> "Cyclic causality"
-      | Par_leads_to_finish fg -> "Par leads to pause or exit"
+      | Par_leads_to_finish fg -> Grc.Flowgraph.pp Format.std_formatter fg; "Par leads to pause or exit"
     end
 
 
@@ -63,6 +63,14 @@ module FgEmitsTbl = Hashtbl.Make(struct
     let equal (fg, stop, s) (fg', stop', s') =
       fg == fg' && stop = stop' && s = s'
   end)
+
+let memo_rec h f =
+  let rec g x =
+    try Hashtbl.find h x with
+    | Not_found ->
+      let y = f g x in
+      Hashtbl.add h x y; y
+  in g
 
 let emits =
   let open Grc.Flowgraph in
@@ -127,52 +135,83 @@ let rec replace_join (fg1 : Grc.Flowgraph.t) fg2 replf =
       children fg1 t1 t2, fg2
     | Pause | Finish -> fg1, fg2
 
+
+module Fgtbl2 = Hashtbl.Make(struct
+    type t = Grc.Flowgraph.t * Grc.Flowgraph.t
+    let hash = Hashtbl.hash
+    let equal (a1, b1) (a2, b2) = (a1 == a2) && (b1 == b2)
+  end)
+
+let fork_id = function
+  | Grc.Flowgraph.Sync(c, _, _) -> c
+  | _ -> 0, 0
+
+
 let rec interleave fg =
   let open Grc.Flowgraph in
+  let fork_tbl = Fgtbl2.create 17 in
+  let visit_tbl = Grc.Flowgraph.Fgtbl.create 17 in
   let rec sequence_of_fork (stop: Grc.Flowgraph.t) fg1 fg2 =
-    match fg1, fg2 with
-    | fg1, fg2 when fg1 == fg2 -> fg1
-    | fg1, fg2 when fg1 == stop -> fg2
-    | fg1, fg2 when fg2 == stop -> fg1
+    try Fgtbl2.find fork_tbl (fg1, fg2) with | Not_found ->
+      try Fgtbl2.find fork_tbl (fg2, fg1) with | Not_found ->
+        let fg = match fg1, fg2 with
+          | fg1, fg2 when fg1 == fg2 -> fg1
+          | fg1, fg2 when fork_id fg1 = fork_id fg2 && fork_id fg1 = fork_id stop ->
+            fg1
 
-    | (Pause | Finish), _ | _, (Finish | Pause) ->
-      error ~loc:Ast.dummy_loc (Par_leads_to_finish fg)
+          | fg1, fg2 when fork_id fg1 = fork_id stop ->
+            sequence_of_fork stop fg2 fg1
 
-    | Test (Signal s, t1, t2), fg2 ->
-      if emits fg2 stop s then match fg2 with
-        | Call (a, t) -> Call (a, sequence_of_fork stop t fg1)
-        | Pause | Finish -> assert false (* TODO: Raise exn *)
-        | Sync(_, t1, t2) | Test (_, t1, t2) ->
-          let t1, t2 = replace_join t1 t2 (sequence_of_fork stop fg1) in
-          children fg2 t1 t2
-        | Fork (t1, t2, sync) ->
-          let fg2 = sequence_of_fork stop t1 t2 in
-          sequence_of_fork sync fg1 fg2
-      else
-        let t1, t2 = replace_join t1 t2 (sequence_of_fork stop fg2) in
-        children fg1 t1 t2
+          | (Pause | Finish), _ ->
+            Format.printf "left is wrong@\n";
+            error ~loc:Ast.dummy_loc (Par_leads_to_finish fg2)
+          | _, (Finish | Pause) ->
+            Format.printf "right is wrong@\n";
+            error ~loc:Ast.dummy_loc (Par_leads_to_finish fg1)
 
-    | Call (action, t), fg2 ->
-      Call (action, sequence_of_fork stop t fg2)
+          | Test (Signal s, t1, t2), fg2 ->
+            if emits fg2 stop s then match fg2 with
+              | Call (a, t) -> Call (a, sequence_of_fork stop t fg1)
+              | Pause | Finish -> assert false (* TODO: Raise exn *)
+              | Sync(_, t1, t2) -> assert false
+              | Test (_, t1, t2) ->
+                let t1, t2 = replace_join t1 t2 (sequence_of_fork stop fg1) in
+                children fg2 t1 t2
+              | Fork (t1, t2, sync) ->
+                let fg2 = sequence_of_fork stop t1 t2 in
+                sequence_of_fork sync fg1 fg2
+            else
+              let t1, t2 = replace_join t1 t2 (sequence_of_fork stop fg2) in
+              children fg1 t1 t2
 
-    | (Fork (t1, t2, sync)), (_ as fg2)
-    | (_ as fg2), (Fork (t1, t2, sync)) ->
-      let fg1 = sequence_of_fork sync t1 t2 in
-      sequence_of_fork stop fg1 fg2
+          | Call (action, t), fg2 ->
+            Call (action, sequence_of_fork stop fg2 t)
 
-    | Sync (_, t1, t2), fg2 | Test (_, t1, t2), fg2 ->
-      let t1, t2 = replace_join t1 t2 (sequence_of_fork stop fg2) in
-      children fg1 t1 t2
+          | (Fork (t1, t2, sync)), (_ as fg2)
+          | (_ as fg2), (Fork (t1, t2, sync)) ->
+            let fg1 = sequence_of_fork sync t1 t2 in
+            sequence_of_fork stop fg1 fg2
+
+          | Sync (_, t1, t2), fg2 | Test (_, t1, t2), fg2 ->
+            let t1, t2 = replace_join t1 t2 (sequence_of_fork stop fg2) in
+            children fg1 t1 t2
+        in
+        Fgtbl2.add fork_tbl (fg1, fg2) fg; fg
   in
 
   let rec visit (fg: Grc.Flowgraph.t) =
-    match fg with
-    | Call (a, t) -> Call (a, visit t)
-    | Test (tv, t1, t2) -> Test (tv, visit t1, visit t2)
-    | Fork (t1, t2, sync) -> sequence_of_fork (visit t1) (visit t2) sync
-    | Sync ((i1, i2), t1, t2) -> Sync ((i1, i2), visit t1, visit t2)
-    | Pause -> Pause
-    | Finish -> Finish
+    try
+      Fgtbl.find visit_tbl fg
+    with Not_found ->
+      let fg' = match fg with
+        | Call (a, t) -> Call (a, visit t)
+        | Test (tv, t1, t2) -> Test (tv, visit t1, visit t2)
+        | Fork (t1, t2, sync) -> sequence_of_fork sync (visit t1) (visit t2)
+        | Sync ((i1, i2), t1, t2) -> Sync ((i1, i2), visit t1, visit t2)
+        | Pause -> Pause
+        | Finish -> Finish
+      in
+      Fgtbl.add visit_tbl fg fg'; fg'
   in
   visit fg
 
