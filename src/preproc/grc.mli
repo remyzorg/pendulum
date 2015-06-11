@@ -15,13 +15,13 @@ end
 module Flowgraph : sig
 
   type action =
-    | Emit of string [@printer fun fmt -> Format.fprintf fmt "%s"]
+    | Emit of string
     | Atom of Parsetree.expression
     | Enter of int
     | Exit of int
 
   type test_value =
-    | Signal of string [@printer fun fmt -> Format.fprintf fmt "%s"]
+    | Signal of string
     | Selection of int
     | Finished
 
@@ -32,6 +32,7 @@ module Flowgraph : sig
     | Sync of (int * int) * t * t
     | Pause
     | Finish
+    [@@deriving show]
 
   type flowgraph = t
 

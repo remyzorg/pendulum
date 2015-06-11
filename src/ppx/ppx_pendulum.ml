@@ -7,7 +7,7 @@ open Longident
 
 open Pendulum_preproc
 
-
+open Test_sync2ml
 
 let check_ident_string e =
   let open Ast in

@@ -14,7 +14,7 @@ let print_error fmt e =
   fprintf fmt "%s"
     begin match e with
       | Cyclic_causality fg -> "Cyclic causality"
-      | Par_leads_to_finish fg -> Grc.Flowgraph.pp Format.std_formatter fg; "Par leads to pause or exit"
+      | Par_leads_to_finish fg -> Format.printf "%a\n" Grc.Flowgraph.pp fg; "Par leads to pause or exit"
     end
 
 
@@ -64,12 +64,24 @@ module FgEmitsTbl = Hashtbl.Make(struct
       fg == fg' && stop = stop' && s = s'
   end)
 
+module Fgtbl2 = Hashtbl.Make(struct
+    type t = Grc.Flowgraph.t * Grc.Flowgraph.t
+    let hash = Hashtbl.hash
+    let equal (a1, b1) (a2, b2) = (a1 == a2) && (b1 == b2)
+  end)
+
+module Fgtbl3 = Hashtbl.Make(struct
+    type t = Grc.Flowgraph.t * Grc.Flowgraph.t * Grc.Flowgraph.t
+    let hash = Hashtbl.hash
+    let equal (a1, b1, c1) (a2, b2, c2) = (a1 == a2) && (b1 == b2) && (c1 == c2)
+  end)
+
 let memo_rec h f =
   let rec g x =
-    try Hashtbl.find h x with
+    try Fgtbl2.find h x with
     | Not_found ->
       let y = f g x in
-      Hashtbl.add h x y; y
+      Fgtbl2.add h x y; y
   in g
 
 let emits =
@@ -98,27 +110,40 @@ let emits =
     try FgEmitsTbl.find emittbl (fg, stop, s) with
     | Not_found -> aux fg stop s
 
-let children fg t1 t2 =
+let children =
   let open Grc.Flowgraph in
-  match fg with
-  | Sync (ids, _, _) -> Sync (ids, t1, t2)
-  | Test (tv, _, _) -> Test (tv, t1, t2)
-  | Fork (_, _, sync) -> Fork (t1, t2, sync)
-  | Call (a, _) -> Call(a, t1)
-  | Pause | Finish -> fg
+  let tbl = Fgtbl3.create 17 in
+  let children fg t1 t2 =
+    try Fgtbl3.find tbl (fg, t1, t2) with Not_found ->
+      let newfg = match fg with
+        | Sync (ids, _, _) -> Sync (ids, t1, t2)
+        | Test (tv, _, _) -> Test (tv, t1, t2)
+        | Fork (_, _, sync) -> Fork (t1, t2, sync)
+        | Call (a, _) -> Call(a, t1)
+        | Pause | Finish -> fg
+      in Fgtbl3.add tbl (fg, t1, t2) newfg; newfg
+  in children
+
 
 let rec find_and_replace fg elt replf =
-  let open Grc.Flowgraph in
-  if fg == elt then true, replf fg
-  else match fg with
-    | Call (a, t) ->
-      let res, t = find_and_replace t elt replf in
-      res, children fg t t
-    | Sync(_ , t1, t2) | Test (_, t1, t2) | Fork (t1, t2, _)->
-      let res1, t1 = find_and_replace t1 elt replf in
-      let res2, t2 = find_and_replace t2 elt replf in
-      res1 || res2, children fg t1 t2
-    | Pause | Finish -> false, fg
+  let tbl = Fgtbl2.create 17 in
+  let rec aux fg =
+    try Fgtbl2.find tbl (fg, elt) with Not_found ->
+      let open Grc.Flowgraph in
+      let result =
+        if fg == elt then true, replf fg
+        else match fg with
+          | Call (a, t) ->
+            let res, t = aux t in
+            res, children fg t t
+          | Sync(_ , t1, t2) | Test (_, t1, t2) | Fork (t1, t2, _)->
+            let res1, t1 = aux t1 in
+            let res2, t2 = aux t2 in
+            res1 || res2, children fg t1 t2
+          | Pause | Finish -> false, fg
+      in Fgtbl2.add tbl (fg, elt) result; result
+  in
+  aux fg
 
 let rec replace_join fg1 fg2 replf =
   let open Grc.Flowgraph in
@@ -134,12 +159,6 @@ let rec replace_join fg1 fg2 replf =
       children fg1 t1 t2, fg2
     | Pause | Finish -> fg1, fg2
 
-
-module Fgtbl2 = Hashtbl.Make(struct
-    type t = Grc.Flowgraph.t * Grc.Flowgraph.t
-    let hash = Hashtbl.hash
-    let equal (a1, b1) (a2, b2) = (a1 == a2) && (b1 == b2)
-  end)
 
 let fork_id = function
   | Grc.Flowgraph.Sync(c, _, _) -> c

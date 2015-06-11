@@ -103,11 +103,12 @@ module Flowgraph = struct
 
   type action =
     | Emit of string [@printer fun fmt -> Format.fprintf fmt "%s"]
-    | Atom of Parsetree.expression
+    | Atom of Parsetree.expression [@printer fun fmt _ -> Format.fprintf fmt ""]
     | Enter of int
     | Exit of int
+    [@@deriving show]
 
-  let pp_action fmt a =
+  let pp_action_dot fmt a =
     Format.(fprintf fmt "%s" begin
         match a with
         | Emit s -> "emit <B>" ^ s ^ "</B>"
@@ -121,8 +122,9 @@ module Flowgraph = struct
     | Signal of string [@printer fun fmt -> Format.fprintf fmt "%s"]
     | Selection of int
     | Finished
+    [@@deriving show]
 
-  let pp_test_value fmt tv =
+  let pp_test_value_dot fmt tv =
     Format.(begin
         match tv with
         | Signal s -> fprintf fmt "%s" s
@@ -137,13 +139,13 @@ module Flowgraph = struct
     | Sync of (int * int) * t * t
     | Pause
     | Finish
-        [@@deriving show]
+    [@@deriving show]
 
-  let pp_node fmt t =
+  let pp_dot fmt t =
     Format.(begin
         match t with
-        | Call (a, _) -> fprintf fmt "%a" pp_action a
-        | Test (tv, _, _) -> fprintf fmt "test <B>%a</B>  " pp_test_value tv
+        | Call (a, _) -> fprintf fmt "%a" pp_action_dot a
+        | Test (tv, _, _) -> fprintf fmt "test <B>%a</B>  " pp_test_value_dot tv
         | Sync ((i1, i2), _, _) -> fprintf fmt "sync(%d, %d)" i1 i2
         | Fork (_, _, _) -> fprintf fmt "fork"
         | Pause -> fprintf fmt "pause"
@@ -189,7 +191,7 @@ module Flowgraph = struct
         let id = begin match fg with
           | Call (action, t) ->
             let my_id = id () in
-            fprintf fmt "N%d [%slabel=<%a>]; @\n" my_id (style_of_node fg) pp_node fg;
+            fprintf fmt "N%d [%slabel=<%a>]; @\n" my_id (style_of_node fg) pp_dot fg;
             let fg_id = visit t in
             fprintf fmt "N%d -> N%d ;@\n" my_id fg_id;
             my_id
@@ -197,7 +199,7 @@ module Flowgraph = struct
           | Test (_, t1, t2) | Fork (t1, t2, _) | Sync (_, t1, t2) ->
             let my_id = id () in
             let shape = match fg with Test _ | Sync _ -> "[style = dashed]" | _ -> "" in
-            fprintf fmt "N%d [%s label=<%a>]; @\n" my_id (style_of_node fg) pp_node fg;
+            fprintf fmt "N%d [%s label=<%a>]; @\n" my_id (style_of_node fg) pp_dot fg;
             let fg1_id, fg2_id = visit t1, visit t2 in
             fprintf fmt "N%d -> N%d;@\n" my_id fg1_id;
             fprintf fmt "N%d -> N%d %s;@\n" my_id fg2_id shape;
@@ -205,7 +207,7 @@ module Flowgraph = struct
 
           | Pause | Finish ->
             let my_id = id () in
-            fprintf fmt "N%d [shape = none, label=<%a>]; @\n" my_id pp_node fg;
+            fprintf fmt "N%d [shape = none, label=<%a>]; @\n" my_id pp_dot fg;
             my_id
 
         end

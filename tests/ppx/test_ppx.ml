@@ -57,7 +57,7 @@ let cyclic_grc ctx = assert_equal
   (Seq(Par (Nothing, Present_then ("I", Present ("S", Pause, Pause ))), Emit "S"))
 
 let par_deps ctx = assert_equal
-    [%sync
+    [%sync_ast
       input S1, S2;
       present S1 (emit S2)
       ||
