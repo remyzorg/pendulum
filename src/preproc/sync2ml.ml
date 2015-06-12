@@ -135,7 +135,7 @@ let rec find_and_replace fg elt replf =
         else match fg with
           | Call (a, t) ->
             let res, t' = aux t in
-            let t = if res then t else t' in
+            let t = if res then t' else t in
             res, children fg t t
           | Sync(_ , t1, t2) | Test (_, t1, t2) | Fork (t1, t2, _)->
             let res1, t1' = aux t1 in
