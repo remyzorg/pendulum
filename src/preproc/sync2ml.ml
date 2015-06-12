@@ -134,12 +134,14 @@ let rec find_and_replace fg elt replf =
         if fg == elt then true, replf fg
         else match fg with
           | Call (a, t) ->
-            let res, t = aux t in
+            let res, t' = aux t in
+            let t = if res then t else t' in
             res, children fg t t
           | Sync(_ , t1, t2) | Test (_, t1, t2) | Fork (t1, t2, _)->
-            let res1, t1 = aux t1 in
-            let res2, t2 = aux t2 in
-            res1 || res2, children fg t1 t2
+            let res1, t1' = aux t1 in
+            let res2, t2' = aux t2 in
+            res1 || res2,
+            children fg (if res1 then t1' else t1) (if res2 then t2' else t2)
           | Pause | Finish -> false, fg
       in Fgtbl2.add tbl (fg, elt) result; result
   in
