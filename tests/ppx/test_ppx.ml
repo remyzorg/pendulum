@@ -68,6 +68,7 @@ let par_deps ctx = assert_equal
 
 let par_deps ctx = assert_equal
     [%to_dot_grc
+    (* [%sync_ast *)
       input S1, S2;
       present S1 (emit S2)
       ||
