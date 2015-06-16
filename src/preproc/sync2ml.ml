@@ -222,7 +222,7 @@ let rec interleave fg =
         Fgtbl2.add fork_tbl (fg1, fg2) fg; fg
   in
 
-  let rec visit (fg: Grc.Flowgraph.t) =
+  let rec visit fg =
     try
       Fgtbl.find visit_tbl fg
     with Not_found ->
