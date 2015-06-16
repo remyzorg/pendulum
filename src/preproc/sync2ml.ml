@@ -14,7 +14,8 @@ let print_error fmt e =
   fprintf fmt "%s"
     begin match e with
       | Cyclic_causality fg -> "Cyclic causality"
-      | Par_leads_to_finish fg -> Format.printf "%a\n" Grc.Flowgraph.pp fg; "Par leads to pause or exit"
+      | Par_leads_to_finish fg ->
+        Format.printf "%a\n" Grc.Flowgraph.pp fg; "Par leads to pause or exit"
     end
 
 
@@ -237,8 +238,6 @@ let rec interleave fg =
       Fgtbl.add visit_tbl fg fg'; fg'
   in
   visit fg
-
-
 
 type ml_test_expr =
   | MLsig of string
