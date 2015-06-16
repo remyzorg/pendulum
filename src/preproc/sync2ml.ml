@@ -57,6 +57,9 @@ let check_causality_cycles grc =
   in
   visit StringMap.empty fg
 
+
+open Grc.Flowgraph
+
 module FgEmitsTbl = Hashtbl.Make(struct
     type t = Grc.Flowgraph.t * Grc.Flowgraph.t * string
     let hash = Hashtbl.hash
@@ -76,84 +79,75 @@ module Fgtbl3 = Hashtbl.Make(struct
     let equal (a1, b1, c1) (a2, b2, c2) = (a1 == a2) && (b1 == b2) && (c1 == c2)
   end)
 
-let memo_rec h f =
-  let rec g x =
-    try Fgtbl2.find h x with
-    | Not_found ->
-      let y = f g x in
-      Fgtbl2.add h x y; y
-  in g
+module Fgstbl = Hashtbl.Make(struct
+    type t = Grc.Flowgraph.t list
+    let hash = Hashtbl.hash
+    let rec equal l1 l2 =
+      match l1, l2 with
+      | [], [] -> true
+      | [x1], [x2] -> x1 == x2
+      | [x1; y1], [x2; y2] -> x1 == x2 && y1 == y2
+      | [x1; y1; z1], [x2; y2; z2] -> x1 == x2 && y1 == y2 && z1 == z2
+      | x1 :: t1, x2 :: t2  -> x1 == x2 && equal t1 t2
+      | [], _ | _, [] -> false
+  end)
+
+let memo_rec (type a) (module H : Hashtbl.S with type key = a) =
+  let h = H.create 17 in
+  fun f ->
+    let rec g x =
+      try H.find h x with
+      | Not_found ->
+        let y = f g x in
+        H.add h x y; y
+    in g
+
 
 let emits =
-  let open Grc.Flowgraph in
-  let emittbl = FgEmitsTbl.create 17 in
-  let rec aux fg stop s =
+  let aux aux (fg, stop, s) =
     match fg with
-    | Call (Emit s', t) when s = s' ->
-      FgEmitsTbl.add emittbl (fg, stop, s) true;
-      true
-    | fg when fg == stop ->
-      FgEmitsTbl.add emittbl (fg, stop, s) false;
-      false
-
-    | Call (_, t) ->
-      let res = aux t stop s in
-      FgEmitsTbl.add emittbl (fg, stop, s) res;
-      res
+    | Call (Emit s', t) when s = s' -> true
+    | fg when fg == stop -> false
+    | Call (_, t) -> aux (t, stop, s)
     | Test (_, t1, t2) | Fork (t1, t2, _) | Sync (_ , t1, t2) ->
-      let res = aux t1 stop s || aux t2 stop s in
-      FgEmitsTbl.add emittbl (fg, stop, s) res;
-      res
+      aux (t1, stop, s) || aux (t2, stop, s)
     | Pause | Finish -> false
   in
-  fun fg stop s ->
-    try FgEmitsTbl.find emittbl (fg, stop, s) with
-    | Not_found -> aux fg stop s
+  let f = memo_rec (module FgEmitsTbl) aux in fun fg stop s -> f (fg, stop, s)
 
 let children =
-  let open Grc.Flowgraph in
-  let tbl = Fgtbl3.create 17 in
-  let children fg t1 t2 =
-    try Fgtbl3.find tbl (fg, t1, t2) with Not_found ->
-      let newfg = match fg with
-        | Sync (ids, _, _) -> Sync (ids, t1, t2)
-        | Test (tv, _, _) -> Test (tv, t1, t2)
-        | Fork (_, _, sync) -> Fork (t1, t2, sync)
-        | Call (a, _) -> Call(a, t1)
-        | Pause | Finish -> fg
-      in Fgtbl3.add tbl (fg, t1, t2) newfg; newfg
-  in children
+  let children _ (fg, t1, t2) =
+    let newfg = match fg with
+      | Sync (ids, _, _) -> Sync (ids, t1, t2)
+      | Test (tv, _, _) -> Test (tv, t1, t2)
+      | Fork (_, _, sync) -> Fork (t1, t2, sync)
+      | Call (a, _) -> Call(a, t1)
+      | Pause | Finish -> fg
+    in newfg
+  in let f = memo_rec (module Fgtbl3) children in fun fg t1 t2 -> f (fg, t1, t2)
 
 
-let rec find_and_replace fg elt replf =
-  let tbl = Fgtbl2.create 17 in
-  let rec aux fg =
-    try Fgtbl2.find tbl (fg, elt) with Not_found ->
-      let open Grc.Flowgraph in
-      let result =
-        if fg == elt then true, replf fg
-        else match fg with
-          | Call (a, t) ->
-            let res, t' = aux t in
-            let t = if res then t' else t in
-            res, children fg t t
-          | Sync(_ , t1, t2) | Test (_, t1, t2) | Fork (t1, t2, _)->
-            let res1, t1' = aux t1 in
-            let res2, t2' = aux t2 in
-            res1 || res2,
-            children fg (if res1 then t1' else t1) (if res2 then t2' else t2)
-          | Pause | Finish -> false, fg
-      in Fgtbl2.add tbl (fg, elt) result; result
-  in
-  aux fg
-
-
+let rec find_and_replace replf =
+  let aux aux (fg, elt) =
+    if fg == elt then true, replf fg
+    else match fg with
+      | Call (a, t) ->
+        let res, t' = aux (t, elt) in
+        let t = if res then t' else t in
+        res, children fg t t
+      | Sync(_ , t1, t2) | Test (_, t1, t2) | Fork (t1, t2, _)->
+        let res1, t1' = aux (t1, elt) in
+        let res2, t2' = aux (t2, elt) in
+        res1 || res2,
+        children fg (if res1 then t1' else t1) (if res2 then t2' else t2)
+      | Pause | Finish -> false, fg
+  in let f = memo_rec (module Fgtbl2) aux in fun fg elt -> f (fg, elt)
 
 
 
 let rec replace_join fg1 fg2 replf =
   let open Grc.Flowgraph in
-  let res, fg2' = find_and_replace fg2 fg1 replf in
+  let res, fg2' = find_and_replace replf fg2 fg1 in
   if res then replf fg1, fg2'
   else match fg1 with
     | Call(a, t) ->
@@ -166,12 +160,9 @@ let rec replace_join fg1 fg2 replf =
     | Pause | Finish -> fg1, fg2
 
 
-
-
 let fork_id = function
   | Grc.Flowgraph.Sync(c, _, _) -> c
   | _ -> 0, 0
-
 
 let rec interleave fg =
   let open Grc.Flowgraph in
@@ -182,12 +173,10 @@ let rec interleave fg =
       try Fgtbl2.find fork_tbl (fg2, fg1) with | Not_found ->
         let fg = match fg1, fg2 with
           | fg1, fg2 when fg1 == fg2 -> fg1
-          | fg1, fg2 when
-              fork_id fg1 = fork_id fg2 &&
-              fork_id fg1 = fork_id stop
+          | fg1, fg2 when fork_id fg1 = fork_id fg2 &&
+                          fork_id fg1 = fork_id stop
             -> fg1
-          | fg1, fg2 when
-              fork_id fg1 = fork_id stop
+          | fg1, fg2 when fork_id fg1 = fork_id stop
             -> sequence_of_fork stop fg2 fg1
 
           | (Pause | Finish), _ ->
@@ -199,16 +188,16 @@ let rec interleave fg =
 
           | Test (Signal s, t1, t2), fg2 ->
             if emits fg2 stop s then match fg2 with
-              | Call (a, t) -> assert false
-                (* Call (a, sequence_of_fork stop t fg1) *)
+              | Call (a, t) ->
+                Call (a, sequence_of_fork stop t fg1)
               | Pause | Finish -> assert false (* TODO: Raise exn *)
               | Sync(_, t1, t2) -> assert false
-              | Test (_, t1, t2) -> assert false
-                (* let t1, t2 = replace_join t1 t2 (sequence_of_fork stop fg1) in *)
-                (* children fg2 t1 t2 *)
-              | Fork (t1, t2, sync) -> assert false
-                (* let fg2 = sequence_of_fork stop t1 t2 in *)
-                (* sequence_of_fork sync fg1 fg2 *)
+              | Test (_, t1, t2) ->
+                let t1, t2 = replace_join t1 t2 (sequence_of_fork stop fg1) in
+                children fg2 t1 t2
+              | Fork (t1, t2, sync) ->
+                let fg2 = sequence_of_fork stop t1 t2 in
+                sequence_of_fork sync fg1 fg2
             else
               let t1, t2 = replace_join t1 t2 (fun x -> sequence_of_fork stop x fg2) in
               children fg1 t1 t2
@@ -217,14 +206,14 @@ let rec interleave fg =
             Call (action, sequence_of_fork stop fg2 t)
 
           | (Fork (t1, t2, sync)), (_ as fg2)
-          | (_ as fg2), (Fork (t1, t2, sync)) -> assert false
-            (* let fg1 = sequence_of_fork sync t1 t2 in *)
-            (* sequence_of_fork stop fg1 fg2 *)
+          | (_ as fg2), (Fork (t1, t2, sync)) ->
+            let fg1 = sequence_of_fork sync t1 t2 in
+            sequence_of_fork stop fg1 fg2
 
-          | Sync (_, t1, t2), fg2 -> assert false
-            (* Format.printf "====@\n"; *)
-            (* let t1, t2 = replace_join t1 t2 (sequence_of_fork stop fg2) in *)
-            (* children fg1 t1 t2 *)
+          | Sync (_, t1, t2), fg2 ->
+            Format.printf "====@\n";
+            let t1, t2 = replace_join t1 t2 (sequence_of_fork stop fg2) in
+            children fg1 t1 t2
 
           | Test (_, t1, t2), fg2 ->
             let t1, t2 = replace_join t1 t2 (sequence_of_fork stop fg2) in

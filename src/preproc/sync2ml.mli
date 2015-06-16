@@ -9,8 +9,8 @@ exception Error of Location.t * error
 val print_error : Format.formatter -> error -> unit
 
 val find_and_replace :
-  Grc.Flowgraph.t -> Grc.Flowgraph.t -> (Grc.Flowgraph.t -> Grc.Flowgraph.t)
-  -> bool * Grc.Flowgraph.t
+  (Grc.Flowgraph.t -> Grc.Flowgraph.t) ->
+  Grc.Flowgraph.t -> Grc.Flowgraph.t -> bool * Grc.Flowgraph.t
 
 val replace_join : Grc.Flowgraph.t -> Grc.Flowgraph.t -> (Grc.Flowgraph.t -> Grc.Flowgraph.t)
   -> Grc.Flowgraph.t * Grc.Flowgraph.t

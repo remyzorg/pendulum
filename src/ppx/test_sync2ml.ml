@@ -66,11 +66,11 @@ let () =
 (* ; print_to_dot_one name "_interfg" Grc.Flowgraph.print_to_dot (Sync2ml.interleave fg) *)
 
 let () =
-  let res, mod_test_fg = Sync2ml.find_and_replace test_fg callex9sync (fun x ->
+  let res, mod_test_fg = Sync2ml.find_and_replace (fun x ->
       match x with
       | Call (a, t) -> callex100sync
       | _ -> assert false
-    ) in
+    ) test_fg callex9sync  in
   Pendulum_misc.print_to_dot_one "test_sync2mllolz_mod" "_fg" Grc.Flowgraph.print_to_dot mod_test_fg
 
 
@@ -102,6 +102,3 @@ let () =
 
 
 let () = Format.printf "Test sync2ml: OK \n";
-
-
-
