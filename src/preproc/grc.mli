@@ -41,8 +41,9 @@ module Flowgraph : sig
   val print_to_dot : Format.formatter -> t -> unit
   val pp : Format.formatter -> t -> unit
 
-
 end
 
-val flowgraph : Ast.Tagged.t -> Flowgraph.t
-val of_ast : Ast.Tagged.t -> Selection_tree.t * Flowgraph.t
+module Of_ast : sig
+  val flowgraph : Ast.Tagged.t -> Flowgraph.t
+  val construct : Ast.Tagged.t -> Selection_tree.t * Flowgraph.t
+end
