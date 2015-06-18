@@ -53,10 +53,18 @@ let construct_test_expr tv =
 
 let grc2ml fg =
   let open Grc.Flowgraph in
-  let rec construct fg =
+  let rec construct stop fg =
     match fg with
-    | Call (a, t) -> (mls @@ construct_ml_action a) ++ construct t
-    | Test (tv, t1, t2) -> assert false
+    | Call (a, t) -> (mls @@ construct_ml_action a) ++ construct None t
+    | Test (tv, t1, t2) ->
+      let join = Grc.Schedule.find_join t1 t2 in
+      begin
+        match join with
+        | None -> mls @@ MLif (construct_test_expr tv, construct None t1, construct None t2)
+        | Some j ->
+          (mls @@ MLif (construct_test_expr tv, construct None t1, construct None t2))
+          ++ construct None j
+      end
     | Fork (t1, t2, sync) -> assert false
     | Sync ((i1, i2), t1, t2) -> assert false
     | Pause -> assert false

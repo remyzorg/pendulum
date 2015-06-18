@@ -41,4 +41,7 @@ module Option = struct
   let map f v =
     match v with None -> None | Some v -> Some (f v)
 
+  let mapn v f =
+    match v with None -> f () | Some v -> Some v
+
 end

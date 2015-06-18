@@ -52,9 +52,13 @@ module Schedule : sig
 
   val check_causality_cycles : 'a * Flowgraph.t -> Flowgraph.t list Utils.StringMap.t
 
+  val find : Flowgraph.t -> Flowgraph.t -> Flowgraph.t option
+
   val find_and_replace :
     (Flowgraph.t -> Flowgraph.t) ->
     Flowgraph.t -> Flowgraph.t -> bool * Flowgraph.t
+
+  val find_join : Flowgraph.t -> Flowgraph.t -> Flowgraph.t option
 
   val replace_join : Flowgraph.t -> Flowgraph.t -> (Flowgraph.t -> Flowgraph.t)
     -> Flowgraph.t * Flowgraph.t

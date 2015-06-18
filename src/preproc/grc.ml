@@ -517,7 +517,18 @@ module Schedule = struct
     in let f = memo_rec (module Fgtbl3) children in fun fg t1 t2 -> f (fg, t1, t2)
 
 
-  let rec find_and_replace replf =
+  let find =
+    let aux aux (fg, elt) =
+      if fg == elt then Some fg
+      else match fg with
+        | Call (a, t) -> aux (t, elt)
+        | Sync(_ , t1, t2) | Test (_, t1, t2) | Fork (t1, t2, _) ->
+          Option.mapn (aux (t1, elt)) (fun () -> aux (t2, elt))
+        | Pause | Finish -> None
+    in let f = memo_rec (module Fgtbl2) aux in fun fg t -> f (fg, t)
+
+
+  let find_and_replace replf =
     let aux aux (fg, elt) =
       if fg == elt then true, replf fg
       else match fg with
@@ -533,7 +544,14 @@ module Schedule = struct
         | Pause | Finish -> false, fg
     in let f = memo_rec (module Fgtbl2) aux in fun fg elt -> f (fg, elt)
 
-
+  let rec find_join fg1 fg2 =
+    Option.mapn (find fg2 fg1) begin fun () ->
+      match fg1 with
+      | Call(a, t) -> find_join fg2 t
+      | Sync(_ , t1, t2) | Test (_, t1, t2) | Fork (t1, t2, _) ->
+        Option.mapn (find_join fg2 t1) (fun () -> find_join fg2 t2)
+      | Pause | Finish -> None
+    end
 
   let rec replace_join fg1 fg2 replf =
     let res, fg2' = find_and_replace replf fg2 fg1 in
