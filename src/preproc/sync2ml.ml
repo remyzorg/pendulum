@@ -67,8 +67,8 @@ let grc2ml fg =
 
 let generate tast =
   let _selection_tree, control_flowgraph as grc = Grc.Of_ast.construct tast in
-  let open Grc.Flowgraph in
+  let open Grc in
   let _deps = Schedule.check_causality_cycles grc in
-  let _interleaved_grc = interleave control_flowgraph in
+  let _interleaved_grc = Schedule.interleave control_flowgraph in
   ()
   (* ml_of_grc control_flowgraph selection_tree *)

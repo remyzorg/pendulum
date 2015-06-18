@@ -32,7 +32,7 @@ let fork_br2 = Test ((Selection 9),
 let callex100sync = Call ((Exit 100), sync49)
 
 let fork_br2_2 =
-  let br1, br2 = Sync2ml.replace_join callex8ex6 callex9sync (fun x ->
+  let br1, br2 = Grc.Schedule.replace_join callex8ex6 callex9sync (fun x ->
       match x with
       | Call (a, t) -> (* Sync2ml.children callex100sync t t *) callex100sync
       | t ->
@@ -66,7 +66,7 @@ let () =
 (* ; print_to_dot_one name "_interfg" Grc.Flowgraph.print_to_dot (Sync2ml.interleave fg) *)
 
 let () =
-  let res, mod_test_fg = Sync2ml.find_and_replace (fun x ->
+  let res, mod_test_fg = Grc.Schedule.find_and_replace (fun x ->
       match x with
       | Call (a, t) -> callex100sync
       | _ -> assert false
