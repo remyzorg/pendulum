@@ -29,6 +29,7 @@ let () =
          mark_tag_used("pkg_ppx_pendulum");
          mark_tag_used("pkg_ppx_deriving.std");
          mark_tag_used("pkg_ppx_deriving");
+         mark_tag_used("pkg_oUnit");
 
        | _ ->
          ());
