@@ -42,61 +42,42 @@ and ml_ast =
   | MLfinish
       [@@deriving show]
 
-(* |[h] -> Format.fprintf fmt "%a" pp_element h *)
-(*   |h::t -> *)
-(*       Format.fprintf fmt "%a%s@,%a" *)
-(*       pp_element h sep (pp_list ~sep pp_element) t *)
-(*   |[] -> () *)
 
-let pp_deriving_ml_sequence = pp_ml_sequence
-
-let rec pp_list ?(sep="") pp_element fmt = function
-  |[h] -> Format.fprintf fmt "%a" pp_element h
-  |h::t ->
-      Format.fprintf fmt "%a%s@,%a"
-      pp_element h sep (pp_list ~sep pp_element) t
-  |[] -> ()
-
-let rec pp_ml_sequence fmt =
-  (* Format.printf "@."; *)
-  (* Format.(fprintf fmt "@[<v 1>@,%a@]@." *)
-  (*   (pp_list ~sep:"," (fun fmt s -> fprintf fmt "%s" s)) ["aa";"bb";"cc"]) *)
-
-let rec pp_list ?(sep="") pp_element fmt = function
-  |[h] -> Format.fprintf fmt "%a" pp_element h
-  |h::t ->
-      Format.fprintf fmt "%a%s@,%a"
-      pp_element h sep (pp_list ~sep pp_element) t
-  |[] -> ()
-
-let pp_cell fmt cell = Format.fprintf fmt "%s" cell
-
-
+let rec pp_ml_sequence lvl fmt =
   Format.(function
-    | Seqlist [] -> ()
-    | Seqlist ml_asts -> MList.pp_iter ~sep:";" pp_ml_ast fmt ml_asts
-    | Seq (mlseq1, mlseq2) ->
-      begin match mlseq2 with
-      | Seqlist [] | Seq (Seqlist [], Seqlist []) -> fprintf fmt "%a" pp_ml_sequence mlseq1
-      | mlseq2 -> fprintf fmt "%a;%a" pp_ml_sequence mlseq1 pp_ml_sequence mlseq2
-      end)
+      | Seqlist [] | Seq (Seqlist [], Seqlist []) -> ()
+      | Seq (Seqlist [], s) | Seq (s, Seqlist[]) -> pp_ml_sequence lvl fmt s
 
-and pp_ml_ast fmt = Format.(function
-    | MLemit s -> fprintf fmt "emit s"
+      | Seqlist ml_asts -> MList.pp_iter ~sep:";\n" (pp_ml_ast lvl) fmt ml_asts
+      | Seq (mlseq1, mlseq2) ->
+        fprintf fmt "%a;\n%a" (pp_ml_sequence lvl)
+          mlseq1 (pp_ml_sequence lvl) mlseq2
+    )
+
+and pp_ml_ast lvl fmt =
+  let indent = String.init lvl (fun _ -> ' ') in
+  Format.(function
+    | MLemit s -> fprintf fmt "%semit %s" indent s
     | MLif (mltest_expr, mlseq1, mlseq2) ->
-      fprintf fmt "@[<v 2>if %a then begin@\n" pp_ml_test_expr mltest_expr;
-      pp_ml_sequence fmt mlseq1;
-      fprintf fmt "@]@\nend";
+      fprintf fmt "%sif %a then begin\n" indent pp_ml_test_expr mltest_expr;
+      (pp_ml_sequence (lvl + 2)) fmt mlseq1;
+      fprintf fmt "\n%send" indent;
       begin match mlseq2 with
        | Seqlist [] | Seq (Seqlist [], Seqlist []) -> ()
-       | mlseq2 -> Format.fprintf fmt "@[<v 2>else begin@\n %a@]@.end" pp_ml_sequence mlseq2
+       | mlseq2 ->
+         Format.fprintf fmt
+           "\n%selse begin\n%a\n%send"
+           indent
+           (pp_ml_sequence (lvl + 2))
+           mlseq2
+           indent
       end
 
-    | MLenter i -> fprintf fmt "enter %d" i
-    | MLexit i -> fprintf fmt "exit %d" i
-    | MLexpr e -> fprintf fmt "%a" Pprintast.expression e
-    | MLpause -> fprintf fmt "Pause"
-    | MLfinish -> fprintf fmt "Finish"
+    | MLenter i -> fprintf fmt "%senter %d" indent i
+    | MLexit i -> fprintf fmt "%sexit %d" indent i
+    | MLexpr e -> fprintf fmt "%s%s" indent (asprintf "%a" Pprintast.expression e)
+    | MLpause -> fprintf fmt "%sPause" indent
+    | MLfinish -> fprintf fmt "%sFinish" indent
   )
 
 let nop = Seqlist []

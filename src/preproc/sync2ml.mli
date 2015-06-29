@@ -24,7 +24,7 @@ and ml_ast =
   | MLpause
   | MLfinish
 
-val pp_ml_sequence : Format.formatter -> ml_sequence -> unit
+val pp_ml_sequence : int -> Format.formatter -> ml_sequence -> unit
 
 val grc2ml : Grc.Flowgraph.t -> ml_sequence
 
