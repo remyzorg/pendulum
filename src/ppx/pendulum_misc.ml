@@ -102,5 +102,9 @@ let print_to_dot loc =
     in
     print_to_dot_one name "_tagged" Ast.Tagged.print_to_dot e;
     let fg = Grc.Of_ast.flowgraph e in
-    print_to_dot_one name "_fg" Grc.Flowgraph.print_to_dot fg
-    ; print_to_dot_one name "_interfg" Grc.Flowgraph.print_to_dot (Grc.Schedule.interleave fg)
+    print_to_dot_one name "_fg" Grc.Flowgraph.print_to_dot fg;
+    let fg = Grc.Schedule.interleave fg in
+    print_to_dot_one name "_interfg"
+      Grc.Flowgraph.print_to_dot fg;
+    Format.printf "=============================@.";
+    Sync2ml.(pp_ml_sequence Format.std_formatter (grc2ml fg))
