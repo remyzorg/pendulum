@@ -59,14 +59,14 @@ and pp_ml_ast lvl fmt =
   Format.(function
     | MLemit s -> fprintf fmt "%semit %s" indent s
     | MLif (mltest_expr, mlseq1, mlseq2) ->
-      fprintf fmt "%sif %a then begin\n" indent pp_ml_test_expr mltest_expr;
+      fprintf fmt "%sif %a then (\n" indent pp_ml_test_expr mltest_expr;
       (pp_ml_sequence (lvl + 2)) fmt mlseq1;
-      fprintf fmt "\n%send" indent;
+      fprintf fmt "\n%s)" indent;
       begin match mlseq2 with
        | Seqlist [] | Seq (Seqlist [], Seqlist []) -> ()
        | mlseq2 ->
          Format.fprintf fmt
-           "\n%selse begin\n%a\n%send"
+           "\n%selse (\n%a\n%s)"
            indent
            (pp_ml_sequence (lvl + 2))
            mlseq2
@@ -106,23 +106,30 @@ let grc2ml (fg : Grc.Flowgraph.t) =
   let open Grc.Flowgraph in
   let rec construct stop fg =
     match stop with
-    | Some fg' when fg == fg' -> nop
+    | Some fg' when fg == fg' && fg' <> Finish && fg' <> Pause ->
+      nop
     | _ ->
       begin match fg with
-        | Call (a, t) -> (mls @@ construct_ml_action a) ++ construct None t
+        | Call (a, t) -> (mls @@ construct_ml_action a) ++ construct stop t
         | Test (tv, t1, t2) ->
           begin
             match Grc.Schedule.find_join t1 t2 with
-            | None -> mls @@ MLif (construct_test_expr tv, construct None t1, construct None t2)
+            | None ->
+              mls @@ MLif
+                (construct_test_expr tv, construct stop t1, construct stop t2)
             | Some j ->
-              (mls @@ MLif (construct_test_expr tv, construct (Some j) t1, construct (Some j) t2))
+              (mls @@ MLif
+                 (construct_test_expr tv,
+                  construct (Some j) t1,
+                  construct (Some j) t2))
+
               ++ (match stop with
-              | Some fg' when fg' == j -> nop
-              | _ -> construct None j)
+                  | Some fg' when fg' == j -> nop
+                  | _ -> construct stop j)
           end
         | Fork (t1, t2, sync) -> assert false
         | Sync ((i1, i2), t1, t2) ->
-          mls @@ MLif (MLor (MLselect i1, MLselect i2), construct None t1, construct None t2)
+          mls @@ MLif (MLor (MLselect i1, MLselect i2), construct stop t1, construct stop t2)
         | Pause -> mls MLpause
         | Finish -> mls MLfinish
       end
