@@ -27,7 +27,6 @@ module StringMap = Map.Make(struct
     let compare = compare
   end)
 
-
 module Queue = struct
   type 'a t = 'a list * 'a list
   let empty = ([], [])

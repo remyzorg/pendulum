@@ -101,7 +101,8 @@ let print_to_dot loc =
       ) ^ ("_" ^ (string_of_int !n))
     in
     print_to_dot_one name "_tagged" Ast.Tagged.print_to_dot e;
-    let fg = Grc.Of_ast.flowgraph e in
+    let sel, fg = Grc.Of_ast.construct e in
+    print_to_dot_one name "_sel" Grc.Selection_tree.print_to_dot sel;
     print_to_dot_one name "_fg" Grc.Flowgraph.print_to_dot fg;
     let fg = Grc.Schedule.interleave fg in
     print_to_dot_one name "_interfg"

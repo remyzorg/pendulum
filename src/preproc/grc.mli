@@ -1,14 +1,17 @@
 
 module Selection_tree : sig
 
-  type t
 
-  module Primitive : sig
-    val exit : t -> unit
-    val enter : t -> unit
-    val sync : t -> bool
-  end
+  type t = {label : int; t : repr}
+      [@@deriving show]
+  and repr =
+    | Bottom
+    | Pause
+    | Par of t list
+    | Excl of t list
+    | Ref of t
 
+  val print_to_dot : Format.formatter -> t -> unit
 
 end
 

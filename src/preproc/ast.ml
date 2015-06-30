@@ -144,16 +144,10 @@ module Tagged = struct
       (*   visit env st *)
 
       | Derived.Seq (st1, st2) ->
-        let id = !+id in
-        let f1 = visit env st1 in
-        let f2 = visit env st2 in
-        mk_tagged (Seq (f1, f2)) id
+        mk_tagged (Seq (visit env st1, visit env st2)) !+id
 
       | Derived.Par (st1, st2) ->
-        let id = !+id in
-        let f1 = visit env st1 in
-        let f2 = visit env st2 in
-        mk_tagged (Par (f1, f2)) id
+        mk_tagged (Par (visit env st1, visit env st2)) !+id
 
       | Derived.Emit s -> mk_tagged (Emit (rename env.signals s ast)) !+id
       | Derived.Nothing -> mk_tagged Nothing !+id
@@ -211,14 +205,6 @@ module Tagged = struct
           ) !+id
       | Derived.Every (s, st) -> mk_tagged (Seq (visit env (mkl @@ Derived.Await s), visit env
                                         (mkl @@ Derived.Loop_each (st, s)))) !+id
-
-
-
-
-
-
-
-
 
     in
     visit env ast

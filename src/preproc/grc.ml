@@ -5,8 +5,8 @@ module Selection_tree = struct
 
   open Tagged
 
-  type t = {mutable status : bool; label : int; t : repr}
-    [@@deriving show]
+  type t = {label : int; t : repr}
+      [@@deriving show]
   and repr =
     | Bottom
     | Pause
@@ -14,13 +14,12 @@ module Selection_tree = struct
     | Excl of t list
     | Ref of t
 
-  let none = {status = false; label = 0; t = Excl []}
+  let none = {label = 0; t = Excl []}
 
   let (!+) a = incr a; !a
 
   let mk_tree stt id = {
     t = stt;
-    status = false;
     label = id;
   }
 
@@ -43,41 +42,41 @@ module Selection_tree = struct
     in
     visit ast
 
-  module Primitive = struct
-    let rec exit stree =
-      stree.status <- false;
-      match stree.t with
-      | Pause | Bottom -> ()
-      | Ref s -> exit s
-      | Excl sts | Par sts -> List.iter exit sts
+  (* module Primitive = struct *)
+  (*   let rec exit stree = *)
+  (*     stree.status <- false; *)
+  (*     match stree.t with *)
+  (*     | Pause | Bottom -> () *)
+  (*     | Ref s -> exit s *)
+  (*     | Excl sts | Par sts -> List.iter exit sts *)
 
-    let enter stree = stree.status <- true
+  (*   let enter stree = stree.status <- true *)
 
-    let sync stree = match stree.t with
-      | Par sts -> List.for_all (fun x -> x.status) sts
-      | _ -> assert false
-  end
+  (*   let sync stree = match stree.t with *)
+  (*     | Par sts -> List.for_all (fun x -> x.status) sts *)
+  (*     | _ -> assert false *)
+  (* end *)
 
 
-let print_to_dot fmt selection =
-  let open Format in
-  let rec visit x = match x.t with
-    | Bottom -> fprintf fmt "N%d [shape = none, label=\"Bottom %d\"]; @\n" x.label x.label
-    | Pause -> fprintf fmt "N%d [shape = none, label=\"Pause %d\"]; @\n" x.label x.label
-    | Par sels ->
-      fprintf fmt "N%d [shape = none, label=\"Par %d\"]; @\n" x.label x.label;
-      List.iter (fun sel -> fprintf fmt "N%d -> N%d ;@\n" x.label sel.label; visit sel) sels
-    | Excl sels ->
-      fprintf fmt "N%d [shape = none, label=\"Excl %d\"]; @\n" x.label x.label;
-      List.iter (fun sel -> fprintf fmt "N%d -> N%d ;@\n" x.label sel.label; visit sel) sels
-    | Ref sel ->
-      fprintf fmt "N%d [shape = none, label=\"Ref %d\"]; @\n" x.label x.label;
-      fprintf fmt "N%d -> N%d ;@\n" x.label sel.label;
-      visit sel
-  in
-  fprintf fmt "@[<hov 2>digraph selection {@\nmargin = 0;@\n";
-  visit selection;
-  fprintf fmt "}@]\n@."
+  let print_to_dot fmt selection =
+    let open Format in
+    let rec visit x = match x.t with
+      | Bottom -> fprintf fmt "N%d [shape = none, label=\"Bottom %d\"]; @\n" x.label x.label
+      | Pause -> fprintf fmt "N%d [shape = none, label=\"Pause %d\"]; @\n" x.label x.label
+      | Par sels ->
+        fprintf fmt "N%d [shape = none, label=\"Par %d\"]; @\n" x.label x.label;
+        List.iter (fun sel -> fprintf fmt "N%d -> N%d ;@\n" x.label sel.label; visit sel) sels
+      | Excl sels ->
+        fprintf fmt "N%d [shape = none, label=\"Excl %d\"]; @\n" x.label x.label;
+        List.iter (fun sel -> fprintf fmt "N%d -> N%d ;@\n" x.label sel.label; visit sel) sels
+      | Ref sel ->
+        fprintf fmt "N%d [shape = none, label=\"Ref %d\"]; @\n" x.label x.label;
+        fprintf fmt "N%d -> N%d ;@\n" x.label sel.label;
+        visit sel
+    in
+    fprintf fmt "@[<hov 2>digraph selection {@\nmargin = 0;@\n";
+    visit selection;
+    fprintf fmt "}@]\n@."
 
 end
 
@@ -94,7 +93,7 @@ module Flowgraph = struct
     Format.(fprintf fmt "%s" begin
         match a with
         | Emit s -> "emit <B>" ^ s ^ "</B>"
-        | Atom _ -> "atom"
+        | Atom e -> asprintf "%a" Pprintast.expression e
         | Enter i -> sprintf "enter %d" i
         | Exit i -> sprintf "exit %d" i
       end)
