@@ -16,19 +16,19 @@ let check_ident_string e =
   | Pexp_construct ({txt = Lident s; loc}, None) -> {loc; content = s}
   | _ -> Ast.syntax_error ~loc:e.pexp_loc "identifier expected"
 
-let pop_signals_decl e =
-  let rec aux sigs e =
-    match e with
-    | [%expr input [%e ?e]; [%e ?e2] ]
-    | [%expr output [%e ?e]; [%e ?e2]] ->
-      let ident = check_ident_string e in
-      aux (ident.Ast.content :: sigs) e2
-    | e -> e, sigs
-  in
-  aux [] e
+(* let pop_signals_decl e = *)
+(*   let rec aux sigs e = *)
+(*     match e with *)
+(*     | [%expr input [%e ?e]; [%e ?e2] ] *)
+(*     | [%expr output [%e ?e]; [%e ?e2]] -> *)
+(*       let ident = check_ident_string e in *)
+(*       aux (ident.Ast.content :: sigs) e2 *)
+(*     | e -> e, sigs *)
+(*   in *)
+(*   aux [] e *)
 
 let pop_signals_decl e =
-  let cont e = (check_ident_string e).Ast.content in
+  let cont e = (check_ident_string e) in
   let rec aux sigs p =
     match p with
     | [%expr [%e ?params]; [%e ?e2] ] ->
@@ -129,7 +129,7 @@ let extend_mapper argv =
                   | "to_dot_grc" ->
                     let e = ast_of_expr e in
                     begin try
-                        Pendulum_misc.print_to_dot loc Ast.(Tagged.of_ast ~env e);
+                        Pendulum_misc.print_to_dot loc (Ast.Tagged.of_ast ~env e);
                       with
                       | Sync2ml.Error(_, e) ->
                         raise (Location.Error (
@@ -139,7 +139,7 @@ let extend_mapper argv =
                   | "sync" ->
                     let ast = ast_of_expr e in
                     let tast = Ast.Tagged.of_ast ~env ast in
-                    let () = try Sync2ml.generate tast with
+                    let () = try Sync2ml.generate ~env tast with
                       | Sync2ml.Error(loc, e) ->
                         Format.eprintf "[%%sync] %a\n" Sync2ml.print_error e
                     in

@@ -260,181 +260,191 @@ let error ~loc e = raise (Error (loc, e))
 
 module Of_ast = struct
 
-type env = {
-  exits : Flowgraph.t StringMap.t;
-  under_suspend : bool;
-  synctbl : (int * int, Flowgraph.t) Hashtbl.t
-}
+  type env = {
+    exits : Flowgraph.t StringMap.t;
+    under_suspend : bool;
+    synctbl : (int * int, Flowgraph.t) Hashtbl.t;
+    sigs : (signal, unit) Hashtbl.t;
+  }
 
-let extend_labels env l =
-  {env with exits = l}
+  type flow_builder = env -> Tagged.t -> Flowgraph.t -> Flowgraph.t -> Flowgraph.t
 
-type flow_builder = env -> Tagged.t -> Flowgraph.t -> Flowgraph.t -> Flowgraph.t
-
-let memo_rec :
-  (int, Flowgraph.t) Hashtbl.t ->
-  (flow_builder -> flow_builder) ->
-  flow_builder =
-  fun h f ->
-    let open Tagged in
-    let rec g env x p e =
-      try Hashtbl.find h x.id with
-      | Not_found ->
-        let y = f g env x p e in
-        Hashtbl.add h x.id y; y
-    in g
-
-
-let surface h =
-  let open Tagged in let open Flowgraph in
-  let surface surface env p pause endp =
-    match p.st.content with
-    | Pause -> enter_node p pause
-
-    | Await s ->
-      enter_node p @@
-      test_node (Signal s.content) (
-        exit_node p endp,
-        pause
-      )
-
-    | Emit s -> Emit s.content >> endp
-    | Nothing -> endp
-    | Atom f -> Atom f >> endp
-
-    | Suspend (q, _)
-    | Signal (_, q) ->
-      enter_node p
-      @@ surface env q pause
-      @@ exit_node p endp
-
-    | Seq (q,r) ->
-      enter_node p
-      @@ surface env q pause
-      @@ surface env r pause endp
-
-    | Present (s, q, r) ->
-      let end_pres = exit_node p endp in
-      enter_node p
-      @@ test_node (Signal s.content) (
-        surface env q pause end_pres,
-        surface env r pause end_pres
-      )
-
-    | Loop q -> enter_node p @@ surface env q pause endp
-
-    | Par (q, r) ->
-      let syn = try Hashtbl.find env.synctbl (q.id, r.id) with
+  let memo_rec :
+    (int, Flowgraph.t) Hashtbl.t ->
+    (flow_builder -> flow_builder) ->
+    flow_builder =
+    fun h f ->
+      let open Tagged in
+      let rec g env x p e =
+        try Hashtbl.find h x.id with
         | Not_found ->
-          let n = Sync ((q.id, r.id), pause, exit_node p endp)
-          in Hashtbl.add env.synctbl (q.id, r.id) n; n
-      in
-      enter_node p @@
-      Fork (
-        surface env q syn syn,
-        surface env r syn syn,
-        syn
-      )
-
-    | Exit (Label s) ->
-      begin try StringMap.find s.content env.exits
-        with Not_found -> error ~loc:Ast.dummy_loc @@ Unbound_label s.content
-      end
-
-    | Trap (Label s, q) ->
-      let end_trap = exit_node p endp in
-      enter_node p
-      @@ surface {env with exits =
-                             (StringMap.add s.content end_trap env.exits)} q pause end_trap
-  in
-  memo_rec h surface
+          let y = f g env x p e in
+          Hashtbl.add h x.id y; y
+      in g
 
 
-let depth h surface =
-  let open Tagged in let open Flowgraph in
-  let depth depth env p pause endp =
-    match p.st.content with
-    | Emit s -> endp
-    | Nothing -> endp
+  let surface h =
+    let open Tagged in let open Flowgraph in
+    let surface surface env p pause endp =
+      match p.st.content with
+      | Pause -> enter_node p pause
 
-    | Pause -> Exit p.id >> endp
-
-    | Await s ->
-      test_node (Signal s.content) (
-        exit_node p endp,
-        pause
-      )
-
-    | Atom f -> endp
-    | Exit _ -> endp
-    | Loop q -> depth env q pause (surface env q pause pause)
-
-    | Seq (q, r) ->
-      let end_seq = exit_node p endp in
-      if env.under_suspend || Ast.Analysis.blocking q then
-        test_node (Selection q.id) (
-          depth env q pause (surface env r pause end_seq),
-          depth env r pause end_seq
+      | Await s ->
+        enter_node p @@
+        test_node (Signal s.content) (
+          exit_node p endp,
+          pause
         )
-      else
-        depth env r pause end_seq
 
-    | Par (q, r) ->
-      let syn = try Hashtbl.find env.synctbl (q.id, r.id) with
-        | Not_found ->
-          let n = Sync ((q.id, r.id), pause, exit_node p endp)
-          in Hashtbl.add env.synctbl (q.id, r.id) n; n
-      in
-      Fork (
-        test_node (Selection q.id) (
-          depth env q syn syn,
+      | Emit s -> Emit s.content >> endp
+      | Nothing -> endp
+      | Atom f -> Atom f >> endp
+
+      | Suspend (q, _) ->
+        enter_node p
+        @@ surface env q pause
+        @@ exit_node p endp
+
+      | Signal (s, q) ->
+        Hashtbl.add env.sigs s ();
+        enter_node p
+        @@ surface env q pause
+        @@ exit_node p endp
+
+      | Seq (q,r) ->
+        enter_node p
+        @@ surface env q pause
+        @@ surface env r pause endp
+
+      | Present (s, q, r) ->
+        let end_pres = exit_node p endp in
+        enter_node p
+        @@ test_node (Signal s.content) (
+          surface env q pause end_pres,
+          surface env r pause end_pres
+        )
+
+      | Loop q -> enter_node p @@ surface env q pause endp
+
+      | Par (q, r) ->
+        let syn = try Hashtbl.find env.synctbl (q.id, r.id) with
+          | Not_found ->
+            let n = Sync ((q.id, r.id), pause, exit_node p endp)
+            in Hashtbl.add env.synctbl (q.id, r.id) n; n
+        in
+        enter_node p @@
+        Fork (
+          surface env q syn syn,
+          surface env r syn syn,
           syn
-        ),
-        test_node (Selection r.id) (
-          depth env r syn syn,
-          syn),
-        syn
-      )
+        )
 
-    | Present (s, q, r) ->
-      let end_pres = exit_node p endp in
-      test_node (Selection q.id) (
-        depth env q pause end_pres,
-        depth env r pause end_pres
-      )
+      | Exit (Label s) ->
+        begin try StringMap.find s.content env.exits
+          with Not_found -> error ~loc:Ast.dummy_loc @@ Unbound_label s.content
+        end
 
-    | Signal (s,q) -> depth env q pause @@ exit_node p endp
-    | Suspend (q, s) ->
-      test_node (Signal s.content) (
-        pause,
-        depth env q pause (Exit p.id >> endp)
-      )
-
-    | Trap (Label s, q) ->
-      let end_trap = exit_node p endp in
-      depth {env with exits = StringMap.add s.content end_trap env.exits} q pause end_trap
-  in memo_rec h depth
+      | Trap (Label s, q) ->
+        let end_trap = exit_node p endp in
+        enter_node p
+        @@ surface {env with exits =
+                               (StringMap.add s.content end_trap env.exits)} q pause end_trap
+    in
+    memo_rec h surface
 
 
-let flowgraph p =
-  let open Flowgraph in
-  let open Tagged in
-  let env = {under_suspend = false; exits = StringMap.empty; synctbl = Hashtbl.create 17} in
-  let depthtbl, surftbl = Hashtbl.create 30, Hashtbl.create 30 in
+  let depth h surface =
+    let open Tagged in let open Flowgraph in
+    let depth depth env p pause endp =
+      match p.st.content with
+      | Emit s -> endp
+      | Nothing -> endp
 
-  let surface = surface surftbl in
+      | Pause -> Exit p.id >> endp
 
-  let s = surface env p Pause Finish in
-  let d = depth depthtbl surface env p Pause Finish in
+      | Await s ->
+        test_node (Signal s.content) (
+          exit_node p endp,
+          pause
+        )
 
-  test_node Finished (
-    Finish,
-    test_node (Selection p.id) (d, s)
-  )
+      | Atom f -> endp
+      | Exit _ -> endp
+      | Loop q -> depth env q pause (surface env q pause pause)
+
+      | Seq (q, r) ->
+        let end_seq = exit_node p endp in
+        if env.under_suspend || Ast.Analysis.blocking q then
+          test_node (Selection q.id) (
+            depth env q pause (surface env r pause end_seq),
+            depth env r pause end_seq
+          )
+        else
+          depth env r pause end_seq
+
+      | Par (q, r) ->
+        let syn = try Hashtbl.find env.synctbl (q.id, r.id) with
+          | Not_found ->
+            let n = Sync ((q.id, r.id), pause, exit_node p endp)
+            in Hashtbl.add env.synctbl (q.id, r.id) n; n
+        in
+        Fork (
+          test_node (Selection q.id) (
+            depth env q syn syn,
+            syn
+          ),
+          test_node (Selection r.id) (
+            depth env r syn syn,
+            syn),
+          syn
+        )
+
+      | Present (s, q, r) ->
+        let end_pres = exit_node p endp in
+        test_node (Selection q.id) (
+          depth env q pause end_pres,
+          depth env r pause end_pres
+        )
+
+      | Signal (s,q) ->
+        Hashtbl.add env.sigs s ();
+        depth env q pause @@ exit_node p endp
+      | Suspend (q, s) ->
+        test_node (Signal s.content) (
+          pause,
+          depth env q pause (Exit p.id >> endp)
+        )
+
+      | Trap (Label s, q) ->
+        let end_trap = exit_node p endp in
+        depth {env with exits = StringMap.add s.content end_trap env.exits} q pause end_trap
+    in memo_rec h depth
 
 
-let construct p =
-  Selection_tree.of_ast p, flowgraph p
+  let flowgraph p =
+    let open Flowgraph in
+    let open Tagged in
+    let env = {
+      under_suspend = false;
+      exits = StringMap.empty;
+      synctbl = Hashtbl.create 17;
+      sigs = Hashtbl.create 17;
+    } in
+    let depthtbl, surftbl = Hashtbl.create 30, Hashtbl.create 30 in
+
+    let surface = surface surftbl in
+
+    let s = surface env p Pause Finish in
+    let d = depth depthtbl surface env p Pause Finish in
+
+    test_node Finished (
+      Finish,
+      test_node (Selection p.id) (d, s)
+    )
+
+
+  let construct p =
+    Selection_tree.of_ast p, flowgraph p
 
 end
 

@@ -123,7 +123,7 @@ module Tagged = struct
   let create_env sigs = {
     labels = StringMap.empty;
     signals = List.fold_left (fun accmap s ->
-        StringMap.add s 0 accmap )
+        StringMap.add s.content 0 accmap )
         StringMap.empty sigs
   }
 
