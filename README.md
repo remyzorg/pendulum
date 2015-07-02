@@ -2,25 +2,37 @@
 
 # Readme
 
-https://github.com/ocsigen/lwt/blob/master/myocamlbuild.ml#L93-L94
-
-https://github.com/ocsigen/lwt/blob/master/_tags#L14
+## Description
 
 
-# Compilation
+## TODO :
+* Documentation :
+  * update description
+  * document surface / depth
+* Language
+  * about adding first class modules (necessary)
+  * maintain signals values or presence informations between steps
+  * gather at signal definitions (several emission of the same signal at the same instant
+  * `pre`
+  * syntax to get signal value
+  * n-ary parallel operator
+* DOM
+  * setTimeout and requestAnimationFrames as global clocks ?
+* Code generation
+  * define signals as globals with the unique name and rebind them locally (very same semantic)
+    * keep local signal informations trough steps
 
-* depandancies : oasis, oUnit, ppx_deriving
+## Compilation
+
+* dependencies : oasis, oUnit, ppx_deriving
 * `make`
 
 
-# Esterel Semantic
-
-Solution à l'extrusion de portée : *connecon code*
 
 # GRC intermediate format
 
 
-# Selection Tree
+## Selection Tree
 
 Label correspondance :
 * Squares : pauses
@@ -101,7 +113,7 @@ end
 pause	    		 => code 1 
 ```
 
-# Flowgraph
+## Flowgraph
 
 Memo : 
 * Tick : Triangle inversé
@@ -327,11 +339,3 @@ test_node q.id
 		-> pause
 		-> endp
 ```
-
-
-
-# GRC Interpretation
-
-Steps:
-* state update
-* state decoding
