@@ -122,28 +122,26 @@ let extend_mapper argv =
         begin try
             begin match e with
               | PStr [{ pstr_desc = Pstr_eval (e, _)}] ->
-                let e, env = pop_signals_decl e in
+                let e, sigs = pop_signals_decl e in
                 begin match ext with
                   | "sync_ast" ->
                     [%expr ([%e Pendulum_misc.expr_of_ast @@ ast_of_expr e])]
                   | "to_dot_grc" ->
-                    let e = ast_of_expr e in
-                    begin try
-                        Pendulum_misc.print_to_dot loc (Ast.Tagged.of_ast ~env e);
-                      with
-                      | Sync2ml.Error(_, e) ->
-                        raise (Location.Error (
-                            Location.error ~loc (Format.asprintf "[%%sync] : %a"
-                                                   Sync2ml.print_error e)))
-                    end; [%expr [%e Pendulum_misc.expr_of_ast e]]
+                    let ast = ast_of_expr e in
+
+                    Pendulum_misc.print_to_dot loc (Ast.Tagged.of_ast ~sigs ast);
+
+                    let tast = Ast.Tagged.of_ast ~sigs ast in
+                    let ocaml_expr = Sync2ml.generate ~sigs tast in
+
+                    Format.printf "%a@." Pprintast.expression ocaml_expr;
+                    [%expr [%e Pendulum_misc.expr_of_ast ast]]
                   | "sync" ->
                     let ast = ast_of_expr e in
-                    let tast = Ast.Tagged.of_ast ~env ast in
-                    let () = try Sync2ml.generate ~env tast with
-                      | Sync2ml.Error(loc, e) ->
-                        Format.eprintf "[%%sync] %a\n" Sync2ml.print_error e
-                    in
-                    [%expr [%e Pendulum_misc.expr_of_ast ast]]
+                    let tast = Ast.Tagged.of_ast ~sigs ast in
+                    let ocaml_expr = Sync2ml.generate ~sigs tast in
+                    Format.printf "%a@." Pprintast.expression ocaml_expr;
+                    [%expr [%e ocaml_expr]]
                   | _ -> assert false
                 end
               | _ ->
@@ -154,9 +152,9 @@ let extend_mapper argv =
           | Ast.Error (loc, e) ->
             raise (Location.Error (
                 Location.error ~loc (Format.asprintf "[%%sync] : %a" Ast.print_error e)))
-          (* | Sync2ml.Error (loc, e) -> *)
-          (*   raise (Location.Error ( *)
-          (*       Location.error ~loc (Format.asprintf "[%%sync] : %a" Sync2ml.print_error e))) *)
+          | Sync2ml.Error (loc, e) ->
+            raise (Location.Error (
+                Location.error ~loc (Format.asprintf "[%%sync] : %a" Sync2ml.print_error e)))
         end
       | x -> default_mapper.expr mapper x;
   }

@@ -137,7 +137,7 @@ let grc2ml (fg : Grc.Flowgraph.t) =
   in
   construct None fg
 
-module OcamlGen = struct
+module Ocaml_gen = struct
 
   open Ast_helper
   open Parsetree
@@ -146,7 +146,8 @@ module OcamlGen = struct
 
   let int_const i = Exp.constant (Asttypes.Const_int i)
   let string_const s = Exp.constant (Asttypes.Const_string(s, None))
-  let mk_ident s = Pat.(Asttypes.(Pexp_ident {txt = Longident.Lident s.Ast.content; loc = s.Ast.loc}))
+
+  let mk_ident s = Pat.(Asttypes.(var @@ Location.mkloc s.Ast.content s.Ast.loc))
 
   let deplist sel =
     let open Grc.Selection_tree in
@@ -166,76 +167,63 @@ module OcamlGen = struct
 
   let select_env = Pat.var Location.(mkloc "__pendulum__t__" Location.none )
 
-  (* let gen_init nstmts sigs sel = *)
-  (*   let open Grc.Selection_tree in *)
-  (*   fun e -> *)
-  (*     let sigs e = List.fold_left (fun acc signal -> *)
-  (*         [%expr let [%p signal] = None in [%e acc]] *)
-  (*       ) e sigs *)
-  (*     in *)
-  (*     [%expr *)
-  (*       { instantiate = fun () -> *)
-  (*             let [%p select_env] = Sync.Bitset.make [%e int_const (1 + nstmts)] in *)
-  (*             [%e sigs [%expr fun () -> [%e e]]] *)
-  (*       } *)
+  let init nstmts sigs sel =
+    let open Grc.Selection_tree in
+    fun e ->
+      let sigs e = List.fold_left (fun acc signal ->
+          [%expr let [%p mk_ident signal] = None in [%e acc]]
+        ) e sigs
+      in
+      [%expr
+        { instantiate = fun () ->
+              let [%p select_env] = Sync.Bitset.make [%e int_const (1 + nstmts)] in
+              [%e sigs [%expr fun () -> [%e e]]]
+        }]
 
-(*   type ml_test_expr = *)
-(*     | MLsig of string *)
-(*     | MLselect of int *)
-(*     | MLor of ml_test_expr * ml_test_expr *)
-(*     | MLfinished *)
+  let instantiate sigs sel ml =
+    let rec construct_sequence depl mlseq =
+      match mlseq with
+      | Seq (Seqlist [], Seqlist []) | Seqlist [] -> assert false
+      | Seq (mlseq, Seqlist []) | Seq (Seqlist [], mlseq) ->
+        construct_sequence depl mlseq
+      | Seqlist ml_asts ->
+        List.fold_left (fun acc x ->
+            if acc == dumb then construct_ml_ast depl x
+            else Exp.sequence acc (construct_ml_ast depl x)
+          ) (Exp.constant (Asttypes.Const_int 0)) ml_asts
+      | Seq (mlseq1, mlseq2) ->
+        Exp.sequence (construct_sequence depl mlseq1)
+          (construct_sequence depl mlseq2)
+    and construct_ml_ast depl ast =
+      match ast with
+      | MLemit s -> assert false (* TODO *)
+      | MLif (test, mlseq1, mlseq2) ->
 
+        assert false (* TODO *)
 
-  (* let gen_instantiate env sel ml = *)
-  (*   let rec construct_sequence depl mlseq = *)
-  (*     match mlseq with *)
-  (*     | Seq (Seqlist [], Seqlist []) | Seqlist [] -> assert false *)
-  (*     | Seq (mlseq, Seqlist []) | Seq (Seqlist [], mlseq) -> *)
-  (*       construct_sequence depl mlseq *)
-  (*     | Seqlist ml_asts -> *)
-  (*       List.fold_left (fun acc x -> *)
-  (*           if acc == dumb then construct_ml_ast depl x *)
-  (*           else Exp.sequence acc (construct_ml_ast depl x) *)
-  (*         ) (Exp.constant (Asttypes.Const_int 0)) ml_asts *)
-  (*     | Seq (mlseq1, mlseq2) -> *)
-  (*       Exp.sequence (construct_sequence depl mlseq1) *)
-  (*         (construct_sequence depl mlseq2) *)
-  (*   and construct_ml_ast depl ast = *)
-  (*     match ast with *)
-  (*     | MLemit s -> assert false (\* TODO *\) *)
-  (*     | MLif (test, mlseq1, mlseq2) -> assert false (\* TODO *\) *)
-  (*     | MLenter i -> [%expr Bitset.add [%e int_const i]] *)
-  (*     | MLexit i -> List.fold_left (fun acc x -> *)
-  (*           Exp.sequence acc [%expr Bitset.remove __t__ [%e int_const x]] *)
-  (*       ) [%expr Bitset.remove __t__ [%e int_const i]] depl.(i) *)
-  (*     | MLexpr pexpr -> pexpr *)
-  (*     | MLpause -> [%expr Pause] *)
-  (*     | MLfinish -> [%expr Finish] *)
-  (*   in *)
-  (*   let deps = deplist sel in *)
-  (*   let dep_array = Array.make (List.length depls) [] in *)
-  (*   List.iter (fun (i, l) -> dep_array.(i) <- l) depls; *)
-  (*   gen_init (Array.length depla) sigs sel (construct_sequence dep_array ml) *)
+      | MLenter i -> [%expr Bitset.add [%e int_const i]]
+      | MLexit i -> List.fold_left (fun acc x ->
+            Exp.sequence acc [%expr Bitset.remove __t__ [%e int_const x]]
+        ) [%expr Bitset.remove __t__ [%e int_const i]] depl.(i)
+      | MLexpr pexpr -> pexpr
+      | MLpause -> [%expr Pause]
+      | MLfinish -> [%expr Finish]
+    in
+    let deps = deplist sel in
+    let dep_array = Array.make (List.length deps + 1) [] in
+    List.iter (fun (i, l) -> dep_array.(i) <- l) deps;
+    init (Array.length dep_array) sigs sel (construct_sequence dep_array ml)
 
-
-
-(* and ml_ast = *)
-(*   | MLemit of string *)
-(*   | MLif of ml_test_expr * ml_sequence * ml_sequence *)
-(*   | MLenter of int *)
-(*   | MLexit of int *)
-(*   | MLexpr of Parsetree.expression *)
-(*   | MLpause *)
-(*   | MLfinish *)
 
 
 end
 
 
-let generate ?(env=[]) tast =
-  let _selection_tree, control_flowgraph as grc = Grc.Of_ast.construct tast in
+let generate ?(sigs=[]) tast =
+  let selection_tree, control_flowgraph as grc = Grc.Of_ast.construct tast in
   let open Grc in
   let _deps = Schedule.check_causality_cycles grc in
   let interleaved_grc = Schedule.interleave control_flowgraph in
-  let _ml_ast = grc2ml interleaved_grc in
-  ()
+  let ml_ast = grc2ml interleaved_grc in
+  let ocaml_ast = Ocaml_gen.instantiate sigs selection_tree ml_ast in
+  ocaml_ast

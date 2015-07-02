@@ -128,9 +128,9 @@ module Tagged = struct
   }
 
 
-  let rec of_ast ?env:(env=[]) ast =
+  let rec of_ast ?(sigs=[]) ast =
     let id = ref 0 in
-    let env = create_env env in
+    let env = create_env sigs in
     let rec visit : env -> Derived.statement -> t = fun env ast ->
       let mk_tagged tagged = mk_tagged ~loc:ast.loc tagged in
       let mkl stmt = mk_loc ~loc:ast.loc stmt in

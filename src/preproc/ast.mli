@@ -79,7 +79,7 @@ module Tagged : sig
     signals : int StringMap.t;
   }
 
-  val of_ast : ?env:signal list -> Derived.statement -> t
+  val of_ast : ?sigs:signal list -> Derived.statement -> t
 
   val print_to_dot : Format.formatter -> t -> unit
 end
