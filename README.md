@@ -21,6 +21,8 @@
 * Code generation
   * define signals as globals with the unique name and rebind them locally (very same semantic)
     * keep local signal informations trough steps
+  * add local signals definitions to generated let bindings
+  * generate the struct let binding ? 
 
 ## Compilation
 
