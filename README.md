@@ -23,6 +23,11 @@
     * keep local signal informations trough steps
   * add local signals definitions to generated let bindings
   * generate the struct let binding ? 
+  * generate new signals (even for input) at each steps ?
+  * handle complete if then else cases
+  * remove the returned value (useless anyway) and use side effects (pause / finished)
+    * replace by ()
+  * check ml_ast generation for sync
 
 ## Compilation
 

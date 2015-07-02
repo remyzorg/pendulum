@@ -147,7 +147,9 @@ module Ocaml_gen = struct
   let int_const i = Exp.constant (Asttypes.Const_int i)
   let string_const s = Exp.constant (Asttypes.Const_string(s, None))
 
-  let mk_ident s = Pat.(Asttypes.(var @@ Location.mkloc s.Ast.content s.Ast.loc))
+  let mk_pat_var s = Pat.(Asttypes.(var @@ Location.mkloc s.Ast.content s.Ast.loc))
+
+  let mk_ident s = Location.(mkloc (Longident.Lident s) Location.none )
 
   let deplist sel =
     let open Grc.Selection_tree in
@@ -165,46 +167,62 @@ module Ocaml_gen = struct
     in ignore (visit sel); !env
 
 
-  let select_env = Pat.var Location.(mkloc "__pendulum__t__" Location.none )
+  let select_env_name = "__pendulum__t__"
+  let select_env_var = Location.(mkloc select_env_name Location.none )
+  let select_env_ident = mk_ident select_env_name
 
   let init nstmts sigs sel =
     let open Grc.Selection_tree in
     fun e ->
       let sigs e = List.fold_left (fun acc signal ->
-          [%expr let [%p mk_ident signal] = None in [%e acc]]
+          [%expr let [%p mk_pat_var signal] = None in [%e acc]]
         ) e sigs
       in
       [%expr
         { instantiate = fun () ->
-              let [%p select_env] = Sync.Bitset.make [%e int_const (1 + nstmts)] in
+              let [%p Pat.var select_env_var] = Sync.Bitset.make [%e int_const (1 + nstmts)] in
               [%e sigs [%expr fun () -> [%e e]]]
         }]
 
+
+
   let instantiate sigs sel ml =
-    let rec construct_sequence depl mlseq =
+    let rec construct_test test =
+      match test with
+        | MLsig s -> [%expr [%e Exp.ident @@ mk_ident s]]
+        | MLselect i -> [%expr Bitset.mem [%e Exp.ident select_env_ident] [%e int_const i]]
+        | MLor (mlte1, mlte2) -> [%expr [%e construct_test mlte1 ] || [%e construct_test mlte1]]
+        | MLfinished -> [%expr Bitset.mem [%e Exp.ident select_env_ident] 0]
+    in
+  let rec construct_sequence depl mlseq =
       match mlseq with
       | Seq (Seqlist [], Seqlist []) | Seqlist [] -> assert false
       | Seq (mlseq, Seqlist []) | Seq (Seqlist [], mlseq) ->
         construct_sequence depl mlseq
       | Seqlist ml_asts ->
         List.fold_left (fun acc x ->
-            if acc == dumb then construct_ml_ast depl x
+            if acc = dumb then construct_ml_ast depl x
             else Exp.sequence acc (construct_ml_ast depl x)
-          ) (Exp.constant (Asttypes.Const_int 0)) ml_asts
+          ) dumb ml_asts
       | Seq (mlseq1, mlseq2) ->
         Exp.sequence (construct_sequence depl mlseq1)
           (construct_sequence depl mlseq2)
     and construct_ml_ast depl ast =
       match ast with
-      | MLemit s -> assert false (* TODO *)
+      | MLemit s -> [%expr [%e Exp.ident @@ mk_ident s] := true]
       | MLif (test, mlseq1, mlseq2) ->
-
-        assert false (* TODO *)
-
+        begin match mlseq2 with
+          | Seqlist [] | Seq (Seqlist [], Seqlist []) ->
+            [%expr if [%e construct_test test] then [%e construct_sequence depl mlseq1]]
+          | _ ->
+            [%expr if [%e construct_test test] then
+                     [%e construct_sequence depl mlseq1]
+                   else [%e construct_sequence depl mlseq2]]
+        end
       | MLenter i -> [%expr Bitset.add [%e int_const i]]
       | MLexit i -> List.fold_left (fun acc x ->
-            Exp.sequence acc [%expr Bitset.remove __t__ [%e int_const x]]
-        ) [%expr Bitset.remove __t__ [%e int_const i]] depl.(i)
+          Exp.sequence acc [%expr Bitset.remove [%e Exp.ident select_env_ident] [%e int_const x]]
+        ) [%expr Bitset.remove [%e Exp.ident select_env_ident] [%e int_const i]] depl.(i)
       | MLexpr pexpr -> pexpr
       | MLpause -> [%expr Pause]
       | MLfinish -> [%expr Finish]
