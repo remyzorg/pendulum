@@ -4,6 +4,8 @@ open OUnit
 
 open Pendulum.Runtime_ast
 
+
+
 let test_loop_pause ctx =
   let%sync_ast ast = loop begin pause end
   in assert_equal ast (loop [pause])
@@ -70,7 +72,6 @@ let par_deps ctx = assert_equal
 
 let par_deps ctx = assert_equal
     (let%to_dot_grc ast =
-    (* [%sync_ast *)
       input S1, S2;
       present S1 (emit S2)
       ||
@@ -80,8 +81,26 @@ let par_deps ctx = assert_equal
       end;
      in ast) (Par (Present_then ("S1", emit "S2"), Present_then ("S2", Atom)))
 
+let () =
+  let%sync prog2 =
+    loop begin
+      atom (Format.printf "42 ==== @\n");
+      pause
+    end
+    ||
+    loop begin
+      atom (Format.printf "43 ==== @\n");
+      pause
+    end
+  in
+  let open Pendulum.Machine in
+  let step = prog2.instantiate () in
+  match step () with
+  | Finish -> Format.printf "Finish@."
+  | Pause -> Format.printf "Pause@."
 
-let%sync par = trap a (loop (present OUT (exit a); pause))
+
+(* let%sync par = trap a (loop (present OUT (exit a); pause)) *)
 
 let suite =
   "Test_ppx_pendulum_syntax">::: [
@@ -94,7 +113,6 @@ let suite =
     "seq">:: test_seq;
     "cyclic">:: cyclic_grc;
   ] |> run_test_tt_main
-
 
 
 
