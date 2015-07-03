@@ -120,19 +120,18 @@ let parse_ast loc ext e =
       [%expr ([%e Pendulum_misc.expr_of_ast @@ ast_of_expr e])]
     | "to_dot_grc" ->
       let ast = ast_of_expr e in
-
       Pendulum_misc.print_to_dot loc (Ast.Tagged.of_ast ~sigs ast);
 
       let tast = Ast.Tagged.of_ast ~sigs ast in
-      let ocaml_expr = Sync2ml.generate ~sigs tast in
+      let _ocaml_expr = Sync2ml.generate ~sigs tast in
 
-      Format.printf "%a@." Pprintast.expression ocaml_expr;
+      (* Format.printf "%a@." Pprintast.expression ocaml_expr; *)
       [%expr [%e Pendulum_misc.expr_of_ast ast]]
     | "sync" ->
       let ast = ast_of_expr e in
       let tast = Ast.Tagged.of_ast ~sigs ast in
       let ocaml_expr = Sync2ml.generate ~sigs tast in
-      Format.printf "%a@." Pprintast.expression ocaml_expr;
+      (* Format.printf "\n%a@." Pprintast.expression ocaml_expr; *)
       [%expr [%e ocaml_expr]]
     | _ -> assert false
   end

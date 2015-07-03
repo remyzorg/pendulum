@@ -115,10 +115,7 @@ let grc2ml (fg : Grc.Flowgraph.t) =
         | Test (tv, t1, t2) ->
           begin
             match Grc.Schedule.find_join t1 t2 with
-            | None ->
-              mls @@ MLif
-                (construct_test_expr sigs tv, construct stop t1, construct stop t2)
-            | Some j ->
+            | Some j when j <> Finish && j <> Pause ->
               (mls @@ MLif
                  (construct_test_expr sigs tv,
                   construct (Some j) t1,
@@ -127,6 +124,9 @@ let grc2ml (fg : Grc.Flowgraph.t) =
               ++ (match stop with
                   | Some fg' when fg' == j -> nop
                   | _ -> construct stop j)
+            | _ ->
+              mls @@ MLif
+                (construct_test_expr sigs tv, construct stop t1, construct stop t2)
           end
         | Fork (t1, t2, sync) -> assert false
         | Sync ((i1, i2), t1, t2) ->
@@ -175,18 +175,20 @@ module Ocaml_gen = struct
     let open Grc.Selection_tree in
     fun e ->
       let sigs e = List.fold_left (fun acc signal ->
-          [%expr let [%p mk_pat_var signal] = None in [%e acc]]
+          [%expr let [%p mk_pat_var signal] = ref false in [%e acc]]
         ) e sigs
       in
       [%expr
+        let open Pendulum.Runtime_misc in
+        let open Pendulum.Machine in
         { instantiate = fun () ->
-              let [%p Pat.var select_env_var] = Sync.Bitset.make [%e int_const (1 + nstmts)] in
+              let [%p Pat.var select_env_var] = Bitset.make [%e int_const (1 + nstmts)] in
               [%e sigs [%expr fun () -> [%e e]]]
         }]
 
   let rec construct_test test =
     match test with
-    | MLsig s -> [%expr [%e Exp.ident @@ mk_ident s]]
+    | MLsig s -> [%expr ![%e Exp.ident @@ mk_ident s]]
     | MLselect i -> [%expr Bitset.mem [%e Exp.ident select_env_ident] [%e int_const i]]
     | MLor (mlte1, mlte2) -> [%expr [%e construct_test mlte1 ] || [%e construct_test mlte2]]
     | MLfinished -> [%expr Bitset.mem [%e Exp.ident select_env_ident] 0]
@@ -217,7 +219,7 @@ module Ocaml_gen = struct
                    [%e construct_sequence depl mlseq1]
                  else [%e construct_sequence depl mlseq2]]
       end
-    | MLenter i -> [%expr Bitset.add [%e int_const i]]
+    | MLenter i -> [%expr Bitset.add [%e Exp.ident select_env_ident] [%e int_const i]]
     | MLexit i -> List.fold_left (fun acc x ->
         Exp.sequence acc [%expr Bitset.remove [%e Exp.ident select_env_ident] [%e int_const x]]
       ) [%expr Bitset.remove [%e Exp.ident select_env_ident] [%e int_const i]] depl.(i)
