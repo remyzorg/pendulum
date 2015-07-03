@@ -8,6 +8,7 @@ open Longident
 open Pendulum_preproc
 
 open Test_sync2ml
+open Utils
 
 let check_ident_string e =
   let open Ast in
@@ -112,41 +113,78 @@ let ast_of_expr e =
     | e -> Ast.(error ~loc:e.pexp_loc Syntax)
   in visit e
 
+let parse_ast loc ext e =
+  let e, sigs = pop_signals_decl e in
+  begin match ext with
+    | "sync_ast" ->
+      [%expr ([%e Pendulum_misc.expr_of_ast @@ ast_of_expr e])]
+    | "to_dot_grc" ->
+      let ast = ast_of_expr e in
+
+      Pendulum_misc.print_to_dot loc (Ast.Tagged.of_ast ~sigs ast);
+
+      let tast = Ast.Tagged.of_ast ~sigs ast in
+      let ocaml_expr = Sync2ml.generate ~sigs tast in
+
+      Format.printf "%a@." Pprintast.expression ocaml_expr;
+      [%expr [%e Pendulum_misc.expr_of_ast ast]]
+    | "sync" ->
+      let ast = ast_of_expr e in
+      let tast = Ast.Tagged.of_ast ~sigs ast in
+      let ocaml_expr = Sync2ml.generate ~sigs tast in
+      Format.printf "%a@." Pprintast.expression ocaml_expr;
+      [%expr [%e ocaml_expr]]
+    | _ -> assert false
+  end
+
+
+let gen_bindings ext vbl =
+  List.map (fun vb ->
+      {vb with pvb_expr = parse_ast vb.pvb_loc ext vb.pvb_expr}
+    ) vbl
+
+
+let expected_ext = Utils.StringSet.(
+    add "to_dot_grc" (
+      add "sync_ast" (
+        singleton "sync" )))
 
 let extend_mapper argv =
   { default_mapper with
-    expr = fun mapper expr ->
-      match expr with
+    structure_item = (fun mapper stri -> match stri with
+      | { pstr_desc = Pstr_extension (({ txt = ext }, PStr [
+          { pstr_desc = Pstr_value (Nonrecursive, vbs) }]), attrs); pstr_loc }
+        when StringSet.mem ext expected_ext ->
+
+        (Str.value Nonrecursive (gen_bindings ext vbs))
+
+      | { pstr_desc = Pstr_extension (({ txt = ext }, PStr [
+          { pstr_desc = Pstr_value (Recursive, _) }]), _); pstr_loc }
+        when StringSet.mem ext expected_ext ->
+        raise (Location.Error (
+            Location.error ~loc:pstr_loc "[%sync] non recursive `let` expected"))
+
+      | x -> default_mapper.structure_item mapper x
+      );
+
+    expr = fun mapper expr -> match expr with
       | { pexp_desc = Pexp_extension ({ txt = ext; loc }, e)}
-        when ext = "sync" || ext = "sync_ast" || ext = "to_dot_grc" ->
+        when StringSet.mem ext expected_ext ->
         begin try
             begin match e with
               | PStr [{ pstr_desc = Pstr_eval (e, _)}] ->
-                let e, sigs = pop_signals_decl e in
-                begin match ext with
-                  | "sync_ast" ->
-                    [%expr ([%e Pendulum_misc.expr_of_ast @@ ast_of_expr e])]
-                  | "to_dot_grc" ->
-                    let ast = ast_of_expr e in
-
-                    Pendulum_misc.print_to_dot loc (Ast.Tagged.of_ast ~sigs ast);
-
-                    let tast = Ast.Tagged.of_ast ~sigs ast in
-                    let ocaml_expr = Sync2ml.generate ~sigs tast in
-
-                    Format.printf "%a@." Pprintast.expression ocaml_expr;
-                    [%expr [%e Pendulum_misc.expr_of_ast ast]]
-                  | "sync" ->
-                    let ast = ast_of_expr e in
-                    let tast = Ast.Tagged.of_ast ~sigs ast in
-                    let ocaml_expr = Sync2ml.generate ~sigs tast in
-                    Format.printf "%a@." Pprintast.expression ocaml_expr;
-                    [%expr [%e ocaml_expr]]
-                  | _ -> assert false
+                begin match e.pexp_desc with
+                  | Pexp_let (Nonrecursive, vbl, e) ->
+                    Exp.let_ Nonrecursive (gen_bindings ext vbl) e
+                  | Pexp_let (Recursive, vbl, e) ->
+                    raise (Location.Error (
+                        Location.error ~loc "[%sync] non recursive `let` expected"))
+                  | _ ->
+                    raise (Location.Error (
+                        Location.error ~loc "[%sync] `let` expected"))
                 end
-              | _ ->
-                raise (Location.Error (
-                    Location.error ~loc "[%sync] is only on expressions"))
+              | _ -> raise (Location.Error
+                              (Location.error ~loc "[%sync] is only allowed on expressions"))
             end
           with
           | Ast.Error (loc, e) ->
