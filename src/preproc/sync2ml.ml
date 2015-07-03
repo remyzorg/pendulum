@@ -184,49 +184,48 @@ module Ocaml_gen = struct
               [%e sigs [%expr fun () -> [%e e]]]
         }]
 
+  let rec construct_test test =
+    match test with
+    | MLsig s -> [%expr [%e Exp.ident @@ mk_ident s]]
+    | MLselect i -> [%expr Bitset.mem [%e Exp.ident select_env_ident] [%e int_const i]]
+    | MLor (mlte1, mlte2) -> [%expr [%e construct_test mlte1 ] || [%e construct_test mlte2]]
+    | MLfinished -> [%expr Bitset.mem [%e Exp.ident select_env_ident] 0]
 
+  let rec construct_sequence depl mlseq =
+    match mlseq with
+    | Seq (Seqlist [], Seqlist []) | Seqlist [] -> assert false
+    | Seq (mlseq, Seqlist []) | Seq (Seqlist [], mlseq) ->
+      construct_sequence depl mlseq
+    | Seqlist ml_asts ->
+      List.fold_left (fun acc x ->
+          if acc = dumb then construct_ml_ast depl x
+          else Exp.sequence acc (construct_ml_ast depl x)
+        ) dumb ml_asts
+    | Seq (mlseq1, mlseq2) ->
+      Exp.sequence (construct_sequence depl mlseq1)
+        (construct_sequence depl mlseq2)
+
+  and construct_ml_ast depl ast =
+    match ast with
+    | MLemit s -> [%expr [%e Exp.ident @@ mk_ident s] := true]
+    | MLif (test, mlseq1, mlseq2) ->
+      begin match mlseq2 with
+        | Seqlist [] | Seq (Seqlist [], Seqlist []) ->
+          [%expr if [%e construct_test test] then [%e construct_sequence depl mlseq1]]
+        | _ ->
+          [%expr if [%e construct_test test] then
+                   [%e construct_sequence depl mlseq1]
+                 else [%e construct_sequence depl mlseq2]]
+      end
+    | MLenter i -> [%expr Bitset.add [%e int_const i]]
+    | MLexit i -> List.fold_left (fun acc x ->
+        Exp.sequence acc [%expr Bitset.remove [%e Exp.ident select_env_ident] [%e int_const x]]
+      ) [%expr Bitset.remove [%e Exp.ident select_env_ident] [%e int_const i]] depl.(i)
+    | MLexpr pexpr -> pexpr
+    | MLpause -> [%expr Pause]
+    | MLfinish -> [%expr Finish]
 
   let instantiate sigs sel ml =
-    let rec construct_test test =
-      match test with
-        | MLsig s -> [%expr [%e Exp.ident @@ mk_ident s]]
-        | MLselect i -> [%expr Bitset.mem [%e Exp.ident select_env_ident] [%e int_const i]]
-        | MLor (mlte1, mlte2) -> [%expr [%e construct_test mlte1 ] || [%e construct_test mlte1]]
-        | MLfinished -> [%expr Bitset.mem [%e Exp.ident select_env_ident] 0]
-    in
-  let rec construct_sequence depl mlseq =
-      match mlseq with
-      | Seq (Seqlist [], Seqlist []) | Seqlist [] -> assert false
-      | Seq (mlseq, Seqlist []) | Seq (Seqlist [], mlseq) ->
-        construct_sequence depl mlseq
-      | Seqlist ml_asts ->
-        List.fold_left (fun acc x ->
-            if acc = dumb then construct_ml_ast depl x
-            else Exp.sequence acc (construct_ml_ast depl x)
-          ) dumb ml_asts
-      | Seq (mlseq1, mlseq2) ->
-        Exp.sequence (construct_sequence depl mlseq1)
-          (construct_sequence depl mlseq2)
-    and construct_ml_ast depl ast =
-      match ast with
-      | MLemit s -> [%expr [%e Exp.ident @@ mk_ident s] := true]
-      | MLif (test, mlseq1, mlseq2) ->
-        begin match mlseq2 with
-          | Seqlist [] | Seq (Seqlist [], Seqlist []) ->
-            [%expr if [%e construct_test test] then [%e construct_sequence depl mlseq1]]
-          | _ ->
-            [%expr if [%e construct_test test] then
-                     [%e construct_sequence depl mlseq1]
-                   else [%e construct_sequence depl mlseq2]]
-        end
-      | MLenter i -> [%expr Bitset.add [%e int_const i]]
-      | MLexit i -> List.fold_left (fun acc x ->
-          Exp.sequence acc [%expr Bitset.remove [%e Exp.ident select_env_ident] [%e int_const x]]
-        ) [%expr Bitset.remove [%e Exp.ident select_env_ident] [%e int_const i]] depl.(i)
-      | MLexpr pexpr -> pexpr
-      | MLpause -> [%expr Pause]
-      | MLfinish -> [%expr Finish]
-    in
     let deps = deplist sel in
     let dep_array = Array.make (List.length deps + 1) [] in
     List.iter (fun (i, l) -> dep_array.(i) <- l) deps;
