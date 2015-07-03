@@ -4,7 +4,7 @@
 
 # Description
 
-**pendulum** is a language dedicated to programming reactive systems in the
+**pendulum** is a language dedicated to the programming of reactive systems on the
  Web. It has a powerful expressivity to describe synchronous concurrent systems
  communicating with broadcasted signals. Its constructions and implementation
  are mostly based on Esterel. The language is embedded in OCaml as a syntax
@@ -14,6 +14,8 @@
 
 The core language is completely compatible with vanilla OCaml compiler >4.02.1.
 
+
+**Please do not use pendulum for now, as it is an early prototype**
 
 
 # TODO :
