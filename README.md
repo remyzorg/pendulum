@@ -18,6 +18,7 @@ The core language is completely compatible with vanilla OCaml compiler >4.02.1.
 **Please do not use pendulum for now, as it is an early prototype**
 
 
+
 # TODO :
 * Documentation :
   * update description
@@ -40,6 +41,7 @@ The core language is completely compatible with vanilla OCaml compiler >4.02.1.
   * remove the returned value (useless anyway) and use side effects (pause / finished)
     * replace by ()
   * localize ocaml statements when needed (sync2ml & ppx_pendulum)
+  * refuse Lident in signals names
 
 # Compilation
 

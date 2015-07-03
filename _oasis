@@ -28,7 +28,7 @@ Library "pendulum_preproc"
 Library "pendulum"
   Path: src/runtime/
   Pack: true
-  Modules: Interp, Runtime_ast, Runtime_misc
+  Modules: Interp, Runtime_ast, Runtime_misc, Machine
   BuildDepends: ppx_deriving
 
 
