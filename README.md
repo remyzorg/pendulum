@@ -2,10 +2,21 @@
 
 # Readme
 
-## Description
+# Description
+
+*pendulum* is a language dedicated to programming reactive systems in the
+ Web. It has a powerful expressivity to describe synchronous concurrent systems
+ communicating with broadcasted signals. Its constructions and implementation
+ are mostly based on Esterel. The language is embedded in OCaml as a syntax
+ extension. It allows the programmer to describe *reactive machines* as OCaml
+ values, and run them on signals arguments. The compilation of *pendulum* is
+ completely sequential and static.
+
+The core language is completely compatible with vanilla OCaml compiler >4.02.1.
 
 
-## TODO :
+
+# TODO :
 * Documentation :
   * update description
   * document surface / depth
@@ -29,7 +40,7 @@
     * replace by ()
   * check ml_ast generation for sync
 
-## Compilation
+# Compilation
 
 * dependencies : oasis, oUnit, ppx_deriving
 * `make`
