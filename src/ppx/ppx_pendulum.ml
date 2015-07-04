@@ -17,17 +17,6 @@ let check_ident_string e =
   | Pexp_construct ({txt = Lident s; loc}, None) -> {loc; content = s}
   | _ -> Ast.syntax_error ~loc:e.pexp_loc "identifier expected"
 
-(* let pop_signals_decl e = *)
-(*   let rec aux sigs e = *)
-(*     match e with *)
-(*     | [%expr input [%e ?e]; [%e ?e2] ] *)
-(*     | [%expr output [%e ?e]; [%e ?e2]] -> *)
-(*       let ident = check_ident_string e in *)
-(*       aux (ident.Ast.content :: sigs) e2 *)
-(*     | e -> e, sigs *)
-(*   in *)
-(*   aux [] e *)
-
 let pop_signals_decl e =
   let cont e = (check_ident_string e) in
   let rec aux sigs p =

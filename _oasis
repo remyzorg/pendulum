@@ -21,7 +21,6 @@ Library "pendulum_preproc"
   Modules: Utils, Ast, Grc, Sync2ml
   BuildDepends:
     unix,
-    compiler-libs.common,
     ppx_tools.metaquot,
     ppx_deriving.std
 
