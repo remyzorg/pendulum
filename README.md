@@ -40,8 +40,6 @@ The core language is completely compatible with vanilla OCaml compiler >4.02.1.
   * handle complete if then else cases
   * remove the returned value (useless anyway) and use side effects (pause / finished)
     * replace by ()
-  * localize ocaml statements when needed (sync2ml & ppx_pendulum)
-  * refuse Lident in signals names
 
 # Compilation
 

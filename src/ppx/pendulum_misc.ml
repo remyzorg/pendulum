@@ -76,7 +76,7 @@ let rec expr_of_ast e =
     | Every (signal, e) ->
       [%expr Every ([%e string_const signal], [%e visit e])]
 
-    | _ -> syntax_error ~loc:e.loc "Syntax error : pendulum keyword expected"
+    | _ -> syntax_error_reason ~loc:e.loc "keyword expected"
     end  [@metaloc e.loc]
   in visit e
 
