@@ -71,7 +71,7 @@ let par_deps ctx = assert_equal
      in ast) (Par (Present_then ("S1", emit "S2"), Present_then ("S2", Atom)))
 
 let par_deps ctx = assert_equal
-    (let%to_dot_grc ast =
+    (let%sync_ast ast =
       input s1, s2;
       present s1 (emit s2)
       ||
@@ -81,37 +81,34 @@ let par_deps ctx = assert_equal
       end;
      in ast) (Par (Present_then ("S1", emit "S2"), Present_then ("S2", Atom)))
 
-let () =
-  (* let%sync prog = *)
-  (*   loop begin *)
-  (*     atom (Format.printf "42 ==== \n"); *)
-  (*     pause *)
-  (*   end *)
-  (* in *)
-  let%sync prog2 =
-    loop begin
-      atom (
-        Format.printf "42 ==== \n";
-      );
-      pause
-    end
-    ||
-    loop begin
-      atom (Format.printf "43 ==== \n");
-      pause
-    end
-  in
-  let open Pendulum.Machine in
-  let step = prog2.instantiate () in
-  for i = 0 to 5 do
-    match step () with
-    | Finish -> Format.printf "Finish\n"
-    | Pause -> Format.printf "Pause\n"
-  done;
-  Format.printf "@."
 
+let par_deps ctx = assert_equal
+    (let%to_dot_grc ast =
+      input s1, s2;
+      present s1 (emit s2)
+      ||
+      present s2 begin
+        signal s1 (
+          emit s1;
+          atom (print_string "42");
+          pause
+        )
+      end;
+     in ast) (Par (Present_then ("S1", emit "S2"), Present_then ("S2", Atom)))
 
-(* let%sync par = trap a (loop (present OUT (exit a); pause)) *)
+let par_deps ctx = assert_equal
+    (let%sync_ast ast =
+      input s1, s2;
+      present s1 (emit s2)
+      ||
+      present s2 begin
+        signal s1 (
+          emit s1;
+          atom (print_string "42");
+          pause
+        )
+      end;
+     in ast) (Par (Present_then ("S1", emit "S2"), Present_then ("S2", Atom)))
 
 let suite =
   "Test_ppx_pendulum_syntax">::: [

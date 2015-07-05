@@ -167,7 +167,7 @@ module Ocaml_gen = struct
     in ignore (visit sel); !env
 
 
-  let select_env_name = "__pendulum__t__"
+  let select_env_name = "pendulum~t"
   let select_env_var = Location.(mkloc select_env_name Location.none )
   let select_env_ident = mk_ident select_env_name
 

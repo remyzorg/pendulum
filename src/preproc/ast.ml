@@ -104,31 +104,41 @@ module Tagged = struct
   type env = {
     labels : int StringMap.t;
     signals : int StringMap.t;
+    mutable local_signals : signal list;
   }
 
-  let empty_env = {labels = StringMap.empty; signals = StringMap.empty}
+  let add_env (env : env) s =
+    let signals, s = StringMap.(match find s.content env.signals with
+      | exception Not_found ->
+        add s.content 0 env.signals, s
+      | i ->
+        add s.content (i + 1) env.signals,
+        {s with content = Format.sprintf "%s~%d" s.content (i + 1)}
+      )
+    in
+    env.local_signals <- s :: env.local_signals;
+    {env with signals}, s
 
-  let add_env env s = StringMap.(match find s.content env with
+  let add_label env s = StringMap.(match find s.content env with
       | exception Not_found -> add s.content 0 env, s
       | i -> add s.content (i + 1) env,
              {s with content = Format.sprintf "%s%d" s.content (i + 1)})
 
   let rename env s p =
     StringMap.(match find s.content env with
-      | exception Not_found ->
-        StringMap.iter (fun a b -> Format.printf "%s %d @\n" a b) env;
-        error ~loc:p.loc @@ Unbound_identifier s.content
-      | 0 -> s
-      | i -> {s with content = Format.sprintf "%s%d" s.content i})
-
+        | exception Not_found ->
+          StringMap.iter (fun a b -> Format.printf "%s %d @\n" a b) env;
+          error ~loc:p.loc @@ Unbound_identifier s.content
+        | 0 -> s
+        | i -> {s with content = Format.sprintf "%s~%d" s.content i})
 
   let create_env sigs = {
     labels = StringMap.empty;
     signals = List.fold_left (fun accmap s ->
         StringMap.add s.content 0 accmap )
-        StringMap.empty sigs
+        StringMap.empty sigs;
+    local_signals = []
   }
-
 
   let rec of_ast ?(sigs=[]) ast =
     let id = ref 0 in
@@ -161,7 +171,7 @@ module Tagged = struct
         mk_tagged (Suspend (visit env t, rename env.signals s ast)) !+id
 
       | Derived.Trap (Label s, t) ->
-        let labels, s = add_env env.labels s in
+        let labels, s = add_label env.labels s in
         mk_tagged (Trap (Label s, visit {env with labels} t)) !+id
 
       | Derived.Exit (Label s) -> mk_tagged (Exit (Label (rename env.labels s ast))) !+id
@@ -172,8 +182,8 @@ module Tagged = struct
       | Derived.Atom f -> mk_tagged (Atom f) !+id
 
       | Derived.Signal (s,t) ->
-        let signals, s = add_env env.signals s in
-        mk_tagged (Signal (s, visit {env with signals} t)) !+id
+        let env, s = add_env env s in
+        mk_tagged (Signal (s, visit env t)) !+id
 
 
       | Derived.Halt -> mk_tagged (Loop (mk_tagged Pause !+id)) !+id
@@ -209,7 +219,8 @@ module Tagged = struct
                                         (mkl @@ Derived.Loop_each (st, s)))) !+id
 
     in
-    visit env ast
+    let tagged = visit env ast in
+    tagged, env
 
 let print_to_dot fmt tagged =
   let open Format in
@@ -283,29 +294,3 @@ module Analysis = struct
      | Signal (_,t) -> blocking t
      | Await s -> true
 end
-
-
-(* let rec flatten_par : statement list -> statement list = function *)
-(*   | [] -> [] *)
-(*   | (Par l) :: t -> l @ flatten_par t *)
-(*   | st :: t -> st :: flatten_par t *)
-
-open Derived
-(* let list_to_seq l = *)
-(*   let rec step l = match l with *)
-(*   | [] -> mk_loc Nothing *)
-(*   | [e] -> e *)
-(*   | h :: t -> (mk_loc @@ Seq (h, step t)) *)
-(*   in step l *)
-
-(* let (//) a b = mk_loc @@ Par (a, b) *)
-(* let (!!) l = list_to_seq l *)
-(* let loop_each r p = mk_loc @@ Loop_each (p, r) *)
-(* let loop l = mk_loc @@ Loop (!! l) *)
-(* let atom f = mk_loc @@ Atom f *)
-(* let await a = mk_loc @@ Await a *)
-(* let emit a = mk_loc @@ Emit a *)
-(* let pause = Pause *)
-(* let trap s st = Trap (Label s, st) *)
-(* let exit_l s = Exit (Label s) *)
-(* let abort s p = Abort (p ,s) *)

@@ -42,22 +42,6 @@ module Selection_tree = struct
     in
     visit ast
 
-  (* module Primitive = struct *)
-  (*   let rec exit stree = *)
-  (*     stree.status <- false; *)
-  (*     match stree.t with *)
-  (*     | Pause | Bottom -> () *)
-  (*     | Ref s -> exit s *)
-  (*     | Excl sts | Par sts -> List.iter exit sts *)
-
-  (*   let enter stree = stree.status <- true *)
-
-  (*   let sync stree = match stree.t with *)
-  (*     | Par sts -> List.for_all (fun x -> x.status) sts *)
-  (*     | _ -> assert false *)
-  (* end *)
-
-
   let print_to_dot fmt selection =
     let open Format in
     let rec visit x = match x.t with
@@ -232,9 +216,7 @@ module Flowgraph = struct
 
 end
 
-(* type tag = int [@@deriving show] *)
 type id = int [@@deriving show]
-
 
 type error =
   | Unbound_label of string
@@ -254,8 +236,6 @@ let print_error fmt e =
     end
 
 let error ~loc e = raise (Error (loc, e))
-
-
 
 
 module Of_ast = struct

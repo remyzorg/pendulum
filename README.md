@@ -18,7 +18,6 @@ The core language is completely compatible with vanilla OCaml compiler >4.02.1.
 **Please do not use pendulum for now, as it is an early prototype**
 
 
-
 # TODO :
 * Documentation :
   * update description
@@ -28,18 +27,22 @@ The core language is completely compatible with vanilla OCaml compiler >4.02.1.
   * maintain signals values or presence informations between steps
   * gather at signal definitions (several emission of the same signal at the same instant
   * `pre`
-  * syntax to get signal value
-  * n-ary parallel operator
+  * handle valued signal
+    * operator for presence & value
+  * n-ary parallel operator and/or gathering (at signals definition)
 * DOM
   * setTimeout and requestAnimationFrames as global clocks ?
 * Code generation
   * define signals as globals with the unique name and rebind them locally (very same semantic)
     * keep local signal informations trough steps
-  * add local signals definitions to generated let bindings
   * generate new signals (even for input) at each steps ?
-  * handle complete if then else cases
-  * remove the returned value (useless anyway) and use side effects (pause / finished)
-    * replace by ()
+  * check if then else generation
+
+  * simplify `remove` sequentials calls
+  * remove call to `remove` if the statement is not tested in grc
+  * add local signals definitions to generated let bindings
+  and rebind signals locally (to each test and to each atoms) to the correct name so the use can use them
+
 
 # Compilation
 

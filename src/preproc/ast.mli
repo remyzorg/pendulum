@@ -78,9 +78,10 @@ module Tagged : sig
   type env = {
     labels : int StringMap.t;
     signals : int StringMap.t;
+    mutable local_signals : signal list;
   }
 
-  val of_ast : ?sigs:signal list -> Derived.statement -> t
+  val of_ast : ?sigs:signal list -> Derived.statement -> t * env
 
   val print_to_dot : Format.formatter -> t -> unit
 end

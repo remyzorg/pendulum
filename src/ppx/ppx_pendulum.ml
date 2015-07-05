@@ -129,21 +129,21 @@ let parse_ast loc ext e =
   begin match ext with
     | "sync_ast" ->
       [%expr ([%e Pendulum_misc.expr_of_ast @@ ast_of_expr e])]
+
     | "to_dot_grc" ->
       let ast = ast_of_expr e in
-      Pendulum_misc.print_to_dot loc (Ast.Tagged.of_ast ~sigs ast);
-
-      let tast = Ast.Tagged.of_ast ~sigs ast in
-      let _ocaml_expr = Sync2ml.generate ~sigs tast in
-
-      (* Format.printf "%a@." Pprintast.expression ocaml_expr; *)
+      let tast, env = Ast.Tagged.of_ast ~sigs ast in
+      Pendulum_misc.print_to_dot loc tast;
+      let ocaml_expr = Sync2ml.generate ~sigs:(sigs@env.Ast.Tagged.local_signals) tast in
+      Format.printf "%a@." Pprintast.expression ocaml_expr;
       [%expr [%e Pendulum_misc.expr_of_ast ast]]
+
     | "sync" ->
       let ast = ast_of_expr e in
-      let tast = Ast.Tagged.of_ast ~sigs ast in
-      let ocaml_expr = Sync2ml.generate ~sigs tast in
-      (* Format.printf "\n%a@." Pprintast.expression ocaml_expr; *)
+      let tast, env = Ast.Tagged.of_ast ~sigs ast in
+      let ocaml_expr = Sync2ml.generate ~sigs:(sigs@env.Ast.Tagged.local_signals) tast in
       [%expr [%e ocaml_expr]]
+
     | _ -> assert false
   end
 
@@ -159,8 +159,8 @@ let expected_ext = Utils.StringSet.(
       add "sync_ast" (
         singleton "sync" )))
 
-let extend_mapper argv =
-  { default_mapper with
+let extend_mapper argv = {
+  default_mapper with
     structure_item = (fun mapper stri -> match stri with
       | { pstr_desc = Pstr_extension (({ txt = ext }, PStr [
           { pstr_desc = Pstr_value (Nonrecursive, vbs) }]), attrs); pstr_loc }
