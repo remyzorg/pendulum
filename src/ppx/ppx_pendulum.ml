@@ -7,24 +7,26 @@ open Longident
 
 open Pendulum_preproc
 
-open Test_sync2ml
 open Utils
+
+
 
 let check_ident_string e =
   let open Ast in
   match e.pexp_desc with
-  | Pexp_ident {txt = Lident s; loc}
-  | Pexp_construct ({txt = Lident s; loc}, None) -> {loc; content = s}
-  | _ -> Ast.syntax_error ~loc:e.pexp_loc "identifier expected"
+  (* | Pexp_construct ({txt = Lident s; loc}, None) *)
+  | Pexp_ident {txt = Lident s; loc} ->
+    {loc; content = s}
+  | _ -> Ast.syntax_error_reason ~loc:e.pexp_loc "variable name expected"
 
 let pop_signals_decl e =
   let cont e = (check_ident_string e) in
   let rec aux sigs p =
     match p with
-    | [%expr [%e ?params]; [%e ?e2] ] ->
+    | [%expr [%e ?params]; [%e? e2] ] ->
       begin match params.pexp_desc with
-        | Pexp_tuple ([%expr input [%e ?e]] :: ids)
-        | Pexp_tuple ([%expr output [%e ?e]] :: ids)->
+        | Pexp_tuple ([%expr input [%e? e]] :: ids)
+        | Pexp_tuple ([%expr output [%e? e]] :: ids)->
           aux (cont e :: ((List.map cont ids) @ sigs)) e2
         | _ ->
           begin match params with
@@ -99,7 +101,27 @@ let ast_of_expr e =
     | [%expr every [%e? e] [%e? signal]] ->
       Every (check_ident_string signal, visit e)
 
-    | e -> Ast.(error ~loc:e.pexp_loc Syntax)
+    | [%expr nothing [%e? e_err]]
+    | [%expr pause [%e? e_err]]
+    | [%expr emit [%e? _] [%e? e_err]]
+    | [%expr exit [%e? _] [%e? e_err]]
+    | [%expr atom [%e? _] [%e? e_err]]
+    | [%expr loop [%e? _] [%e? e_err]]
+    | [%expr [%e? _] || [%e? _] [%e? e_err]]
+    | [%expr present [%e? _] [%e? _] [%e? _] [%e? e_err]]
+    | [%expr signal [%e? _] [%e? _] [%e? e_err]]
+    | [%expr suspend [%e? _] [%e? _][%e? e_err]]
+    | [%expr trap [%e? _] [%e? _][%e? e_err]]
+    | [%expr halt [%e? e_err]]
+    | [%expr sustain [%e? _][%e? e_err]]
+    | [%expr present [%e? _] [%e? _][%e? e_err]]
+    | [%expr await [%e? _][%e? e_err]]
+    | [%expr abort [%e? _] [%e? _] [%e? e_err]]
+    | [%expr loopeach [%e? _] [%e? _][%e? e_err]]
+    | [%expr every [%e? _] [%e? _] [%e? e_err]] ->
+      Ast.(syntax_error_reason ~loc:e_err.pexp_loc "maybe you forgot a `;`")
+
+    | e -> Ast.(syntax_error_reason ~loc:e.pexp_loc "keyword expected")
   in visit e
 
 let parse_ast loc ext e =
@@ -163,7 +185,8 @@ let extend_mapper argv =
               | PStr [{ pstr_desc = Pstr_eval (e, _)}] ->
                 begin match e.pexp_desc with
                   | Pexp_let (Nonrecursive, vbl, e) ->
-                    Exp.let_ Nonrecursive (gen_bindings ext vbl) e
+                    Exp.let_ Nonrecursive (gen_bindings ext vbl)
+                      @@ mapper.expr mapper e
                   | Pexp_let (Recursive, vbl, e) ->
                     raise (Location.Error (
                         Location.error ~loc "[%sync] non recursive `let` expected"))

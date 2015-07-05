@@ -35,8 +35,8 @@ let test_halt_exit_trap ctx = assert_equal
 
 
 let test_presentthen ctx = assert_equal
-  (let%sync_ast ast = trap a (loop (present OUT (exit a); pause)) in ast)
-  (trap "a" (loop [Present_then ("OUT", exit_l "a"); pause]))
+  (let%sync_ast ast = trap a (loop (present out (exit a); pause)) in ast)
+  (trap "a" (loop [Present_then ("out", exit_l "a"); pause]))
 
 let test_abro ctx = assert_equal
     (let%sync_ast ast = loopeach (await a || await b; emit o;) r in ast)
@@ -50,54 +50,65 @@ let test_every ctx = assert_equal
 
 let cyclic_grc ctx = assert_equal
   (let%sync_ast ast =
-    input I, S;
+    input i, s;
     (nothing
      ||
-     present I begin
-       present S pause pause
+     present i begin
+       present s pause pause
      end
     );
-    emit S in ast)
-  (Seq(Par (Nothing, Present_then ("I", Present ("S", Pause, Pause ))), Emit "S"))
+    emit s in ast)
+  (Seq(Par (Nothing, Present_then ("i", Present ("s", Pause, Pause ))), Emit "s"))
 
 let par_deps ctx = assert_equal
     (let%sync_ast ast =
-      input S1, S2;
-      present S1 (emit S2)
+      input s1, s2;
+      present s1 (emit s2)
       ||
-      present S2 (atom begin
+      present s2 (atom begin
           print_string "42";
         end);
      in ast) (Par (Present_then ("S1", emit "S2"), Present_then ("S2", Atom)))
 
 let par_deps ctx = assert_equal
     (let%to_dot_grc ast =
-      input S1, S2;
-      present S1 (emit S2)
+      input s1, s2;
+      present s1 (emit s2)
       ||
-      present S2 begin
+      present s2 begin
         atom (print_string "42");
-        pause;
+        pause
       end;
      in ast) (Par (Present_then ("S1", emit "S2"), Present_then ("S2", Atom)))
 
 let () =
+  (* let%sync prog = *)
+  (*   loop begin *)
+  (*     atom (Format.printf "42 ==== \n"); *)
+  (*     pause *)
+  (*   end *)
+  (* in *)
   let%sync prog2 =
     loop begin
-      atom (Format.printf "42 ==== @\n");
+      atom (
+        Format.printf "42 ==== \n";
+      );
       pause
     end
     ||
     loop begin
-      atom (Format.printf "43 ==== @\n");
+      atom (Format.printf "43 ==== \n");
       pause
     end
   in
   let open Pendulum.Machine in
   let step = prog2.instantiate () in
-  match step () with
-  | Finish -> Format.printf "Finish@."
-  | Pause -> Format.printf "Pause@."
+  for i = 0 to 5 do
+    match step () with
+    | Finish -> Format.printf "Finish\n"
+    | Pause -> Format.printf "Pause\n"
+  done;
+  Format.printf "@."
 
 
 (* let%sync par = trap a (loop (present OUT (exit a); pause)) *)

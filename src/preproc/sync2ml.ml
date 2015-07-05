@@ -223,7 +223,7 @@ module Ocaml_gen = struct
     | MLexit i -> List.fold_left (fun acc x ->
         Exp.sequence acc [%expr Bitset.remove [%e Exp.ident select_env_ident] [%e int_const x]]
       ) [%expr Bitset.remove [%e Exp.ident select_env_ident] [%e int_const i]] depl.(i)
-    | MLexpr pexpr -> pexpr
+    | MLexpr pexpr -> [%expr let () = [%e pexpr] in ()]
     | MLpause -> [%expr Pause]
     | MLfinish -> [%expr Finish]
 
