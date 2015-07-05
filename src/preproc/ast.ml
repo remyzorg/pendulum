@@ -55,9 +55,11 @@ let print_error fmt e =
       | Syntax -> "Syntax error"
     end
 
+let syntax_error ~loc () = raise (Location.Error (
+    Location.error ~loc ("[pendulum] Syntax error")))
 
-let syntax_error ~loc s = raise (Location.Error (
-    Location.error ~loc ("[%sync] " ^ s)))
+let syntax_error_reason ~loc s = raise (Location.Error (
+    Location.error ~loc ("[pendulum] Syntax error : " ^ s)))
 
 
 module IntMap = Map.Make(struct

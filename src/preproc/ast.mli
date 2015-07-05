@@ -50,7 +50,8 @@ type error =
 exception Error of Location.t * error
 val error : loc:Location.t -> error -> 'a
 val print_error : Format.formatter -> error -> unit
-val syntax_error : loc:Location.t -> string -> 'a
+val syntax_error : loc:Location.t -> unit -> 'a
+val syntax_error_reason : loc:Location.t -> string -> 'a
 
 module Tagged : sig
   type t = {id : int; st : tagged}
