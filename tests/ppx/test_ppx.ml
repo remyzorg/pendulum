@@ -84,6 +84,7 @@ let par_deps ctx = assert_equal
 
 let par_deps ctx = assert_equal
     (let%to_dot_grc ast =
+
       input s1, s2;
       present s1 (emit s2)
       ||
@@ -94,7 +95,8 @@ let par_deps ctx = assert_equal
           pause
         )
       end;
-     in ast) (Par (Present_then ("S1", emit "S2"), Present_then ("S2", Atom)))
+     in ast)
+    (Par (Present_then ("S1", emit "S2"), Present_then ("S2", Atom)))
 
 let par_deps ctx = assert_equal
     (let%sync_ast ast =

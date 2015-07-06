@@ -10,6 +10,9 @@ open Pendulum_preproc
 open Utils
 
 
+let error ~loc rsn =
+  raise (Location.Error (
+      Location.error ~loc ("[pendulum] " ^ rsn)))
 
 let check_ident_string e =
   let open Ast in
@@ -134,14 +137,16 @@ let parse_ast loc ext e =
       let ast = ast_of_expr e in
       let tast, env = Ast.Tagged.of_ast ~sigs ast in
       Pendulum_misc.print_to_dot loc tast;
-      let ocaml_expr = Sync2ml.generate ~sigs:(sigs@env.Ast.Tagged.local_signals) tast in
+      let ocaml_expr =
+        Sync2ml.generate ~sigs:(sigs@env.Ast.Tagged.local_signals) tast in
       Format.printf "%a@." Pprintast.expression ocaml_expr;
       [%expr [%e Pendulum_misc.expr_of_ast ast]]
 
     | "sync" ->
       let ast = ast_of_expr e in
       let tast, env = Ast.Tagged.of_ast ~sigs ast in
-      let ocaml_expr = Sync2ml.generate ~sigs:(sigs@env.Ast.Tagged.local_signals) tast in
+      let ocaml_expr =
+        Sync2ml.generate ~sigs:(sigs@env.Ast.Tagged.local_signals) tast in
       [%expr [%e ocaml_expr]]
 
     | _ -> assert false
@@ -171,8 +176,7 @@ let extend_mapper argv = {
       | { pstr_desc = Pstr_extension (({ txt = ext }, PStr [
           { pstr_desc = Pstr_value (Recursive, _) }]), _); pstr_loc }
         when StringSet.mem ext expected_ext ->
-        raise (Location.Error (
-            Location.error ~loc:pstr_loc "[%sync] non recursive `let` expected"))
+            error ~loc:pstr_loc "non recursive `let` expected"
 
       | x -> default_mapper.structure_item mapper x
       );
@@ -188,22 +192,17 @@ let extend_mapper argv = {
                     Exp.let_ Nonrecursive (gen_bindings ext vbl)
                       @@ mapper.expr mapper e
                   | Pexp_let (Recursive, vbl, e) ->
-                    raise (Location.Error (
-                        Location.error ~loc "[%sync] non recursive `let` expected"))
+                    error ~loc "non recursive `let` expected"
                   | _ ->
-                    raise (Location.Error (
-                        Location.error ~loc "[%sync] `let` expected"))
+                    error ~loc "`let` expected"
                 end
-              | _ -> raise (Location.Error
-                              (Location.error ~loc "[%sync] is only allowed on expressions"))
+              | _ -> error ~loc "only allowed on expressions"
             end
           with
           | Ast.Error (loc, e) ->
-            raise (Location.Error (
-                Location.error ~loc (Format.asprintf "[%%sync] : %a" Ast.print_error e)))
+            error ~loc (Format.asprintf "%a" Ast.print_error e)
           | Sync2ml.Error (loc, e) ->
-            raise (Location.Error (
-                Location.error ~loc (Format.asprintf "[%%sync] : %a" Sync2ml.print_error e)))
+            error ~loc (Format.asprintf "%a" Sync2ml.print_error e)
         end
       | x -> default_mapper.expr mapper x;
   }

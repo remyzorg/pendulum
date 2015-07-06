@@ -41,7 +41,7 @@ The core language is completely compatible with vanilla OCaml compiler >4.02.1.
   * simplify `remove` sequentials calls
   * remove call to `remove` if the statement is not tested in grc
   * add local signals definitions to generated let bindings
-  and rebind signals locally (to each test and to each atoms) to the correct name so the use can use them
+    and rebind signals locally (to each test and to each atoms) to the correct name so the use can use them
 
 
 # Compilation

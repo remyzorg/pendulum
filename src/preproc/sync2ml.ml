@@ -78,7 +78,7 @@ and pp_ml_ast lvl fmt =
     | MLexpr e -> fprintf fmt "%s%s" indent (asprintf "%a" Pprintast.expression e)
     | MLpause -> fprintf fmt "%sPause" indent
     | MLfinish -> fprintf fmt "%sFinish" indent
-  )
+    )
 
 let nop = Seqlist []
 let ml l = Seqlist l
@@ -91,7 +91,7 @@ let construct_ml_action mr a =
   let open Grc.Flowgraph in
   match a with
   | Emit s -> mr := StringSet.add s  !mr; MLemit s
-  | Atom e -> MLexpr e
+  | Atom e -> MLexpr e.Ast.Tagged.exp
   | Enter i -> MLenter i
   | Exit i -> MLexit i
 
@@ -174,8 +174,7 @@ module Ocaml_gen = struct
   let init nstmts sigs sel =
     let open Grc.Selection_tree in
     fun e ->
-      let sigs e = List.fold_left (fun acc signal ->
-          [%expr let [%p mk_pat_var signal] = ref false in [%e acc]]
+      let sigs e = List.fold_left (fun acc signal -> [%expr let [%p mk_pat_var signal] = ref false in [%e acc]]
         ) e sigs
       in
       [%expr
