@@ -72,14 +72,21 @@ module StringMap = Map.Make(struct
     let compare = compare
   end)
 
+module IdentMap = Map.Make(struct
+    type t = ident
+    let compare a b = compare a.content b.content
+  end)
+
 let trap_signal = Label  (mk_loc "Trap")
 let (!+) a = incr a; !a
 
 
 module Tagged = struct
 
-  type t = {id : int; st : tagged}
-  [@@deriving show]
+
+  type atom = { locals : signal list; exp : Parsetree.expression}
+  type t = {id : int; st : tagged} [@@deriving show]
+
 
   and tagged_ast =
     | Loop of t
@@ -92,7 +99,7 @@ module Tagged = struct
     | Trap of label * t
     | Exit of label
     | Present of signal * t * t
-    | Atom of Parsetree.expression [@printer Printast.expression 0]
+    | Atom of atom [@printer fun fmt x -> Pprintast.expression fmt x.exp]
     | Signal of signal * t
     | Await of signal
   [@@deriving show]
@@ -102,42 +109,44 @@ module Tagged = struct
     {id; st = {loc ; content}}
 
   type env = {
-    labels : int StringMap.t;
-    signals : int StringMap.t;
-    mutable local_signals : signal list;
+    labels : int IdentMap.t;
+    signals : int IdentMap.t;
+    mutable all_local_signals : signal list;
+    local_signals : signal list;
   }
 
   let add_env (env : env) s =
-    let signals, s = StringMap.(match find s.content env.signals with
+    let signals, s = IdentMap.(match find s env.signals with
       | exception Not_found ->
-        add s.content 0 env.signals, s
+        add s 0 env.signals, s
       | i ->
-        add s.content (i + 1) env.signals,
+        add s (i + 1) env.signals,
         {s with content = Format.sprintf "%s~%d" s.content (i + 1)}
       )
     in
-    env.local_signals <- s :: env.local_signals;
+    env.all_local_signals <- s :: env.all_local_signals;
     {env with signals}, s
 
-  let add_label env s = StringMap.(match find s.content env with
-      | exception Not_found -> add s.content 0 env, s
-      | i -> add s.content (i + 1) env,
+  let add_label env s = IdentMap.(match find s env with
+      | exception Not_found -> add s 0 env, s
+      | i -> add s (i + 1) env,
              {s with content = Format.sprintf "%s%d" s.content (i + 1)})
 
   let rename env s p =
-    StringMap.(match find s.content env with
+    IdentMap.(match find s env with
         | exception Not_found ->
-          StringMap.iter (fun a b -> Format.printf "%s %d @\n" a b) env;
+          iter (fun a b -> Format.printf "%s %d @\n" a.content b) env;
           error ~loc:p.loc @@ Unbound_identifier s.content
         | 0 -> s
         | i -> {s with content = Format.sprintf "%s~%d" s.content i})
 
   let create_env sigs = {
-    labels = StringMap.empty;
+    labels = IdentMap.empty;
     signals = List.fold_left (fun accmap s ->
-        StringMap.add s.content 0 accmap )
-        StringMap.empty sigs;
-    local_signals = []
+        IdentMap.add s 0 accmap )
+        IdentMap.empty sigs;
+    all_local_signals = [];
+    local_signals = [];
   }
 
   let rec of_ast ?(sigs=[]) ast =
@@ -148,12 +157,6 @@ module Tagged = struct
       let mkl stmt = mk_loc ~loc:ast.loc stmt in
       match ast.content with
       | Derived.Loop t -> mk_tagged (Loop (visit env t)) !+id
-
-      (* | (Derived.Par (n, st) *)
-      (*   | Derived.Par (st, n) *)
-      (*   | Derived.Seq (st, n) *)
-      (*   | Derived.Seq (n, st)) when n.content = Nothing -> *)
-      (*   visit env st *)
 
       | Derived.Seq (st1, st2) ->
         mk_tagged (Seq (visit env st1, visit env st2)) !+id
@@ -179,7 +182,10 @@ module Tagged = struct
         mk_tagged (Present(
             rename env.signals s ast, visit env t1, visit env t2))
           !+id
-      | Derived.Atom f -> mk_tagged (Atom f) !+id
+      | Derived.Atom f -> mk_tagged (Atom {
+          locals = env.local_signals;
+          exp = f
+        }) !+id
 
       | Derived.Signal (s,t) ->
         let env, s = add_env env s in

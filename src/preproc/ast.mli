@@ -11,6 +11,7 @@ type label = Label of ident [@@deriving show]
 
 module IntMap : Map.S with type key = int
 module StringMap : Map.S with type key = string
+module IdentMap : Map.S with type key = ident
 
 val dummy_loc : Location.t
 val mk_loc : ?loc:Location.t -> 'a -> 'a location
@@ -54,6 +55,9 @@ val syntax_error : loc:Location.t -> unit -> 'a
 val syntax_error_reason : loc:Location.t -> string -> 'a
 
 module Tagged : sig
+
+  type atom = { locals : signal list; exp : Parsetree.expression}
+
   type t = {id : int; st : tagged}
   [@@deriving show]
 
@@ -68,7 +72,7 @@ module Tagged : sig
     | Trap of label * t
     | Exit of label
     | Present of signal * t * t
-    | Atom of Parsetree.expression [@printer Printast.expression 0]
+    | Atom of atom
     | Signal of signal * t
     | Await of signal
   [@@deriving show]
@@ -76,9 +80,10 @@ module Tagged : sig
 [@@deriving show]
 
   type env = {
-    labels : int StringMap.t;
-    signals : int StringMap.t;
-    mutable local_signals : signal list;
+    labels : int IdentMap.t;
+    signals : int IdentMap.t;
+    mutable all_local_signals : signal list;
+    local_signals : signal list;
   }
 
   val of_ast : ?sigs:signal list -> Derived.statement -> t * env

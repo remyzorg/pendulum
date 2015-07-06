@@ -66,9 +66,10 @@ end
 
 module Flowgraph = struct
 
+
   type action =
     | Emit of string [@printer fun fmt -> Format.fprintf fmt "%s"]
-    | Atom of Parsetree.expression [@printer fun fmt _ -> Format.fprintf fmt ""]
+    | Atom of Ast.Tagged.atom [@printer fun fmt _ -> Format.fprintf fmt ""]
     | Enter of int
     | Exit of int
     [@@deriving show]
@@ -77,7 +78,7 @@ module Flowgraph = struct
     Format.(fprintf fmt "%s" begin
         match a with
         | Emit s -> "emit <B>" ^ s ^ "</B>"
-        | Atom e -> asprintf "%a" Pprintast.expression e
+        | Atom e -> asprintf "%a" Pprintast.expression e.Ast.Tagged.exp
         | Enter i -> sprintf "enter %d" i
         | Exit i -> sprintf "exit %d" i
       end)
@@ -244,7 +245,6 @@ module Of_ast = struct
     exits : Flowgraph.t StringMap.t;
     under_suspend : bool;
     synctbl : (int * int, Flowgraph.t) Hashtbl.t;
-    sigs : (signal, unit) Hashtbl.t;
   }
 
   type flow_builder = env -> Tagged.t -> Flowgraph.t -> Flowgraph.t -> Flowgraph.t
@@ -286,7 +286,6 @@ module Of_ast = struct
         @@ exit_node p endp
 
       | Signal (s, q) ->
-        Hashtbl.add env.sigs s ();
         enter_node p
         @@ surface env q pause
         @@ exit_node p endp
@@ -387,7 +386,6 @@ module Of_ast = struct
         )
 
       | Signal (s,q) ->
-        Hashtbl.add env.sigs s ();
         depth env q pause @@ exit_node p endp
       | Suspend (q, s) ->
         test_node (Signal s.content) (
@@ -408,7 +406,6 @@ module Of_ast = struct
       under_suspend = false;
       exits = StringMap.empty;
       synctbl = Hashtbl.create 17;
-      sigs = Hashtbl.create 17;
     } in
     let depthtbl, surftbl = Hashtbl.create 30, Hashtbl.create 30 in
 
