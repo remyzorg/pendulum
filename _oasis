@@ -70,7 +70,7 @@ Test "test_pendulum"
   Command: 	$test_lang_bin
   WorkingDirectory: tests
   
-Test "test_ppx"
-  Run$:		flag(tests)
-  Command: 	$test_ppx
-  WorkingDirectory: tests/ppx
+# Test "test_ppx"
+#   Run$:		flag(tests)
+#   Command: 	$test_ppx
+#   WorkingDirectory: tests/ppx
