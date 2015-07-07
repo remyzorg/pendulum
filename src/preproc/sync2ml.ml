@@ -2,6 +2,7 @@
 
 
 open Utils
+open Ast
 
 type error = Noerr
 exception Error of Location.t * error
@@ -15,14 +16,14 @@ let print_error fmt e =
     end
 
 type ml_test_expr =
-  | MLsig of string
+  | MLsig of Ast.signal
   | MLselect of int
   | MLor of ml_test_expr * ml_test_expr
   | MLfinished
     [@@deriving show]
 
 let rec pp_ml_test_expr fmt = Format.(function
-  | MLsig s -> fprintf fmt "present %s" s
+  | MLsig s -> fprintf fmt "present %s" s.content
   | MLselect i -> fprintf fmt "select %d" i
   | MLfinished -> fprintf fmt "finished"
   | MLor (mlt1, mlt2) -> fprintf fmt "%a || %a" pp_ml_test_expr mlt1 pp_ml_test_expr mlt2
@@ -33,11 +34,11 @@ type ml_sequence =
   | Seq of ml_sequence * ml_sequence
              [@@deriving show]
 and ml_ast =
-  | MLemit of string
+  | MLemit of Ast.signal
   | MLif of ml_test_expr * ml_sequence * ml_sequence
   | MLenter of int
   | MLexit of int
-  | MLexpr of Ast.atom [@printer fun fmt e -> Pprintast.expression fmt e.Ast.exp]
+  | MLexpr of Ast.atom [@printer fun fmt e -> Pprintast.expression fmt e.exp]
   | MLpause
   | MLfinish
       [@@deriving show]
@@ -57,7 +58,7 @@ let rec pp_ml_sequence lvl fmt =
 and pp_ml_ast lvl fmt =
   let indent = String.init lvl (fun _ -> ' ') in
   Format.(function
-    | MLemit s -> fprintf fmt "%semit %s" indent s
+    | MLemit s -> fprintf fmt "%semit %s" indent s.content
     | MLif (mltest_expr, mlseq1, mlseq2) ->
       fprintf fmt "%sif %a then (\n" indent pp_ml_test_expr mltest_expr;
       (pp_ml_sequence (lvl + 2)) fmt mlseq1;
@@ -75,7 +76,7 @@ and pp_ml_ast lvl fmt =
 
     | MLenter i -> fprintf fmt "%senter %d" indent i
     | MLexit i -> fprintf fmt "%sexit %d" indent i
-    | MLexpr e -> fprintf fmt "%s%s" indent (asprintf "%a" Pprintast.expression e.Ast.exp)
+    | MLexpr e -> fprintf fmt "%s%s" indent (asprintf "%a" Pprintast.expression e.exp)
     | MLpause -> fprintf fmt "%sPause" indent
     | MLfinish -> fprintf fmt "%sFinish" indent
     )
@@ -90,7 +91,7 @@ let (++) c1 c2 = Seq (c1, c2)
 let construct_ml_action mr a =
   let open Grc.Flowgraph in
   match a with
-  | Emit s -> mr := StringSet.add s  !mr; MLemit s
+  | Emit s -> mr := IdentSet.add s !mr; MLemit s
   | Atom e -> MLexpr e
   | Enter i -> MLenter i
   | Exit i -> MLexit i
@@ -98,13 +99,13 @@ let construct_ml_action mr a =
 let construct_test_expr mr tv =
   let open Grc.Flowgraph in
   match tv with
-  | Signal s -> mr := StringSet.add s !mr; MLsig s
+  | Signal s -> mr := IdentSet.add s !mr; MLsig s
   | Selection i -> MLselect i
   | Finished -> MLfinished
 
 let grc2ml (fg : Grc.Flowgraph.t) =
   let open Grc.Flowgraph in
-  let sigs = ref StringSet.empty in
+  let sigs = ref IdentSet.empty in
   let rec construct stop fg =
     match stop with
     | Some fg' when fg == fg' && fg' <> Finish && fg' <> Pause ->
@@ -147,10 +148,10 @@ module Ocaml_gen = struct
   let int_const i = Exp.constant (Asttypes.Const_int i)
   let string_const s = Exp.constant (Asttypes.Const_string(s, None))
 
-  let mk_pat_var s = Pat.(Asttypes.(var @@ Location.mkloc s.Ast.content s.Ast.loc))
-  let mk_pat_var s = Pat.(Asttypes.(var @@ Location.mkloc s.Ast.content s.Ast.loc))
+  let mk_pat_var s = Pat.(Asttypes.(var @@ Location.mkloc s.content s.loc))
+  let mk_pat_var s = Pat.(Asttypes.(var @@ Location.mkloc s.content s.loc))
 
-  let mk_ident s = Location.(mkloc (Longident.Lident s.Ast.content) s.Ast.loc)
+  let mk_ident s = Location.(mkloc (Longident.Lident s.content) s.loc)
   let mk_ident_str ?(loc=Location.none) s = Location.(mkloc (Longident.Lident s) loc)
 
   let mk_value_binding ?(pvb_loc=Location.none) ?(pvb_attributes=[]) pvb_pat pvb_expr =
@@ -197,7 +198,7 @@ module Ocaml_gen = struct
 
   let rec construct_test test =
     match test with
-    | MLsig s -> [%expr ![%e Exp.ident @@ mk_ident_str s]]
+    | MLsig s -> [%expr ![%e Exp.ident @@ mk_ident s]]
     | MLselect i -> [%expr Bitset.mem [%e Exp.ident select_env_ident] [%e int_const i]]
     | MLor (mlte1, mlte2) -> [%expr [%e construct_test mlte1 ] || [%e construct_test mlte2]]
     | MLfinished -> [%expr Bitset.mem [%e Exp.ident select_env_ident] 0]
@@ -218,7 +219,9 @@ module Ocaml_gen = struct
 
   and construct_ml_ast depl ast =
     match ast with
-    | MLemit s -> [%expr [%e Exp.ident @@ mk_ident_str s] := true]
+    | MLemit s ->
+      [%expr [%e Exp.ident @@ mk_ident s] := true]
+
     | MLif (test, mlseq1, mlseq2) ->
       begin match mlseq2 with
         | Seqlist [] | Seq (Seqlist [], Seqlist []) ->
@@ -228,20 +231,37 @@ module Ocaml_gen = struct
                    [%e construct_sequence depl mlseq1]
                  else [%e construct_sequence depl mlseq2]]
       end
-    | MLenter i -> [%expr Bitset.add [%e Exp.ident select_env_ident] [%e int_const i]]
-    | MLexit i -> List.fold_left (fun acc x ->
-        Exp.sequence acc [%expr Bitset.remove [%e Exp.ident select_env_ident] [%e int_const x]]
-      ) [%expr Bitset.remove [%e Exp.ident select_env_ident] [%e int_const i]] depl.(i)
+
+    | MLenter i ->
+      [%expr Bitset.add
+               [%e Exp.ident select_env_ident]
+               [%e int_const i]]
+
+    | MLexit i ->
+      let rem_i =
+        [%expr Bitset.remove
+                 [%e Exp.ident select_env_ident]
+                 [%e int_const i]]
+      in
+      List.fold_left (fun acc x ->
+          Exp.sequence acc
+            [%expr Bitset.remove
+                     [%e Exp.ident select_env_ident]
+                     [%e int_const x]]
+        ) rem_i depl.(i)
+
     | MLexpr pexpr ->
-        (List.fold_left (fun acc x ->
-             Exp.let_ Asttypes.Nonrecursive
-               [(mk_value_binding
-                   (mk_pat_var (remove_signal_renaming x))
-                  (Exp.ident (mk_ident x)))]
-               acc)
-            [%expr let () = [%e pexpr.Ast.exp] in ()] pexpr.Ast.locals)
+      let atom_expr = [%expr let () = [%e pexpr.exp] in ()] in
+      (List.fold_left (fun acc x ->
+           Exp.let_ Asttypes.Nonrecursive
+             [(mk_value_binding
+                 (mk_pat_var (remove_signal_renaming x))
+                 (Exp.ident (mk_ident x)))]
+             acc
+         ) atom_expr pexpr.locals)
+
     | MLpause -> [%expr Pause]
-    | MLfinish -> [%expr Finish]
+    | MLfinish -> [%expr Bitset.add [%e Exp.ident select_env_ident] 0; Finish]
 
   let instantiate sigs sel ml =
     let deps = deplist sel in

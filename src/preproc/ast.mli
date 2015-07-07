@@ -14,6 +14,7 @@ type atom = { locals : signal list; exp : Parsetree.expression}
 module IntMap : Map.S with type key = int
 module StringMap : Map.S with type key = string
 module IdentMap : Map.S with type key = ident
+module IdentSet : Set.S with type elt = ident
 
 val dummy_loc : Location.t
 val mk_loc : ?loc:Location.t -> 'a -> 'a location

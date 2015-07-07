@@ -7,7 +7,7 @@ exception Error of Location.t * error
 val print_error : Format.formatter -> error -> unit
 
 type ml_test_expr =
-  | MLsig of string
+  | MLsig of Ast.signal
   | MLselect of int
   | MLor of ml_test_expr * ml_test_expr
   | MLfinished
@@ -16,7 +16,7 @@ type ml_sequence =
   | Seqlist of ml_ast list
   | Seq of ml_sequence * ml_sequence
 and ml_ast =
-  | MLemit of string
+  | MLemit of Ast.signal
   | MLif of ml_test_expr * ml_sequence * ml_sequence
   | MLenter of int
   | MLexit of int

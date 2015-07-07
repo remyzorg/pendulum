@@ -80,6 +80,11 @@ module IdentMap = Map.Make(struct
     let compare a b = compare a.content b.content
   end)
 
+module IdentSet = Set.Make(struct
+    type t = ident
+    let compare a b = compare a.content b.content
+  end)
+
 let trap_signal = Label  (mk_loc "Trap")
 let (!+) a = incr a; !a
 

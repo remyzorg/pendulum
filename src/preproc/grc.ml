@@ -68,7 +68,7 @@ module Flowgraph = struct
 
 
   type action =
-    | Emit of string [@printer fun fmt -> Format.fprintf fmt "%s"]
+    | Emit of Ast.signal [@printer fun fmt s -> Format.fprintf fmt "%s" s.content]
     | Atom of Ast.atom [@printer fun fmt _ -> Format.fprintf fmt ""]
     | Enter of int
     | Exit of int
@@ -77,7 +77,7 @@ module Flowgraph = struct
   let pp_action_dot fmt a =
     Format.(fprintf fmt "%s" begin
         match a with
-        | Emit s -> "emit <B>" ^ s ^ "</B>"
+        | Emit s -> "emit <B>" ^ s.content ^ "</B>"
         | Atom e -> asprintf "%a" Pprintast.expression e.Ast.exp
         | Enter i -> sprintf "enter %d" i
         | Exit i -> sprintf "exit %d" i
@@ -85,7 +85,7 @@ module Flowgraph = struct
 
 
   type test_value =
-    | Signal of string [@printer fun fmt -> Format.fprintf fmt "%s"]
+    | Signal of Ast.signal [@printer fun fmt s -> Format.fprintf fmt "%s" s.content]
     | Selection of int
     | Finished
     [@@deriving show]
@@ -93,7 +93,7 @@ module Flowgraph = struct
   let pp_test_value_dot fmt tv =
     Format.(begin
         match tv with
-        | Signal s -> fprintf fmt "%s" s
+        | Signal s -> fprintf fmt "%s" s.content
         | Selection i -> fprintf fmt "%d" i
         | Finished -> fprintf fmt "finished"
       end)
@@ -127,10 +127,10 @@ module Flowgraph = struct
     end)
 
   module FgEmitsTbl = Hashtbl.Make(struct
-      type t = flowgraph * flowgraph * string
+      type t = flowgraph * flowgraph * Ast.ident
       let hash = Hashtbl.hash
       let equal (fg, stop, s) (fg', stop', s') =
-        fg == fg' && stop = stop' && s = s'
+        fg == fg' && stop = stop' && s.content = s'.content
     end)
 
   module Fgtbl2 = Hashtbl.Make(struct
@@ -271,12 +271,12 @@ module Of_ast = struct
 
       | Await s ->
         enter_node p @@
-        test_node (Signal s.content) (
+        test_node (Signal s) (
           exit_node p endp,
           pause
         )
 
-      | Emit s -> Emit s.content >> endp
+      | Emit s -> Emit s >> endp
       | Nothing -> endp
       | Atom f -> Atom f >> endp
 
@@ -298,7 +298,7 @@ module Of_ast = struct
       | Present (s, q, r) ->
         let end_pres = exit_node p endp in
         enter_node p
-        @@ test_node (Signal s.content) (
+        @@ test_node (Signal s) (
           surface env q pause end_pres,
           surface env r pause end_pres
         )
@@ -342,7 +342,7 @@ module Of_ast = struct
       | Pause -> Exit p.id >> endp
 
       | Await s ->
-        test_node (Signal s.content) (
+        test_node (Signal s) (
           exit_node p endp,
           pause
         )
@@ -388,7 +388,7 @@ module Of_ast = struct
       | Signal (s,q) ->
         depth env q pause @@ exit_node p endp
       | Suspend (q, s) ->
-        test_node (Signal s.content) (
+        test_node (Signal s) (
           pause,
           depth env q pause (Exit p.id >> endp)
         )
@@ -435,13 +435,13 @@ module Schedule = struct
     let rec visit m fg =
       match fg with
       | Test (Signal s, t1, t2) ->
-        let prev = try StringMap.find s m with
+        let prev = try IdentMap.find s m with
           | Not_found -> []
         in
-        let m = StringMap.add s (fg :: prev) m in
+        let m = IdentMap.add s (fg :: prev) m in
         let m1 = visit m t1 in
         let m2 = visit m t2 in
-        StringMap.merge (fun k v1 v2 ->
+        IdentMap.merge (fun k v1 v2 ->
             match v1, v2 with
             | Some v1, Some v2 -> Some (v1 @ v2)
             | Some v, None | None, Some v -> Some v
@@ -451,7 +451,7 @@ module Schedule = struct
       | Fork (t1, t2, _) | Sync (_, t1, t2) ->
         let m1 = visit m t1 in
         let m2 = visit m t2 in
-        StringMap.merge (fun k v1 v2 ->
+        IdentMap.merge (fun k v1 v2 ->
             match v1, v2 with
             | Some v1, Some v2 -> Some (v1 @ v2)
             | Some v, None | None, Some v -> Some v
@@ -459,14 +459,14 @@ module Schedule = struct
           ) m1 m2
 
       | Call(Emit s, t) ->
-        begin match StringMap.find s m with
+        begin match IdentMap.find s m with
           | h :: fgs -> error ~loc:Ast.dummy_loc @@ Cyclic_causality h
           | [] -> m
           | exception Not_found -> m
         end
       | _ -> m
     in
-    visit StringMap.empty fg
+    visit IdentMap.empty fg
 
 
   let memo_rec (type a) (module H : Hashtbl.S with type key = a) =

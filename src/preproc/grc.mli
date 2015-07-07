@@ -18,13 +18,13 @@ end
 module Flowgraph : sig
 
   type action =
-    | Emit of string
+    | Emit of Ast.signal
     | Atom of Ast.atom
     | Enter of int
     | Exit of int
 
   type test_value =
-    | Signal of string
+    | Signal of Ast.signal
     | Selection of int
     | Finished
 
@@ -53,7 +53,7 @@ end
 
 module Schedule : sig
 
-  val check_causality_cycles : 'a * Flowgraph.t -> Flowgraph.t list Utils.StringMap.t
+  val check_causality_cycles : 'a * Flowgraph.t -> Flowgraph.t list Ast.IdentMap.t
 
   val find : Flowgraph.t -> Flowgraph.t -> Flowgraph.t option
 
