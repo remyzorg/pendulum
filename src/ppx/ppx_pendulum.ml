@@ -138,7 +138,7 @@ let parse_ast loc ext e =
       let tast, env = Ast.Tagged.of_ast ~sigs ast in
       Pendulum_misc.print_to_dot loc tast;
       let ocaml_expr =
-        Sync2ml.generate ~sigs:(sigs@env.Ast.Tagged.local_signals) tast in
+        Sync2ml.generate ~sigs:(sigs @ env.Ast.Tagged.all_local_signals) tast in
       Format.printf "%a@." Pprintast.expression ocaml_expr;
       [%expr [%e Pendulum_misc.expr_of_ast ast]]
 
@@ -146,7 +146,7 @@ let parse_ast loc ext e =
       let ast = ast_of_expr e in
       let tast, env = Ast.Tagged.of_ast ~sigs ast in
       let ocaml_expr =
-        Sync2ml.generate ~sigs:(sigs@env.Ast.Tagged.local_signals) tast in
+        Sync2ml.generate ~sigs:(sigs @ env.Ast.Tagged.all_local_signals) tast in
       [%expr [%e ocaml_expr]]
 
     | _ -> assert false

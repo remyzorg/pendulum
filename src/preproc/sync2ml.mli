@@ -20,7 +20,7 @@ and ml_ast =
   | MLif of ml_test_expr * ml_sequence * ml_sequence
   | MLenter of int
   | MLexit of int
-  | MLexpr of Parsetree.expression
+  | MLexpr of Ast.atom
   | MLpause
   | MLfinish
 

@@ -84,7 +84,6 @@ let par_deps ctx = assert_equal
 
 let par_deps ctx = assert_equal
     (let%to_dot_grc ast =
-
       input s1, s2;
       present s1 (emit s2)
       ||

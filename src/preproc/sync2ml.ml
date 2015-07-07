@@ -37,7 +37,7 @@ and ml_ast =
   | MLif of ml_test_expr * ml_sequence * ml_sequence
   | MLenter of int
   | MLexit of int
-  | MLexpr of Parsetree.expression [@printer fun fmt -> Pprintast.expression fmt]
+  | MLexpr of Ast.atom [@printer fun fmt e -> Pprintast.expression fmt e.Ast.exp]
   | MLpause
   | MLfinish
       [@@deriving show]
@@ -75,7 +75,7 @@ and pp_ml_ast lvl fmt =
 
     | MLenter i -> fprintf fmt "%senter %d" indent i
     | MLexit i -> fprintf fmt "%sexit %d" indent i
-    | MLexpr e -> fprintf fmt "%s%s" indent (asprintf "%a" Pprintast.expression e)
+    | MLexpr e -> fprintf fmt "%s%s" indent (asprintf "%a" Pprintast.expression e.Ast.exp)
     | MLpause -> fprintf fmt "%sPause" indent
     | MLfinish -> fprintf fmt "%sFinish" indent
     )
@@ -91,7 +91,7 @@ let construct_ml_action mr a =
   let open Grc.Flowgraph in
   match a with
   | Emit s -> mr := StringSet.add s  !mr; MLemit s
-  | Atom e -> MLexpr e.Ast.Tagged.exp
+  | Atom e -> MLexpr e
   | Enter i -> MLenter i
   | Exit i -> MLexit i
 
@@ -148,9 +148,13 @@ module Ocaml_gen = struct
   let string_const s = Exp.constant (Asttypes.Const_string(s, None))
 
   let mk_pat_var s = Pat.(Asttypes.(var @@ Location.mkloc s.Ast.content s.Ast.loc))
+  let mk_pat_var s = Pat.(Asttypes.(var @@ Location.mkloc s.Ast.content s.Ast.loc))
 
-  let mk_ident s = Location.(mkloc (Longident.Lident s) Location.none )
+  let mk_ident s = Location.(mkloc (Longident.Lident s.Ast.content) s.Ast.loc)
+  let mk_ident_str ?(loc=Location.none) s = Location.(mkloc (Longident.Lident s) loc)
 
+  let mk_value_binding ?(pvb_loc=Location.none) ?(pvb_attributes=[]) pvb_pat pvb_expr =
+    { pvb_pat; pvb_expr; pvb_attributes; pvb_loc; }
   let deplist sel =
     let open Grc.Selection_tree in
     let env = ref [] in
@@ -169,7 +173,7 @@ module Ocaml_gen = struct
 
   let select_env_name = "pendulum~t"
   let select_env_var = Location.(mkloc select_env_name Location.none )
-  let select_env_ident = mk_ident select_env_name
+  let select_env_ident = mk_ident (Ast.mk_loc select_env_name)
 
   let init nstmts sigs sel =
     let open Grc.Selection_tree in
@@ -185,9 +189,15 @@ module Ocaml_gen = struct
               [%e sigs [%expr fun () -> [%e e]]]
         }]
 
+  let remove_signal_renaming s =
+    Ast.(
+      {s with Ast.content =
+                String.sub s.content 0 ((String.rindex s.content '~'))
+         })
+
   let rec construct_test test =
     match test with
-    | MLsig s -> [%expr ![%e Exp.ident @@ mk_ident s]]
+    | MLsig s -> [%expr ![%e Exp.ident @@ mk_ident_str s]]
     | MLselect i -> [%expr Bitset.mem [%e Exp.ident select_env_ident] [%e int_const i]]
     | MLor (mlte1, mlte2) -> [%expr [%e construct_test mlte1 ] || [%e construct_test mlte2]]
     | MLfinished -> [%expr Bitset.mem [%e Exp.ident select_env_ident] 0]
@@ -208,7 +218,7 @@ module Ocaml_gen = struct
 
   and construct_ml_ast depl ast =
     match ast with
-    | MLemit s -> [%expr [%e Exp.ident @@ mk_ident s] := true]
+    | MLemit s -> [%expr [%e Exp.ident @@ mk_ident_str s] := true]
     | MLif (test, mlseq1, mlseq2) ->
       begin match mlseq2 with
         | Seqlist [] | Seq (Seqlist [], Seqlist []) ->
@@ -222,7 +232,14 @@ module Ocaml_gen = struct
     | MLexit i -> List.fold_left (fun acc x ->
         Exp.sequence acc [%expr Bitset.remove [%e Exp.ident select_env_ident] [%e int_const x]]
       ) [%expr Bitset.remove [%e Exp.ident select_env_ident] [%e int_const i]] depl.(i)
-    | MLexpr pexpr -> [%expr let () = [%e pexpr] in ()]
+    | MLexpr pexpr ->
+        (List.fold_left (fun acc x ->
+             Exp.let_ Asttypes.Nonrecursive
+               [(mk_value_binding
+                   (mk_pat_var (remove_signal_renaming x))
+                  (Exp.ident (mk_ident x)))]
+               acc)
+            [%expr let () = [%e pexpr.Ast.exp] in ()] pexpr.Ast.locals)
     | MLpause -> [%expr Pause]
     | MLfinish -> [%expr Finish]
 
