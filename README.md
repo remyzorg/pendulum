@@ -33,15 +33,12 @@ The core language is completely compatible with vanilla OCaml compiler >4.02.1.
 * DOM
   * setTimeout and requestAnimationFrames as global clocks ?
 * Code generation
-  * define signals as globals with the unique name and rebind them locally (very same semantic)
-    * keep local signal informations trough steps
   * generate new signals (even for input) at each steps ?
   * check if then else generation
 
   * simplify `remove` sequentials calls
   * remove call to `remove` if the statement is not tested in grc
-  * add local signals definitions to generated let bindings
-    and rebind signals locally (to each test and to each atoms) to the correct name so the use can use them
+  * missing location in signals tests
 
 
 # Compilation
