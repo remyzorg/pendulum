@@ -19,7 +19,7 @@ module Flowgraph : sig
 
   type action =
     | Emit of string
-    | Atom of Ast.Tagged.atom
+    | Atom of Ast.atom
     | Enter of int
     | Exit of int
 

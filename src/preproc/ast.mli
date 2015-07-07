@@ -9,6 +9,8 @@ type ident = string location [@@deriving show]
 type signal = ident [@@deriving show]
 type label = Label of ident [@@deriving show]
 
+type atom = { locals : signal list; exp : Parsetree.expression}
+
 module IntMap : Map.S with type key = int
 module StringMap : Map.S with type key = string
 module IdentMap : Map.S with type key = ident
@@ -56,7 +58,6 @@ val syntax_error_reason : loc:Location.t -> string -> 'a
 
 module Tagged : sig
 
-  type atom = { locals : signal list; exp : Parsetree.expression}
 
   type t = {id : int; st : tagged}
   [@@deriving show]

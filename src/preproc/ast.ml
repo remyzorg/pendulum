@@ -7,8 +7,11 @@ type 'a location = {
 
 type ident = string location [@@deriving show]
 
+
 type signal = ident [@@deriving show]
 type label = Label of ident [@@deriving show]
+
+type atom = { locals : signal list; exp : Parsetree.expression}
 
 let dummy_loc = Location.none
 let mk_loc ?(loc=dummy_loc) content = {loc; content}
@@ -84,7 +87,7 @@ let (!+) a = incr a; !a
 module Tagged = struct
 
 
-  type atom = { locals : signal list; exp : Parsetree.expression}
+
   type t = {id : int; st : tagged} [@@deriving show]
 
 
@@ -125,7 +128,7 @@ module Tagged = struct
       )
     in
     env.all_local_signals <- s :: env.all_local_signals;
-    {env with signals}, s
+    {env with signals; local_signals = s :: env.local_signals}, s
 
   let add_label env s = IdentMap.(match find s env with
       | exception Not_found -> add s 0 env, s

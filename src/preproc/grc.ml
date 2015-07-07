@@ -69,7 +69,7 @@ module Flowgraph = struct
 
   type action =
     | Emit of string [@printer fun fmt -> Format.fprintf fmt "%s"]
-    | Atom of Ast.Tagged.atom [@printer fun fmt _ -> Format.fprintf fmt ""]
+    | Atom of Ast.atom [@printer fun fmt _ -> Format.fprintf fmt ""]
     | Enter of int
     | Exit of int
     [@@deriving show]
@@ -78,7 +78,7 @@ module Flowgraph = struct
     Format.(fprintf fmt "%s" begin
         match a with
         | Emit s -> "emit <B>" ^ s ^ "</B>"
-        | Atom e -> asprintf "%a" Pprintast.expression e.Ast.Tagged.exp
+        | Atom e -> asprintf "%a" Pprintast.expression e.Ast.exp
         | Enter i -> sprintf "enter %d" i
         | Exit i -> sprintf "exit %d" i
       end)
