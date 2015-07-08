@@ -5,18 +5,16 @@ maintainer: "Rémy El Sibaie <remy.el-sibaie@lip6.fr>"
 authors: "Rémy El Sibaie <remy.el-sibaie@lip6.fr>"
 homepage: "http://github.com/remyzorg/pendulum"
 bug-reports: "http://github.com/remyzorg/pendulum/issues"
+dev-repo: "https://github.com/remyzorg/pendulum.git"
 build: [
   ["./configure" "--prefix=%{prefix}%"]
   [make]
 ]
 install: [make "install"]
-remove: [
-  "ocamlfind" "remove" "pendulum"
-  ]
+remove: ["ocamlfind" "remove" "pendulum"]
 depends: [
   "ocamlfind" {build}
   "oasis"
-  "ounit"
   "ppx_tools"
   "ppx_deriving"
 ]
