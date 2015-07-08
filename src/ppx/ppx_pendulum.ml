@@ -5,14 +5,18 @@ open Asttypes
 open Parsetree
 open Longident
 
-open Pendulum_preproc
+open Preproc
 
 open Utils
 
 
-let error ~loc rsn =
-  raise (Location.Error (
-      Location.error ~loc ("[pendulum] " ^ rsn)))
+module Error = struct
+
+  let error ~loc rsn =
+    raise (Location.Error (
+        Location.error ~loc ("[pendulum] " ^ rsn)))
+
+end
 
 let check_ident_string e =
   let open Ast in
@@ -104,6 +108,7 @@ let ast_of_expr e =
     | [%expr every [%e? e] [%e? signal]] ->
       Every (check_ident_string signal, visit e)
 
+
     | [%expr nothing [%e? e_err]]
     | [%expr pause [%e? e_err]]
     | [%expr emit [%e? _] [%e? e_err]]
@@ -124,6 +129,9 @@ let ast_of_expr e =
     | [%expr every [%e? _] [%e? _] [%e? e_err]] ->
       Ast.(syntax_error_reason ~loc:e_err.pexp_loc "maybe you forgot a `;`")
 
+    | [%expr input [%e? _ ] ; [%e? _]] -> 
+      Error.error ~loc:e.pexp_loc "signal declarations must be at the begining"
+
     | e -> Ast.(syntax_error_reason ~loc:e.pexp_loc "keyword expected")
   in visit e
 
@@ -138,7 +146,7 @@ let parse_ast loc ext e =
       let tast, env = Ast.Tagged.of_ast ~sigs ast in
       Pendulum_misc.print_to_dot loc tast;
       let ocaml_expr =
-        Sync2ml.generate ~sigs:(sigs @ env.Ast.Tagged.all_local_signals) tast in
+        Sync2ml.generate ~sigs:(sigs, env.Ast.Tagged.all_local_signals) tast in
       Format.printf "%a@." Pprintast.expression ocaml_expr;
       [%expr [%e Pendulum_misc.expr_of_ast ast]]
 
@@ -146,7 +154,7 @@ let parse_ast loc ext e =
       let ast = ast_of_expr e in
       let tast, env = Ast.Tagged.of_ast ~sigs ast in
       let ocaml_expr =
-        Sync2ml.generate ~sigs:(sigs @ env.Ast.Tagged.all_local_signals) tast in
+        Sync2ml.generate ~sigs:(sigs, env.Ast.Tagged.all_local_signals) tast in
       [%expr [%e ocaml_expr]]
 
     | _ -> assert false
@@ -176,7 +184,7 @@ let extend_mapper argv = {
       | { pstr_desc = Pstr_extension (({ txt = ext }, PStr [
           { pstr_desc = Pstr_value (Recursive, _) }]), _); pstr_loc }
         when StringSet.mem ext expected_ext ->
-            error ~loc:pstr_loc "non recursive `let` expected"
+            Error.error ~loc:pstr_loc "non recursive `let` expected"
 
       | x -> default_mapper.structure_item mapper x
       );
@@ -192,17 +200,17 @@ let extend_mapper argv = {
                     Exp.let_ Nonrecursive (gen_bindings ext vbl)
                       @@ mapper.expr mapper e
                   | Pexp_let (Recursive, vbl, e) ->
-                    error ~loc "non recursive `let` expected"
+                    Error.error ~loc "non recursive `let` expected"
                   | _ ->
-                    error ~loc "`let` expected"
+                    Error.error ~loc "`let` expected"
                 end
-              | _ -> error ~loc "only allowed on expressions"
+              | _ -> Error.error ~loc "only allowed on let"
             end
           with
           | Ast.Error (loc, e) ->
-            error ~loc (Format.asprintf "%a" Ast.print_error e)
+            Error.error ~loc (Format.asprintf "%a" Ast.print_error e)
           | Sync2ml.Error (loc, e) ->
-            error ~loc (Format.asprintf "%a" Sync2ml.print_error e)
+            Error.error ~loc (Format.asprintf "%a" Sync2ml.print_error e)
         end
       | x -> default_mapper.expr mapper x;
   }

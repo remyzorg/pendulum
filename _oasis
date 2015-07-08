@@ -1,7 +1,7 @@
 OASISFormat: 0.4
 Name:        pendulum
 Version:     0.01
-Synopsis:    implementation and experimentation for library or language pendulum
+Synopsis:    pendulum language and library
 Authors:     Remy El Sibaïe
 License:     LGPL
 Plugins:     META (0.4), DevFiles (0.4)
@@ -15,20 +15,21 @@ Flag ppx
   Description: Build the ppx syntax extension
   Default$: flag(all)
 
-Library "pendulum_preproc"
-  Path: src/preproc/
-  Pack: true
-  Modules: Utils, Ast, Grc, Sync2ml
-  BuildDepends:
-    unix,
-    ppx_tools.metaquot,
-    ppx_deriving.std
 
 Library "pendulum"
   Path: src/runtime/
   Pack: true
   Modules: Interp, Runtime_ast, Runtime_misc, Machine
-  BuildDepends: ppx_deriving
+
+Library "preproc"
+  Path: src/preproc/
+  Pack: true
+  FindlibParent: pendulum
+  Modules: Utils, Ast, Grc, Sync2ml
+  BuildDepends:
+    unix,
+    ppx_tools.metaquot,
+    ppx_deriving.std
 
 
 #Executable "main"
@@ -43,7 +44,7 @@ Executable "ppx_pendulum"
   BuildDepends:
     compiler-libs.common,
     ppx_tools.metaquot,
-    pendulum_preproc
+    pendulum.preproc
   MainIs:         ppx_pendulum.ml
   CompiledObject: best
 
