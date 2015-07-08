@@ -149,7 +149,6 @@ module Ocaml_gen = struct
   let string_const s = Exp.constant (Asttypes.Const_string(s, None))
 
   let mk_pat_var s = Pat.(Asttypes.(var @@ Location.mkloc s.content s.loc))
-  let mk_pat_var s = Pat.(Asttypes.(var @@ Location.mkloc s.content s.loc))
 
   let mk_ident s = Location.(mkloc (Longident.Lident s.content) s.loc)
   let mk_ident_str ?(loc=Location.none) s = Location.(mkloc (Longident.Lident s) loc)
@@ -175,19 +174,42 @@ module Ocaml_gen = struct
   let select_env_name = "pendulum~t"
   let select_env_var = Location.(mkloc select_env_name Location.none )
   let select_env_ident = mk_ident (Ast.mk_loc select_env_name)
+  let arg_name s = {s with content = s.content ^ "~arg"}
 
-  let init nstmts sigs sel =
+  let init nstmts (global_sigs,local_sigs) sel =
     let open Grc.Selection_tree in
     fun e ->
-      let sigs e = List.fold_left (fun acc signal -> [%expr let [%p mk_pat_var signal] = ref false in [%e acc]]
-        ) e sigs
+      let let_sigs e = List.fold_left (fun acc signal ->
+          [%expr let [%p mk_pat_var signal] = ref false in [%e acc]]
+        ) e (global_sigs @ local_sigs)
+      in
+      let set_sigs e =
+        let set_locals = 
+          (List.fold_left (fun acc signal ->
+               [%expr [%e Exp.ident @@ mk_ident signal] := false; [%e acc]]
+             ) e local_sigs)
+        in
+        (List.fold_left (fun acc signal ->
+             [%expr [%e Exp.ident @@ mk_ident signal] :=
+                      [%e Exp.ident @@ mk_ident @@ arg_name signal];
+                    [%e acc]]
+           ) set_locals global_sigs)
+      in
+      let sigs_step_arg =
+        match global_sigs with
+        | [] -> [%pat? ()]
+        | [s] -> mk_pat_var (arg_name s)
+        | l -> Pat.tuple @@ List.map (fun s -> mk_pat_var @@ arg_name s) l
       in
       [%expr
         let open Pendulum.Runtime_misc in
         let open Pendulum.Machine in
         { instantiate = fun () ->
-              let [%p Pat.var select_env_var] = Bitset.make [%e int_const (1 + nstmts)] in
-              [%e sigs [%expr fun () -> [%e e]]]
+              let [%p Pat.var select_env_var] =
+                Bitset.make [%e int_const (1 + nstmts)]
+              in
+              [%e let_sigs [%expr fun [%p sigs_step_arg] ->
+                         [%e set_sigs e]]]
         }]
 
   let remove_signal_renaming s =
@@ -274,7 +296,7 @@ module Ocaml_gen = struct
 end
 
 
-let generate ?(sigs=[]) tast =
+let generate ?(sigs=[],[]) tast =
   let selection_tree, control_flowgraph as grc = Grc.Of_ast.construct tast in
   let open Grc in
   let _deps = Schedule.check_causality_cycles grc in

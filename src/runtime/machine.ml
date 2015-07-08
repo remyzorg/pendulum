@@ -7,7 +7,7 @@ type machine_state = Pause | Finish
 type signal_state = Absent | Present
 
 type 'a t = {
-  instantiate : 'a -> ('a -> machine_state);
+  instantiate : unit -> ('a -> machine_state);
 }
 
 type 'a signal = {
