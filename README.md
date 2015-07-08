@@ -19,25 +19,28 @@ The core language is completely compatible with vanilla OCaml compiler >4.02.1.
 
 
 # TODO :
-* Documentation :
-  * update description
-  * document surface / depth
-* Language
-  * about adding first class modules (necessary)
-  * maintain signals values or presence informations between steps
-  * gather at signal definitions (several emission of the same signal at the same instant
-  * `pre`
+
+* Code generation
   * handle valued signal
     * operator for presence & value
-  * n-ary parallel operator and/or gathering (at signals definition)
-* DOM
-  * setTimeout and requestAnimationFrames as global clocks ?
-* Code generation
-  * generate new signals (even for input) at each steps ?
   * check if then else generation
 
-  * simplify `remove` sequentials calls
-  * remove call to `remove` if the statement is not tested in grc
+* Documentation :
+  * write examples
+  * comment surf / depth
+  * other comments
+
+* API
+
+* Language
+  * add first class machines (necessary)
+  * maintain signals values or presence informations between steps
+  * gathering operators at signal definitions (several emission of the same signal at the same instant
+  * `pre`
+  * n-ary parallel operator and/or gathering (at signals definition)
+* DOM
+  * try setTimeout and requestAnimationFrames as global clocks
+
 
 
 # Compilation
