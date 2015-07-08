@@ -31,6 +31,10 @@ The core language is completely compatible with vanilla OCaml compiler >4.02.1.
   * other comments
 
 * API
+  * output takes a callback triggered when they are emited
+  * input takes a call which triggers the machine or
+  better which update the signal value and presence
+  So the presence must not be reset each beggining of a step ? (maybe at the end ?)
 
 * Language
   * add first class machines (necessary)

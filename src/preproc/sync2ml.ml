@@ -219,7 +219,7 @@ module Ocaml_gen = struct
         match global_sigs with
         | [] -> [%pat? ()]
         | [s] -> mk_pat_var (arg_name s)
-        | l -> Pat.tuple @@ List.map (fun s -> mk_pat_var @@ arg_name s) l
+        | l -> Pat.tuple @@ List.rev_map (fun s -> mk_pat_var @@ arg_name s) l
       in
       [%expr
         let open Pendulum.Runtime_misc in
