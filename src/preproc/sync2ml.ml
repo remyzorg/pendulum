@@ -88,13 +88,32 @@ let (++) c1 c2 = Seq (c1, c2)
 let (++) c1 c2 = Seq (c1, c2)
 
 
-let construct_ml_action mr a =
+let construct_ml_action deps mr a =
   let open Grc.Flowgraph in
   match a with
-  | Emit s -> mr := IdentSet.add s !mr; MLemit s
-  | Atom e -> MLexpr e
-  | Enter i -> MLenter i
-  | Exit i -> MLexit i
+  | Emit s -> mr := IdentSet.add s !mr; mls @@ MLemit s
+  | Atom e -> mls @@ MLexpr e
+  | Enter i -> mls @@ MLenter i
+  | Exit i -> ml @@ MLexit i :: List.map (fun x -> MLexit x) deps.(i)
+
+let (<::) sel l =
+  let open Grc.Selection_tree in
+  if sel.tested then sel.label :: l else l
+
+let deplist sel =
+  let open Grc.Selection_tree in
+  let env = ref [] in
+  let rec visit sel =
+    match sel.t with
+    | Bottom -> env := (sel.label, []) :: !env; sel <:: []
+    | Pause -> env := (sel.label, []) :: !env; sel <:: []
+    | Par sels | Excl sels ->
+      let l = List.fold_left (fun acc sel -> acc @ (visit sel)) [] sels in
+      env := (sel.label, l) :: !env; sel <:: l
+    | Ref st ->
+      let l = visit st in
+      env := (sel.label, l) :: !env; sel <:: l
+  in ignore (visit sel); !env
 
 let construct_test_expr mr tv =
   let open Grc.Flowgraph in
@@ -103,7 +122,7 @@ let construct_test_expr mr tv =
   | Selection i -> MLselect i
   | Finished -> MLfinished
 
-let grc2ml (fg : Grc.Flowgraph.t) =
+let grc2ml dep_array fg =
   let open Grc.Flowgraph in
   let sigs = ref IdentSet.empty in
   let rec construct stop fg =
@@ -112,7 +131,7 @@ let grc2ml (fg : Grc.Flowgraph.t) =
       nop
     | _ ->
       begin match fg with
-        | Call (a, t) -> (mls @@ construct_ml_action sigs a) ++ construct stop t
+        | Call (a, t) -> construct_ml_action dep_array sigs a ++ construct stop t
         | Test (tv, t1, t2) ->
           begin
             match Grc.Schedule.find_join t1 t2 with
@@ -155,6 +174,7 @@ module Ocaml_gen = struct
 
   let mk_value_binding ?(pvb_loc=Location.none) ?(pvb_attributes=[]) pvb_pat pvb_expr =
     { pvb_pat; pvb_expr; pvb_attributes; pvb_loc; }
+
   let deplist sel =
     let open Grc.Selection_tree in
     let env = ref [] in
@@ -171,7 +191,7 @@ module Ocaml_gen = struct
     in ignore (visit sel); !env
 
 
-  let select_env_name = "pendulum~t"
+  let select_env_name = "pendulum~state"
   let select_env_var = Location.(mkloc select_env_name Location.none )
   let select_env_ident = mk_ident (Ast.mk_loc select_env_name)
   let arg_name s = {s with content = s.content ^ "~arg"}
@@ -260,20 +280,14 @@ module Ocaml_gen = struct
                [%e int_const i]]
 
     | MLexit i ->
-      let rem_i =
         [%expr Bitset.remove
                  [%e Exp.ident select_env_ident]
                  [%e int_const i]]
-      in
-      List.fold_left (fun acc x ->
-          Exp.sequence acc
-            [%expr Bitset.remove
-                     [%e Exp.ident select_env_ident]
-                     [%e int_const x]]
-        ) rem_i depl.(i)
 
     | MLexpr pexpr ->
-      let atom_expr = [%expr let () = [%e pexpr.exp] in ()] in
+      let atom_expr =
+        [%expr let () = [%e pexpr.exp] in ()]
+      in
       (List.fold_left (fun acc x ->
            Exp.let_ Asttypes.Nonrecursive
              [(mk_value_binding
@@ -285,10 +299,7 @@ module Ocaml_gen = struct
     | MLpause -> [%expr Pause]
     | MLfinish -> [%expr Bitset.add [%e Exp.ident select_env_ident] 0; Finish]
 
-  let instantiate sigs sel ml =
-    let deps = deplist sel in
-    let dep_array = Array.make (List.length deps + 1) [] in
-    List.iter (fun (i, l) -> dep_array.(i) <- l) deps;
+  let instantiate dep_array sigs sel ml =
     init (Array.length dep_array) sigs sel (construct_sequence dep_array ml)
 
 
@@ -297,10 +308,17 @@ end
 
 
 let generate ?(sigs=[],[]) tast =
-  let selection_tree, control_flowgraph as grc = Grc.Of_ast.construct tast in
+  let selection_tree, controlflow_graph as grc = Grc.Of_ast.construct tast in
   let open Grc in
+  Schedule.tag_tested_stmts selection_tree controlflow_graph;
   let _deps = Schedule.check_causality_cycles grc in
-  let interleaved_grc = Schedule.interleave control_flowgraph in
-  let ml_ast = grc2ml interleaved_grc in
-  let ocaml_ast = Ocaml_gen.instantiate sigs selection_tree ml_ast in
+  let interleaved_cfg = Schedule.interleave controlflow_graph in
+
+  let deps = deplist selection_tree in
+  let dep_array = Array.make (List.length deps + 1) [] in
+  List.iter (fun (i, l) -> dep_array.(i) <- l) deps;
+
+  let ml_ast = grc2ml dep_array interleaved_cfg in
+
+  let ocaml_ast = Ocaml_gen.instantiate dep_array sigs selection_tree ml_ast in
   ocaml_ast

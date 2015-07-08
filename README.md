@@ -38,7 +38,6 @@ The core language is completely compatible with vanilla OCaml compiler >4.02.1.
 
   * simplify `remove` sequentials calls
   * remove call to `remove` if the statement is not tested in grc
-  * missing location in signals tests
 
 
 # Compilation

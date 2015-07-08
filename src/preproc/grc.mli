@@ -2,7 +2,7 @@
 module Selection_tree : sig
 
 
-  type t = {label : int; t : repr}
+  type t = {label : int; t : repr; mutable tested : bool}
       [@@deriving show]
   and repr =
     | Bottom
@@ -54,6 +54,8 @@ end
 module Schedule : sig
 
   val check_causality_cycles : 'a * Flowgraph.t -> Flowgraph.t list Ast.IdentMap.t
+
+  val tag_tested_stmts : Selection_tree.t -> Flowgraph.t -> unit
 
   val find : Flowgraph.t -> Flowgraph.t -> Flowgraph.t option
 

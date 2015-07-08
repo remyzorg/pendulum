@@ -5,7 +5,7 @@ module Selection_tree = struct
 
   open Tagged
 
-  type t = {label : int; t : repr}
+  type t = {label : int; t : repr; mutable tested : bool}
       [@@deriving show]
   and repr =
     | Bottom
@@ -14,13 +14,14 @@ module Selection_tree = struct
     | Excl of t list
     | Ref of t
 
-  let none = {label = 0; t = Excl []}
+  let none = {label = 0; t = Excl []; tested = false}
 
   let (!+) a = incr a; !a
 
   let mk_tree stt id = {
     t = stt;
     label = id;
+    tested = false;
   }
 
   let of_ast ast =
@@ -30,8 +31,7 @@ module Selection_tree = struct
       | Pause -> mk_tree Pause tagged.id
 
       | Par (t1, t2) -> mk_tree (Par [visit t1; visit t2]) tagged.id
-
-      | Seq (t1, t2) -> mk_tree (Excl [visit t1; visit t2]) tagged.id
+| Seq (t1, t2) -> mk_tree (Excl [visit t1; visit t2]) tagged.id
       | Present (_, st1, st2) -> mk_tree (Excl [visit st1; visit st2]) tagged.id
 
       | Loop st -> mk_tree (Ref (visit st)) tagged.id
@@ -468,7 +468,6 @@ module Schedule = struct
     in
     visit IdentMap.empty fg
 
-
   let memo_rec (type a) (module H : Hashtbl.S with type key = a) =
     let h = H.create 17 in
     fun f ->
@@ -478,6 +477,33 @@ module Schedule = struct
           let y = f g x in
           H.add h x y; y
       in g
+
+  let tag_tested_stmts sel fg =
+    let open Flowgraph in
+    let open Selection_tree in
+    let lr = ref [] in
+    let rec aux fg =
+      match fg with
+      | Call (_, t) -> aux t
+      | Test (Selection i, t1, t2) ->
+        lr := i :: !lr
+      | Sync ((i1, i2) , t1, t2) ->
+        lr := i1 :: i2 :: !lr
+      | Test (_, t1, t2) | Fork (t1, t2, _)  ->
+        aux t1; aux t2
+      | Pause | Finish -> ()
+    in
+    let rec aux_sel sel =
+      if List.mem sel.label !lr then sel.tested <- true;
+      match sel.t with
+      | Bottom -> ()
+      | Pause -> ()
+      | Par sels | Excl sels -> List.iter aux_sel sels
+      | Ref sel -> aux_sel sel
+    in
+    aux fg; aux_sel sel
+
+
 
   let emits =
     let aux aux (fg, stop, s) =
