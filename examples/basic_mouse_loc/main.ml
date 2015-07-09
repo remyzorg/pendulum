@@ -18,7 +18,6 @@ let%sync m =
     pause
   end
 
-
 let () =
   let open Pendulum.Machine in
   let step = m.instantiate () in

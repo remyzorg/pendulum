@@ -12,20 +12,20 @@ let test_loop_pause ctx =
 
 
 let test_seq ctx =
-  let%sync_ast ast = pause; pause; emit a in
+  let%sync_ast ast = pause; pause; emit a () in
   assert_equal (Seq(Pause, Seq(Pause, Emit "a"))) ast
 
 
 let test_par ctx = assert_equal
-    (let%sync_ast ast = emit a || emit b || emit c in ast)
+    (let%sync_ast ast = emit a () || emit b () || emit c () in ast)
     (Par (Emit "a", Par (Emit "b", Emit "c")))
 
 
 let test_loop_par_emit_await ctx = assert_equal
     (Signal ("a", Loop (!! [Pause; emit "a"; Signal ("a", emit "a")])
                   // Loop (!! [await "a";])))
-    (let%sync_ast ast = signal a begin loop begin pause;
-               emit a; signal a (emit a) end ||
+    (let%sync_ast ast = signal a () begin loop begin pause;
+               emit a (); signal a () (emit a ()) end ||
                           loop (await a) end in ast)
 
 
@@ -39,31 +39,31 @@ let test_presentthen ctx = assert_equal
   (trap "a" (loop [Present_then ("out", exit_l "a"); pause]))
 
 let test_abro ctx = assert_equal
-    (let%sync_ast ast = loopeach (await a || await b; emit o;) r in ast)
+    (let%sync_ast ast = loopeach (await a || await b; emit o ();) r in ast)
     (loop_each "r" @@ !![await "a" // await "b"; emit "o"])
 
 
 let test_every ctx = assert_equal
-    (let%sync_ast ast = every (await a || await b; emit o;) r in ast)
+    (let%sync_ast ast = every (await a || await b; emit o ();) r in ast)
     (Every ("r", !![await "a" // await "b"; emit "o"]))
 
 
 let cyclic_grc ctx = assert_equal
   (let%sync_ast ast =
-    input i, s;
+    input i (), s ();
     (nothing
      ||
      present i begin
        present s pause pause
      end
     );
-    emit s in ast)
+    emit s () in ast)
   (Seq(Par (Nothing, Present_then ("i", Present ("s", Pause, Pause ))), Emit "s"))
 
 let par_deps ctx = assert_equal
     (let%sync_ast ast =
-      input s1, s2;
-      present s1 (emit s2)
+      input s1 (), s2 ();
+      present s1 (emit s2 ())
       ||
       present s2 (atom begin
           print_string "42";
@@ -72,8 +72,8 @@ let par_deps ctx = assert_equal
 
 let par_deps ctx = assert_equal
     (let%sync_ast ast =
-      input s1, s2;
-      present s1 (emit s2)
+      input s1 (), s2 ();
+      present s1 (emit s2 ())
       ||
       present s2 begin
         atom (print_string "42");
@@ -84,12 +84,12 @@ let par_deps ctx = assert_equal
 
 let par_deps ctx = assert_equal
     (let%to_dot_grc ast =
-      input s1, s2;
-      present s1 (emit s2)
+      input s1 (), s2 ();
+      present s1 (emit s2 ())
       ||
       present s2 begin
-        signal s1 (
-          emit s1;
+        signal s1 () (
+          emit s1 ();
           atom (print_string "42");
           pause
         )
@@ -99,12 +99,12 @@ let par_deps ctx = assert_equal
 
 let par_deps ctx = assert_equal
     (let%sync_ast ast =
-      input s1, s2;
-      present s1 (emit s2)
+      input s1 (), s2 ();
+      present s1 (emit s2 ())
       ||
       present s2 begin
-        signal s1 (
-          emit s1;
+        signal s1 () (
+          emit s1 ();
           atom (print_string "42");
           pause
         )

@@ -54,15 +54,13 @@ opam 1.2 with switch 4.02.1 is required
 
 1. clone the repo, `cd pendulum`
 
-2. run `opam pin add pendulum . -n`
-
-3. run `opam install pendulum`
+2. run `opam pin add pendulum .`
 
 (Bonus)
 
-4. to use pendulum as syntax extension
+4. an example to use pendulum as syntax extension with ocamlbuild
 
-`ocamlbuild -package pendulum -cflags "-ppx ppx_pendulum -dsource" main.byte`
+`ocamlbuild -package pendulum -cflags "-ppx ppx_pendulum" <main>.byte`
 
 ### without opam
 

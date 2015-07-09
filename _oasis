@@ -29,7 +29,6 @@ Library "preproc"
   BuildDepends:
     unix,
     ppx_tools.metaquot,
-    ppx_deriving.std
 
 
 #Executable "main"
