@@ -3,7 +3,6 @@ module Selection_tree : sig
 
 
   type t = {label : int; t : repr; mutable tested : bool}
-      [@@deriving show]
   and repr =
     | Bottom
     | Pause
@@ -18,7 +17,7 @@ end
 module Flowgraph : sig
 
   type action =
-    | Emit of Ast.signal
+    | Emit of Parsetree.expression Ast.valued_signal
     | Atom of Ast.atom
     | Enter of int
     | Exit of int
@@ -35,14 +34,13 @@ module Flowgraph : sig
     | Sync of (int * int) * t * t
     | Pause
     | Finish
-    [@@deriving show]
 
   type flowgraph = t
 
   module Fgtbl : Hashtbl.S with type key = flowgraph
 
   val print_to_dot : Format.formatter -> t -> unit
-  val pp : Format.formatter -> t -> unit
+  (* val pp : Format.formatter -> t -> unit *)
 
 end
 

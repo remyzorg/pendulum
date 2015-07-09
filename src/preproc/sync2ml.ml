@@ -20,7 +20,6 @@ type ml_test_expr =
   | MLselect of int
   | MLor of ml_test_expr * ml_test_expr
   | MLfinished
-    [@@deriving show]
 
 let rec pp_ml_test_expr fmt = Format.(function
   | MLsig s -> fprintf fmt "present %s" s.content
@@ -32,16 +31,14 @@ let rec pp_ml_test_expr fmt = Format.(function
 type ml_sequence =
   | Seqlist of ml_ast list
   | Seq of ml_sequence * ml_sequence
-             [@@deriving show]
 and ml_ast =
-  | MLemit of Ast.signal
+  | MLemit of Parsetree.expression Ast.valued_signal
   | MLif of ml_test_expr * ml_sequence * ml_sequence
   | MLenter of int
   | MLexit of int
   | MLexpr of Ast.atom [@printer fun fmt e -> Pprintast.expression fmt e.exp]
   | MLpause
   | MLfinish
-      [@@deriving show]
 
 
 let rec pp_ml_sequence lvl fmt =
@@ -58,7 +55,7 @@ let rec pp_ml_sequence lvl fmt =
 and pp_ml_ast lvl fmt =
   let indent = String.init lvl (fun _ -> ' ') in
   Format.(function
-    | MLemit s -> fprintf fmt "%semit %s" indent s.content
+    | MLemit s -> fprintf fmt "%semit %s" indent s.ident.content
     | MLif (mltest_expr, mlseq1, mlseq2) ->
       fprintf fmt "%sif %a then (\n" indent pp_ml_test_expr mltest_expr;
       (pp_ml_sequence (lvl + 2)) fmt mlseq1;
@@ -91,7 +88,7 @@ let (++) c1 c2 = Seq (c1, c2)
 let construct_ml_action deps mr a =
   let open Grc.Flowgraph in
   match a with
-  | Emit s -> mr := IdentSet.add s !mr; mls @@ MLemit s
+  | Emit s -> mr := IdentSet.add s.ident !mr; mls @@ MLemit s
   | Atom e -> mls @@ MLexpr e
   | Enter i -> mls @@ MLenter i
   | Exit i -> ml @@ MLexit i :: List.map (fun x -> MLexit x) deps.(i)
@@ -204,7 +201,7 @@ module Ocaml_gen = struct
         ) e (global_sigs @ local_sigs)
       in
       let set_sigs e =
-        let set_locals = 
+        let set_locals =
           (List.fold_left (fun acc signal ->
                [%expr [%e Exp.ident @@ mk_ident signal] := false; [%e acc]]
              ) e local_sigs)
@@ -262,7 +259,7 @@ module Ocaml_gen = struct
   and construct_ml_ast depl ast =
     match ast with
     | MLemit s ->
-      [%expr [%e Exp.ident @@ mk_ident s] := true]
+      [%expr [%e Exp.ident @@ mk_ident s.ident] := true]
 
     | MLif (test, mlseq1, mlseq2) ->
       begin match mlseq2 with

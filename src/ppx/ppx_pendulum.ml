@@ -27,17 +27,25 @@ let check_ident_string e =
   | _ -> Ast.syntax_error_reason ~loc:e.pexp_loc "variable name expected"
 
 let pop_signals_decl e =
-  let cont e = (check_ident_string e) in
+  let cont e =
+    match e with
+    | [%expr [%e? e_var] [%e? e_value]] -> Ast.mk_vsig (check_ident_string e_var) e_value
+    | [%expr [%e? e_var]] ->
+      Error.error ~loc:e.pexp_loc ("signal " ^ (check_ident_string e_var).Ast.content ^ " not initialized")
+    | _ -> Ast.syntax_error_reason ~loc:e.pexp_loc "signal declaration expected"
+  in
   let rec aux sigs p =
     match p with
-    | [%expr [%e ?params]; [%e? e2] ] ->
+    | [%expr [%e? params]; [%e? e2] ] ->
       begin match params.pexp_desc with
-        | Pexp_tuple ([%expr input [%e? e]] :: ids)
-        | Pexp_tuple ([%expr output [%e? e]] :: ids)->
-          aux (cont e :: ((List.map cont ids) @ sigs)) e2
+        | Pexp_tuple ([%expr input [%e? e_var] [%e? e_value]] :: ids)
+        | Pexp_tuple ([%expr output [%e? e_var] [%e? e_value]] :: ids)->
+          aux (Ast.mk_vsig (check_ident_string e_var) e_value :: ((List.map cont ids) @ sigs)) e2
         | _ ->
           begin match params with
-            | [%expr input [%e ?e]] | [%expr output [%e ?e]] -> aux (cont e :: sigs) e2
+            | [%expr input [%e? e_var] [%e? e_value]]
+            | [%expr output [%e? e_var] [%e? e_value]] ->
+              aux ((Ast.mk_vsig (check_ident_string e_var) e_value) :: sigs) e2
             | _ -> p, sigs
           end
       end
@@ -55,8 +63,8 @@ let ast_of_expr e =
     | [%expr pause] ->
       Pause
 
-    | [%expr emit [%e? signal]] ->
-      Emit (check_ident_string signal)
+    | [%expr emit [%e? signal] [%e? e_value]] ->
+      Emit (Ast.mk_vsig (check_ident_string signal) e_value)
 
     | [%expr exit [%e? label]] ->
       Exit (Label(check_ident_string label))
@@ -76,9 +84,8 @@ let ast_of_expr e =
     | [%expr present [%e? signal] [%e? e1] [%e? e2]] ->
       Present (check_ident_string signal, visit e1, visit e2)
 
-    | [%expr signal [%e? signal] [%e? e]] ->
-
-      Signal (check_ident_string signal, visit e)
+    | [%expr signal [%e? signal] [%e? e_value] [%e? e]] ->
+      Signal (Ast.mk_vsig (check_ident_string signal) e_value, visit e)
 
     | [%expr suspend [%e? e] [%e? signal]] ->
       Suspend (visit e, check_ident_string signal)
@@ -89,8 +96,8 @@ let ast_of_expr e =
     | [%expr halt ] ->
       Halt
 
-    | [%expr sustain [%e? signal]] ->
-      Sustain (check_ident_string signal)
+    | [%expr sustain [%e? signal] [%e? e_value]] ->
+      Sustain (Ast.mk_vsig (check_ident_string signal) e_value)
 
     | [%expr present [%e? signal] [%e? e]] ->
       Present_then
@@ -129,7 +136,7 @@ let ast_of_expr e =
     | [%expr every [%e? _] [%e? _] [%e? e_err]] ->
       Ast.(syntax_error_reason ~loc:e_err.pexp_loc "maybe you forgot a `;`")
 
-    | [%expr input [%e? _ ] ; [%e? _]] -> 
+    | [%expr input [%e? _ ] ; [%e? _]] ->
       Error.error ~loc:e.pexp_loc "signal declarations must be at the begining"
 
     | e -> Ast.(syntax_error_reason ~loc:e.pexp_loc "keyword expected")

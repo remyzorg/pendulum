@@ -1,20 +1,23 @@
 
 
 type 'a location = {
-  loc : Location.t [@printer Location.print_loc] ;
+  loc : Location.t;
   content : 'a;
-}[@@deriving show]
+}
 
-type ident = string location [@@deriving show]
+type ident = string location
 
 
-type signal = ident [@@deriving show]
-type label = Label of ident [@@deriving show]
+type signal = ident
+type 'a valued_signal = {ident : ident; value : 'a}
+type label = Label of ident
 
 type atom = { locals : signal list; exp : Parsetree.expression}
 
 let dummy_loc = Location.none
 let mk_loc ?(loc=dummy_loc) content = {loc; content}
+
+let mk_vsig ident value = {ident; value}
 
 module Derived = struct
   type statement = statement_tree location
@@ -22,18 +25,18 @@ module Derived = struct
   | Loop of statement
   | Seq of statement * statement
   | Par of statement * statement
-  | Emit of signal
+  | Emit of Parsetree.expression valued_signal
   | Nothing
   | Pause
   | Suspend of statement * signal
   | Trap of label * statement
   | Exit of label
   | Present of signal * statement * statement
-  | Atom of Parsetree.expression [@printer Printast.expression 0]
-  | Signal of signal * statement
+  | Atom of Parsetree.expression
+  | Signal of Parsetree.expression valued_signal * statement
 
   | Halt
-  | Sustain of signal
+  | Sustain of Parsetree.expression valued_signal
   | Present_then of signal * statement
   | Await of signal
   | Await_imm of signal
@@ -42,7 +45,6 @@ module Derived = struct
   | Weak_abort of statement * signal
   | Loop_each of statement * signal
   | Every of signal * statement
-      [@@deriving show]
 end
 
 
@@ -93,14 +95,14 @@ module Tagged = struct
 
 
 
-  type t = {id : int; st : tagged} [@@deriving show]
+  type t = {id : int; st : tagged}
 
 
   and tagged_ast =
     | Loop of t
     | Seq of t * t
     | Par of t * t
-    | Emit of signal
+    | Emit of Parsetree.expression valued_signal
     | Nothing
     | Pause
     | Suspend of t * signal
@@ -108,9 +110,8 @@ module Tagged = struct
     | Exit of label
     | Present of signal * t * t
     | Atom of atom [@printer fun fmt x -> Pprintast.expression fmt x.exp]
-    | Signal of signal * t
+    | Signal of Parsetree.expression valued_signal * t
     | Await of signal
-  [@@deriving show]
   and tagged = tagged_ast location
 
   let mk_tagged ?(loc = dummy_loc) content id =
@@ -151,7 +152,7 @@ module Tagged = struct
   let create_env sigs = {
     labels = IdentMap.empty;
     signals = List.fold_left (fun accmap s ->
-        IdentMap.add s 0 accmap )
+        IdentMap.add s.ident 0 accmap )
         IdentMap.empty sigs;
     all_local_signals = [];
     local_signals = [];
@@ -172,7 +173,7 @@ module Tagged = struct
       | Derived.Par (st1, st2) ->
         mk_tagged (Par (visit env st1, visit env st2)) !+id
 
-      | Derived.Emit s -> mk_tagged (Emit (rename env.signals s ast)) !+id
+      | Derived.Emit s -> mk_tagged (Emit {s with ident = (rename env.signals s.ident ast)}) !+id
       | Derived.Nothing -> mk_tagged Nothing !+id
       | Derived.Pause -> mk_tagged Pause !+id
 
@@ -196,8 +197,8 @@ module Tagged = struct
         }) !+id
 
       | Derived.Signal (s,t) ->
-        let env, s = add_env env s in
-        mk_tagged (Signal (s, visit env t)) !+id
+        let env, s_id = add_env env s.ident in
+        mk_tagged (Signal ({s with ident = s_id}, visit env t)) !+id
 
 
       | Derived.Halt -> mk_tagged (Loop (mk_tagged Pause !+id)) !+id
@@ -255,7 +256,7 @@ let print_to_dot fmt tagged =
       fprintf fmt "N%d -> N%d ;@\n" x.id st2.id;
       visit st1;
       visit st2;
-    | Emit s -> fprintf fmt "N%d [label=\"%d emit(%s)\"];@\n"  x.id x.id s.content
+    | Emit s -> fprintf fmt "N%d [label=\"%d emit(%s)\"];@\n"  x.id x.id s.ident.content
     | Nothing  ->
       fprintf fmt "N%d [label=\"%d nothing\"]; @\n" x.id x.id
     | Pause  ->
@@ -279,7 +280,7 @@ let print_to_dot fmt tagged =
     | Await s ->
       fprintf fmt "N%d [label=\"%d await(%s)\"]; @\n" x.id x.id s.content
     | Signal (s, st) ->
-      fprintf fmt "N%d [label=\"%d signal(%s)\"]; @\n" x.id x.id s.content;
+      fprintf fmt "N%d [label=\"%d signal(%s)\"]; @\n" x.id x.id s.ident.content;
       fprintf fmt "N%d -> N%d ;@\n" x.id st.id;
       visit st
   in

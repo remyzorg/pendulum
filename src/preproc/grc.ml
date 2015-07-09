@@ -68,16 +68,15 @@ module Flowgraph = struct
 
 
   type action =
-    | Emit of Ast.signal [@printer fun fmt s -> Format.fprintf fmt "%s" s.content]
-    | Atom of Ast.atom [@printer fun fmt _ -> Format.fprintf fmt ""]
+    | Emit of Parsetree.expression Ast.valued_signal
+    | Atom of Ast.atom
     | Enter of int
     | Exit of int
-    [@@deriving show]
 
   let pp_action_dot fmt a =
     Format.(fprintf fmt "%s" begin
         match a with
-        | Emit s -> "emit <B>" ^ s.content ^ "</B>"
+        | Emit s -> "emit <B>" ^ s.ident.content ^ "</B>"
         | Atom e -> asprintf "%a" Pprintast.expression e.Ast.exp
         | Enter i -> sprintf "enter %d" i
         | Exit i -> sprintf "exit %d" i
@@ -88,7 +87,6 @@ module Flowgraph = struct
     | Signal of Ast.signal [@printer fun fmt s -> Format.fprintf fmt "%s" s.content]
     | Selection of int
     | Finished
-    [@@deriving show]
 
   let pp_test_value_dot fmt tv =
     Format.(begin
@@ -105,7 +103,6 @@ module Flowgraph = struct
     | Sync of (int * int) * t * t
     | Pause
     | Finish
-    [@@deriving show]
 
   let pp_dot fmt t =
     Format.(begin
@@ -217,7 +214,7 @@ module Flowgraph = struct
 
 end
 
-type id = int [@@deriving show]
+type id = int
 
 type error =
   | Unbound_label of string
@@ -232,8 +229,7 @@ let print_error fmt e =
     begin match e with
       | Unbound_label s -> "unbound label " ^ s
       | Cyclic_causality fg -> "Cyclic causality"
-      | Par_leads_to_finish fg ->
-        Format.printf "%a\n" Flowgraph.pp fg; "Par leads to pause or exit"
+      | Par_leads_to_finish fg -> "Par leads to pause or exit"
     end
 
 let error ~loc e = raise (Error (loc, e))
@@ -459,7 +455,7 @@ module Schedule = struct
           ) m1 m2
 
       | Call(Emit s, t) ->
-        begin match IdentMap.find s m with
+        begin match IdentMap.find s.ident m with
           | h :: fgs -> error ~loc:Ast.dummy_loc @@ Cyclic_causality h
           | [] -> m
           | exception Not_found -> m
@@ -506,9 +502,9 @@ module Schedule = struct
 
 
   let emits =
-    let aux aux (fg, stop, s) =
+    let aux aux (fg, stop, (s : Ast.signal)) =
       match fg with
-      | Call (Emit s', t) when s = s' -> true
+      | Call (Emit s', t) when s = s'.ident -> true
       | fg when fg == stop -> false
       | Call (_, t) -> aux (t, stop, s)
       | Test (_, t1, t2) | Fork (t1, t2, _) | Sync (_ , t1, t2) ->

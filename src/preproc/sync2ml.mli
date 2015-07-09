@@ -16,7 +16,7 @@ type ml_sequence =
   | Seqlist of ml_ast list
   | Seq of ml_sequence * ml_sequence
 and ml_ast =
-  | MLemit of Ast.signal
+  | MLemit of Parsetree.expression Ast.valued_signal
   | MLif of ml_test_expr * ml_sequence * ml_sequence
   | MLenter of int
   | MLexit of int
