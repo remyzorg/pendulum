@@ -49,7 +49,9 @@ let pop_signals_decl e =
       begin match params.pexp_desc with
         | Pexp_tuple ([%expr input [%e? e_var] [%e? e_value]] :: ids)
         | Pexp_tuple ([%expr output [%e? e_var] [%e? e_value]] :: ids)->
-          aux (Ast.mk_vsig (check_ident_string e_var) e_value :: ((List.map cont ids) @ sigs)) e2
+          aux
+            (List.rev @@ Ast.mk_vsig (check_ident_string e_var) e_value
+             :: ((List.map cont ids) @ sigs)) e2
         | _ ->
           begin match params with
             | [%expr input [%e? e_var] [%e? e_value]]

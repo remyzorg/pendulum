@@ -216,7 +216,7 @@ module Ocaml_gen = struct
         match global_sigs with
         | [] -> [%pat? ()]
         | [s] -> mk_pat_var (arg_name s.ident)
-        | l -> Pat.tuple @@ List.map (fun s -> mk_pat_var s.ident) l
+        | l -> Pat.tuple @@ List.rev_map (fun s -> mk_pat_var s.ident) l
       in
       [%expr
         let open Pendulum.Runtime_misc in
@@ -237,7 +237,7 @@ module Ocaml_gen = struct
 
   let rec construct_test test =
     match test with
-    | MLsig s -> [%expr !![%e Exp.ident @@ mk_ident s]]
+    | MLsig s -> [%expr !?[%e Exp.ident @@ mk_ident s]]
     | MLselect i -> [%expr Bitset.mem [%e Exp.ident select_env_ident] [%e int_const i]]
     | MLor (mlte1, mlte2) -> [%expr [%e construct_test mlte1 ] || [%e construct_test mlte2]]
     | MLfinished -> [%expr Bitset.mem [%e Exp.ident select_env_ident] 0]
