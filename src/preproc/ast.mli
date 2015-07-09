@@ -83,8 +83,8 @@ module Tagged : sig
   type env = {
     labels : int IdentMap.t;
     signals : int IdentMap.t;
-    mutable all_local_signals : signal list;
-    local_signals : signal list;
+    mutable all_local_signals : Parsetree.expression valued_signal list;
+    local_signals : Parsetree.expression valued_signal list;
   }
 
   val of_ast : ?sigs:(Parsetree.expression valued_signal list) -> Derived.statement -> t * env

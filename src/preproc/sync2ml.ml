@@ -167,7 +167,6 @@ module Ocaml_gen = struct
   let mk_pat_var s = Pat.(Asttypes.(var @@ Location.mkloc s.content s.loc))
 
   let mk_ident s = Location.(mkloc (Longident.Lident s.content) s.loc)
-  let mk_ident_str ?(loc=Location.none) s = Location.(mkloc (Longident.Lident s) loc)
 
   let mk_value_binding ?(pvb_loc=Location.none) ?(pvb_attributes=[]) pvb_pat pvb_expr =
     { pvb_pat; pvb_expr; pvb_attributes; pvb_loc; }
@@ -189,44 +188,45 @@ module Ocaml_gen = struct
 
 
   let select_env_name = "pendulum~state"
-  let select_env_var = Location.(mkloc select_env_name Location.none )
+  let select_env_var = Location.(mkloc select_env_name !Ast_helper.default_loc)
   let select_env_ident = mk_ident (Ast.mk_loc select_env_name)
   let arg_name s = {s with content = s.content ^ "~arg"}
+
 
   let init nstmts (global_sigs,local_sigs) sel =
     let open Grc.Selection_tree in
     fun e ->
       let let_sigs e = List.fold_left (fun acc signal ->
-          [%expr let [%p mk_pat_var signal] = ref false in [%e acc]]
-        ) e (global_sigs @ local_sigs)
+          [%expr let [%p mk_pat_var signal.ident] = make_signal [%e signal.value] in [%e acc]]
+        ) e (local_sigs)
       in
       let set_sigs e =
         let set_locals =
           (List.fold_left (fun acc signal ->
-               [%expr [%e Exp.ident @@ mk_ident signal] := false; [%e acc]]
-             ) e local_sigs)
+               [%expr set_absent [%e Exp.ident @@ mk_ident signal.ident]; [%e acc]]
+             ) [%expr ()] local_sigs)
         in
-        (List.fold_left (fun acc signal ->
-             [%expr [%e Exp.ident @@ mk_ident signal] :=
-                      [%e Exp.ident @@ mk_ident @@ arg_name signal];
-                    [%e acc]]
+        let set_globals = (List.fold_left (fun acc signal ->
+             [%expr set_absent [%e Exp.ident @@ mk_ident signal.ident]; [%e acc]]
            ) set_locals global_sigs)
+        in
+        [%expr let set_absent () = [%e set_globals] in [%e e]]
       in
       let sigs_step_arg =
         match global_sigs with
         | [] -> [%pat? ()]
-        | [s] -> mk_pat_var (arg_name s)
-        | l -> Pat.tuple @@ List.rev_map (fun s -> mk_pat_var @@ arg_name s) l
+        | [s] -> mk_pat_var (arg_name s.ident)
+        | l -> Pat.tuple @@ List.map (fun s -> mk_pat_var s.ident) l
       in
       [%expr
         let open Pendulum.Runtime_misc in
         let open Pendulum.Machine in
-        { instantiate = fun () ->
+        { instantiate = fun [%p sigs_step_arg] ->
               let [%p Pat.var select_env_var] =
                 Bitset.make [%e int_const (1 + nstmts)]
               in
-              [%e let_sigs [%expr fun [%p sigs_step_arg] ->
-                         [%e set_sigs e]]]
+              [%e let_sigs (set_sigs [%expr fun () ->
+                         [%e e]])]
         }]
 
   let remove_signal_renaming s =
@@ -237,7 +237,7 @@ module Ocaml_gen = struct
 
   let rec construct_test test =
     match test with
-    | MLsig s -> [%expr ![%e Exp.ident @@ mk_ident s]]
+    | MLsig s -> [%expr !![%e Exp.ident @@ mk_ident s]]
     | MLselect i -> [%expr Bitset.mem [%e Exp.ident select_env_ident] [%e int_const i]]
     | MLor (mlte1, mlte2) -> [%expr [%e construct_test mlte1 ] || [%e construct_test mlte2]]
     | MLfinished -> [%expr Bitset.mem [%e Exp.ident select_env_ident] 0]
@@ -259,7 +259,7 @@ module Ocaml_gen = struct
   and construct_ml_ast depl ast =
     match ast with
     | MLemit s ->
-      [%expr [%e Exp.ident @@ mk_ident s.ident] := true]
+      [%expr set_present_value [%e Exp.ident @@ mk_ident s.ident] [%e s.value]]
 
     | MLif (test, mlseq1, mlseq2) ->
       begin match mlseq2 with
@@ -293,8 +293,8 @@ module Ocaml_gen = struct
              acc
          ) atom_expr pexpr.locals)
 
-    | MLpause -> [%expr Pause]
-    | MLfinish -> [%expr Bitset.add [%e Exp.ident select_env_ident] 0; Finish]
+    | MLpause -> [%expr set_absent (); Pause]
+    | MLfinish -> [%expr set_absent (); Bitset.add [%e Exp.ident select_env_ident] 0; Finish]
 
   let instantiate dep_array sigs sel ml =
     init (Array.length dep_array) sigs sel (construct_sequence dep_array ml)

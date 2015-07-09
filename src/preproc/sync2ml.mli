@@ -28,5 +28,8 @@ val pp_ml_sequence : int -> Format.formatter -> ml_sequence -> unit
 
 val grc2ml : int list array -> Grc.Flowgraph.t -> ml_sequence
 
-val generate: ?sigs:( string Ast.location list * string Ast.location list) ->
+val generate:
+  ?sigs:(
+    Parsetree.expression Ast.valued_signal list *
+    Parsetree.expression Ast.valued_signal list) ->
   Ast.Tagged.t -> Parsetree.expression

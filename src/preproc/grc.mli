@@ -40,7 +40,6 @@ module Flowgraph : sig
   module Fgtbl : Hashtbl.S with type key = flowgraph
 
   val print_to_dot : Format.formatter -> t -> unit
-  (* val pp : Format.formatter -> t -> unit *)
 
 end
 

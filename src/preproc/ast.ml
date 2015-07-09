@@ -16,7 +16,6 @@ type atom = { locals : signal list; exp : Parsetree.expression}
 
 let dummy_loc = Location.none
 let mk_loc ?(loc=dummy_loc) content = {loc; content}
-
 let mk_vsig ident value = {ident; value}
 
 module Derived = struct
@@ -120,21 +119,21 @@ module Tagged = struct
   type env = {
     labels : int IdentMap.t;
     signals : int IdentMap.t;
-    mutable all_local_signals : signal list;
-    local_signals : signal list;
+    mutable all_local_signals : Parsetree.expression valued_signal list;
+    local_signals : Parsetree.expression valued_signal list;
   }
 
   let add_env (env : env) s =
-    let signals, s = IdentMap.(match find s env.signals with
+    let signals, s' = IdentMap.(match find s.ident env.signals with
       | exception Not_found ->
-        add s 0 env.signals, s
+        add s.ident 0 env.signals, s.ident
       | i ->
-        add s (i + 1) env.signals,
-        {s with content = Format.sprintf "%s~%d" s.content (i + 1)}
+        add s.ident (i + 1) env.signals,
+        {s.ident with content = Format.sprintf "%s~%d" s.ident.content (i + 1)}
       )
     in
-    env.all_local_signals <- s :: env.all_local_signals;
-    {env with signals; local_signals = s :: env.local_signals}, s
+    env.all_local_signals <- {s with ident = s'} :: env.all_local_signals;
+    {env with signals; local_signals = {s with ident = s'} :: env.local_signals}, s
 
   let add_label env s = IdentMap.(match find s env with
       | exception Not_found -> add s 0 env, s
@@ -192,13 +191,13 @@ module Tagged = struct
             rename env.signals s ast, visit env t1, visit env t2))
           !+id
       | Derived.Atom f -> mk_tagged (Atom {
-          locals = env.local_signals;
+          locals = List.map (fun x -> x.ident) env.local_signals;
           exp = f
         }) !+id
 
       | Derived.Signal (s,t) ->
-        let env, s_id = add_env env s.ident in
-        mk_tagged (Signal ({s with ident = s_id}, visit env t)) !+id
+        let env, s = add_env env s in
+        mk_tagged (Signal (s, visit env t)) !+id
 
 
       | Derived.Halt -> mk_tagged (Loop (mk_tagged Pause !+id)) !+id

@@ -9,6 +9,13 @@ open Preproc
 
 open Utils
 
+let check_ident_string e =
+  let open Ast in
+  match e.pexp_desc with
+  (* | Pexp_construct ({txt = Lident s; loc}, None) *)
+  | Pexp_ident {txt = Lident s; loc} ->
+    {loc; content = s}
+  | _ -> Ast.syntax_error_reason ~loc:e.pexp_loc "variable name expected"
 
 module Error = struct
 
@@ -16,6 +23,10 @@ module Error = struct
     raise (Location.Error (
         Location.error ~loc ("[pendulum] " ^ rsn)))
 
+  let signal_value_missing e s =
+    error ~loc:e.pexp_loc
+      ("signal value of " ^
+       (check_ident_string s).Ast.content ^ " is missing")
 end
 
 let check_ident_string e =
@@ -30,9 +41,7 @@ let pop_signals_decl e =
   let cont e =
     match e with
     | [%expr [%e? e_var] [%e? e_value]] -> Ast.mk_vsig (check_ident_string e_var) e_value
-    | [%expr [%e? e_var]] ->
-      Error.error ~loc:e.pexp_loc ("signal " ^ (check_ident_string e_var).Ast.content ^ " not initialized")
-    | _ -> Ast.syntax_error_reason ~loc:e.pexp_loc "signal declaration expected"
+    | [%expr [%e? e_var]] -> Error.signal_value_missing e e_var
   in
   let rec aux sigs p =
     match p with
@@ -66,6 +75,9 @@ let ast_of_expr e =
     | [%expr emit [%e? signal] [%e? e_value]] ->
       Emit (Ast.mk_vsig (check_ident_string signal) e_value)
 
+    | [%expr emit [%e? signal]] ->
+      Error.signal_value_missing e signal
+
     | [%expr exit [%e? label]] ->
       Exit (Label(check_ident_string label))
 
@@ -84,8 +96,12 @@ let ast_of_expr e =
     | [%expr present [%e? signal] [%e? e1] [%e? e2]] ->
       Present (check_ident_string signal, visit e1, visit e2)
 
+
     | [%expr signal [%e? signal] [%e? e_value] [%e? e]] ->
       Signal (Ast.mk_vsig (check_ident_string signal) e_value, visit e)
+
+    | [%expr signal [%e? signal] [%e? _]] ->
+      Error.signal_value_missing e signal
 
     | [%expr suspend [%e? e] [%e? signal]] ->
       Suspend (visit e, check_ident_string signal)
@@ -96,8 +112,12 @@ let ast_of_expr e =
     | [%expr halt ] ->
       Halt
 
+
     | [%expr sustain [%e? signal] [%e? e_value]] ->
       Sustain (Ast.mk_vsig (check_ident_string signal) e_value)
+
+    | [%expr sustain [%e? signal]] ->
+      Error.signal_value_missing e signal
 
     | [%expr present [%e? signal] [%e? e]] ->
       Present_then
