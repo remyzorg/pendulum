@@ -21,8 +21,7 @@ The core language is completely compatible with vanilla OCaml compiler >4.02.1.
 # TODO :
 
 * Code generation
-  * handle valued signal
-    * operator for presence & value
+  * handle value for local signals !!
   * check if then else generation
 
 * Documentation :
@@ -50,21 +49,19 @@ The core language is completely compatible with vanilla OCaml compiler >4.02.1.
 
 ### with opam (easier)
 
-opam 1.2 with switch 4.02.1 is required
+opam `1.2` with `switch 4.02.1` (minimum) is required
 
-1. clone the repo, `cd pendulum`
-
-2. run `opam pin add pendulum .`
+* `opam pin add pendulum git://github.com/remyzorg/pendulum.git`
 
 (Bonus)
+* an example to use pendulum as syntax extension with ocamlbuild
 
-4. an example to use pendulum as syntax extension with ocamlbuild
-
-`ocamlbuild -package pendulum -cflags "-ppx ppx_pendulum" <main>.byte`
+`ocamlbuild -package pendulum -cflags "-ppx ppx_pendulum" main.byte`
 
 ### without opam
 
-1. clone the repo
-2. `./configure`
-3. `make`
-4. `make install `
+1. `git clone git://github.com/remyzorg/pendulum.git`
+2. `cd pendulum`
+3. `./configure`
+4. `make`
+5. `make install `
