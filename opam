@@ -16,5 +16,4 @@ depends: [
   "ocamlfind" {build}
   "oasis"
   "ppx_tools"
-  "ppx_deriving"
 ]
