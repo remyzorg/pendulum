@@ -50,3 +50,11 @@ The core language is completely compatible with vanilla OCaml compiler >4.02.1.
 
 see opam file
 
+
+`opam pin add pendulum . -n`
+`opam install pendulum`
+
+
+`ocamlbuild -package pendulum -cflags "-ppx ppx_pendulum -dsource" main.byte`
+
+
