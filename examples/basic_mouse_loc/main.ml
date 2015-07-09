@@ -4,23 +4,21 @@ let%sync m =
   output b false;
 
   loop begin
-    present b
-      (atom (Printf.printf "even %B\n" !!b))
-      (atom (Printf.printf "odd %B\n" !!b));
+    present b (atom (Printf.printf "%s %d\n" !!b !!a));
     pause
   end
   ||
   loop begin
-    present a (emit b (!!a mod 2 = 0));
+    present a (emit b (if !!a mod 2 = 0 then "even" else "odd"));
     pause
   end
 
 let () =
   let open Pendulum.Machine in
   let a = make_signal 0 in
-  let b = make_signal false in
+  let b = make_signal "" in
   let step = m.instantiate (a, b) in
   for i = 1 to 10 do
-    setval a i;
+    set_present_value a i;
     ignore (step ());
   done

@@ -83,7 +83,7 @@ let par_deps ctx = assert_equal
 
 
 let par_deps ctx = assert_equal
-    (let%to_dot_grc ast =
+    (let%sync_ast ast =
       input s1 (), s2 ();
       present s1 (emit s2 ())
       ||
@@ -96,6 +96,21 @@ let par_deps ctx = assert_equal
       end;
      in ast)
     (Par (Present_then ("S1", emit "S2"), Present_then ("S2", Atom)))
+
+let%to_dot_grc evenodd =
+  input a 0;
+  output b false;
+
+  loop begin
+    present b (atom (Printf.printf "%s %d\n" !!b !!a));
+    pause
+  end
+  ||
+  loop begin
+    present a (emit b (if !!a mod 2 = 0 then "even" else "odd"));
+    pause
+  end
+
 
 let par_deps ctx = assert_equal
     (let%sync_ast ast =

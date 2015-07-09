@@ -504,7 +504,7 @@ module Schedule = struct
   let emits =
     let aux aux (fg, stop, (s : Ast.signal)) =
       match fg with
-      | Call (Emit s', t) when s = s'.ident -> true
+      | Call (Emit s', t) when s.content = s'.ident.content -> true
       | fg when fg == stop -> false
       | Call (_, t) -> aux (t, stop, s)
       | Test (_, t1, t2) | Fork (t1, t2, _) | Sync (_ , t1, t2) ->
@@ -579,8 +579,18 @@ module Schedule = struct
     | Flowgraph.Sync (c, _, _) -> c
     | _ -> 0, 0
 
+let print_to_dot_one name ext f e =
+  let full_name = (name ^ ext) in
+  let c = open_out (full_name ^ ".dot") in
+  let fmt = Format.formatter_of_out_channel c in
+  f fmt e;
+  close_out c;
+  ignore @@ Sys.command (Format.sprintf "dot -Tpdf %s.dot -o %s.pdf" full_name full_name);
+  (Unix.unlink (full_name ^ ".dot"))
+
   let rec interleave fg =
     let fork_tbl = Fgtbl2.create 17 in
+    let ilol = ref 0 in
     let visit_tbl = Fgtbl.create 17 in
     let rec sequence_of_fork (stop: Flowgraph.t) fg1 fg2 =
       try Fgtbl2.find fork_tbl (fg1, fg2) with | Not_found ->
@@ -601,7 +611,16 @@ module Schedule = struct
               error ~loc:Ast.dummy_loc (Par_leads_to_finish fg1)
 
             | Test (Signal s, t1, t2), fg2 ->
-              if emits fg2 stop s then match fg2 with
+              Format.printf "%s %d\n" s.content !ilol;
+              if s.content = "b" then
+                begin
+                  if !ilol = 0 then
+                  print_to_dot_one "LOL" "_interfg" Flowgraph.print_to_dot fg2;
+                  incr ilol;
+                  if emits fg2 stop s then Format.printf "OK\n"
+                end;
+              if emits fg2 stop s then
+                match fg2 with
                 | Call (a, t) ->
                   Call (a, sequence_of_fork stop t fg1)
                 | Pause | Finish -> assert false (* TODO: Raise exn *)
