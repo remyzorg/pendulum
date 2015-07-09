@@ -46,15 +46,27 @@ The core language is completely compatible with vanilla OCaml compiler >4.02.1.
   * try setTimeout and requestAnimationFrames as global clocks
 
 
-# Compilation
+# Install
 
-see opam file
+### with opam (easier)
 
+opam 1.2 with switch 4.02.1 is required
 
-`opam pin add pendulum . -n`
-`opam install pendulum`
+1. clone the repo, `cd pendulum`
 
+2. run `opam pin add pendulum . -n`
+
+3. run `opam install pendulum`
+
+(Bonus)
+
+4. to use pendulum as syntax extension
 
 `ocamlbuild -package pendulum -cflags "-ppx ppx_pendulum -dsource" main.byte`
 
+### without opam
 
+1. clone the repo
+2. `./configure`
+3. `make`
+4. `make install `
