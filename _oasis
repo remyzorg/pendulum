@@ -28,7 +28,7 @@ Library "preproc"
   Modules: Utils, Ast, Grc, Sync2ml
   BuildDepends:
     unix,
-    ppx_tools.metaquot,
+    ppx_tools.metaquot
 
 
 #Executable "main"
