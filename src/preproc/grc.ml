@@ -604,21 +604,19 @@ let print_to_dot_one name ext f e =
               -> sequence_of_fork stop fg2 fg1
 
             | (Pause | Finish), _ ->
-              Format.printf "left is wrong@\n";
               error ~loc:Ast.dummy_loc (Par_leads_to_finish fg2)
             | _, (Finish | Pause) ->
-              Format.printf "right is wrong@\n";
               error ~loc:Ast.dummy_loc (Par_leads_to_finish fg1)
 
             | Test (Signal s, t1, t2), fg2 ->
-              Format.printf "%s %d\n" s.content !ilol;
-              if s.content = "b" then
-                begin
-                  if !ilol = 0 then
-                  print_to_dot_one "LOL" "_interfg" Flowgraph.print_to_dot fg2;
-                  incr ilol;
-                  if emits fg2 stop s then Format.printf "OK\n"
-                end;
+              (* Format.printf "%s %d\n" s.content !ilol; *)
+              (* if s.content = "b" then *)
+              (*   begin *)
+                  (* if !ilol = 0 then *)
+                  (* print_to_dot_one "LOL" "_interfg" Flowgraph.print_to_dot fg2; *)
+                (*   incr ilol; *)
+                (*   print_to_dot_one ("LOL" ^ string_of_int !ilol) "_interfg" Flowgraph.print_to_dot fg2 *)
+                (* end; *)
               if emits fg2 stop s then
                 match fg2 with
                 | Call (a, t) ->
@@ -644,11 +642,13 @@ let print_to_dot_one name ext f e =
               sequence_of_fork stop fg1 fg2
 
             | Sync (_, t1, t2), fg2 ->
-              Format.printf "====@\n";
               let t1, t2 = replace_join t1 t2 (sequence_of_fork stop fg2) in
               children fg1 t1 t2
 
             | Test (_, t1, t2), fg2 ->
+
+              (* TEST THE CAUSALITY TO KNOW WHICH ONE MUST MUST SCHEDULED FIRST *)
+
               let t1, t2 = replace_join t1 t2 (sequence_of_fork stop fg2) in
               children fg1 t1 t2
           in
