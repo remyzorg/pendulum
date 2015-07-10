@@ -4,9 +4,9 @@ type 'a location = {
   loc : Location.t;
   content : 'a;
 }
+let dummy_loc = Location.none
 
 type ident = string location
-
 
 type signal = ident
 type 'a valued_signal = {ident : ident; value : 'a}
@@ -14,9 +14,9 @@ type label = Label of ident
 
 type atom = { locals : signal list; exp : Parsetree.expression}
 
-let dummy_loc = Location.none
 let mk_loc ?(loc=dummy_loc) content = {loc; content}
 let mk_vsig ident value = {ident; value}
+let mk_atom ?(locals = []) exp = {locals; exp}
 
 module Derived = struct
   type statement = statement_tree location

@@ -8,6 +8,7 @@ open Longident
 open Preproc
 
 open Utils
+open Test_sync2ml
 
 let check_ident_string e =
   let open Ast in
@@ -176,7 +177,7 @@ let parse_ast loc ext e =
       Pendulum_misc.print_to_dot loc tast;
       let ocaml_expr =
         Sync2ml.generate ~sigs:(sigs, env.Ast.Tagged.all_local_signals) tast in
-      Format.printf "%a@." Pprintast.expression ocaml_expr;
+      (* Format.printf "%a@." Pprintast.expression ocaml_expr; *)
       [%expr [%e Pendulum_misc.expr_of_ast ast]]
 
     | "sync" ->

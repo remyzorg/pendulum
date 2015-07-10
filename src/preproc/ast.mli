@@ -13,6 +13,7 @@ type 'a valued_signal = {ident : ident; value : 'a}
 val mk_vsig : signal -> 'a -> 'a valued_signal
 
 type atom = { locals : signal list; exp : Parsetree.expression}
+val mk_atom : ?locals:signal list -> Parsetree.expression -> atom
 
 module IntMap : Map.S with type key = int
 module StringMap : Map.S with type key = string
