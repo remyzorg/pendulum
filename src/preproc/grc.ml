@@ -82,6 +82,14 @@ module Flowgraph = struct
         | Exit i -> sprintf "exit %d" i
       end)
 
+  let pp_action fmt a =
+    Format.(fprintf fmt "%s" begin
+        match a with
+        | Emit s -> "Emit " ^ s.ident.content
+        | Atom e -> asprintf "Atom (%a)" Pprintast.expression e.Ast.exp
+        | Enter i -> sprintf "Enter %d" i
+        | Exit i -> sprintf "Exit %d" i
+      end)
 
   type test_value =
     | Signal of Ast.signal [@printer fun fmt s -> Format.fprintf fmt "%s" s.content]
@@ -96,6 +104,14 @@ module Flowgraph = struct
         | Finished -> fprintf fmt "finished"
       end)
 
+  let pp_test_value fmt tv =
+    Format.(begin
+        match tv with
+        | Signal s -> fprintf fmt "Signal %s" s.content
+        | Selection i -> fprintf fmt "Selection %d" i
+        | Finished -> fprintf fmt "Finished"
+      end)
+
   type t =
     | Call of action * t
     | Test of test_value * t * t (* then * else *)
@@ -103,6 +119,30 @@ module Flowgraph = struct
     | Sync of (int * int) * t * t
     | Pause
     | Finish
+
+
+
+  let rec pp fmt t =
+    let rec aux lvl fmt t =
+      let indent = String.init lvl (fun _ -> ' ') in
+      Format.(begin
+          match t with
+          | Call (a, t) ->
+            fprintf fmt "%sCall(%a,\n%a)"
+              indent pp_action a (aux (lvl + 1)) t
+          | Test (tv, t1, t2) ->
+            fprintf fmt "%sTest(%a,\n%a,\n%a) "
+              indent pp_test_value tv (aux @@ lvl + 1) t1 (aux @@ lvl + 1) t2
+          | Sync ((i1, i2), t1, t2) ->
+            fprintf fmt "%sSync((%d, %d),\n%a,\n%a)" indent
+              i1 i2 (aux @@ lvl + 1) t1 (aux @@ lvl + 1) t2
+          | Fork (t1, t2, _) ->
+            fprintf fmt "%sFork(\n%a, \n%a)"
+              indent (aux @@ lvl + 1) t1 (aux @@ lvl + 1) t2
+          | Pause -> fprintf fmt "%sPause" indent
+          | Finish -> fprintf fmt "%sFinish" indent
+        end)
+    in aux 0 fmt t
 
   let pp_dot fmt t =
     Format.(begin
@@ -563,7 +603,14 @@ module Schedule = struct
 
   let rec replace_join fg1 fg2 replf =
     let res, fg2' = find_and_replace replf fg2 fg1 in
-    if res then replf fg1, fg2'
+    if res then begin
+      let fg1, fg2 = replf fg1, fg2' in
+      (* Flowgraph.pp Format.std_formatter fg1; *)
+      (* Format.printf "\n=================\n"; *)
+      (* Flowgraph.pp Format.std_formatter fg2; *)
+      (* Format.printf "\n#################\n\n"; *)
+      fg1, fg2
+    end
     else match fg1 with
       | Call(a, t) ->
         let t, fg2 = replace_join t fg2 replf in
@@ -649,6 +696,10 @@ let print_to_dot_one name ext f e =
 
               (* TEST THE CAUSALITY TO KNOW WHICH ONE MUST MUST SCHEDULED FIRST *)
 
+              (* Flowgraph.pp Format.std_formatter fg1; *)
+              (* Format.printf "\n=================\n"; *)
+              (* Flowgraph.pp Format.std_formatter fg2; *)
+              (* Format.printf "\n#################\n\n"; *)
               let t1, t2 = replace_join t1 t2 (sequence_of_fork stop fg2) in
               children fg1 t1 t2
           in
