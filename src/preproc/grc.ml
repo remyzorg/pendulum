@@ -590,7 +590,6 @@ let print_to_dot_one name ext f e =
 
   let rec interleave fg =
     let fork_tbl = Fgtbl2.create 17 in
-    let ilol = ref 0 in
     let visit_tbl = Fgtbl.create 17 in
     let rec sequence_of_fork (stop: Flowgraph.t) fg1 fg2 =
       try Fgtbl2.find fork_tbl (fg1, fg2) with | Not_found ->
@@ -609,14 +608,6 @@ let print_to_dot_one name ext f e =
               error ~loc:Ast.dummy_loc (Par_leads_to_finish fg1)
 
             | Test (Signal s, t1, t2), fg2 ->
-              (* Format.printf "%s %d\n" s.content !ilol; *)
-              (* if s.content = "b" then *)
-              (*   begin *)
-                  (* if !ilol = 0 then *)
-                  (* print_to_dot_one "LOL" "_interfg" Flowgraph.print_to_dot fg2; *)
-                (*   incr ilol; *)
-                (*   print_to_dot_one ("LOL" ^ string_of_int !ilol) "_interfg" Flowgraph.print_to_dot fg2 *)
-                (* end; *)
               if emits fg2 stop s then
                 match fg2 with
                 | Call (a, t) ->
@@ -646,6 +637,15 @@ let print_to_dot_one name ext f e =
               children fg1 t1 t2
 
             | Test (_, t1, t2), fg2 ->
+
+              (* Format.printf "%s %d\n" s.content !ilol; *)
+              (* if s.content = "b" then *)
+              (*   begin *)
+                  (* if !ilol = 0 then *)
+                  (* print_to_dot_one "LOL" "_interfg" Flowgraph.print_to_dot fg2; *)
+                (*   incr ilol; *)
+                (*   print_to_dot_one ("LOL" ^ string_of_int !ilol) "_interfg" Flowgraph.print_to_dot fg2 *)
+                (* end; *)
 
               (* TEST THE CAUSALITY TO KNOW WHICH ONE MUST MUST SCHEDULED FIRST *)
 
