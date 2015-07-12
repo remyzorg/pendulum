@@ -100,7 +100,6 @@ let par_deps ctx = assert_equal
 let%to_dot_grc evenodd =
   input a 0;
   output b false;
-
   loop begin
     present b (atom (Printf.printf "%s %d\n" !!b !!a));
     pause

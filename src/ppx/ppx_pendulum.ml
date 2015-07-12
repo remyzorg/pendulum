@@ -8,7 +8,6 @@ open Longident
 open Preproc
 
 open Utils
-open Test_sync2ml
 
 let check_ident_string e =
   let open Ast in

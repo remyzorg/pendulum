@@ -78,6 +78,12 @@ let () =
     ) test_fg callex9sync  in
   Pendulum_misc.print_to_dot_one "test_sync2mllolz_mod" "_fg" Grc.Flowgraph.print_to_dot mod_test_fg
 
+let sync126 =
+  Sync((12, 6),
+       Pause,
+       Call(Exit 13,
+            Finish))
+
 let test12 =
 Test(Selection 12,
  Call(Exit 7,
@@ -88,20 +94,11 @@ Test(Selection 12,
       Call(Atom (Ast.mk_atom dumb),
        Call(Exit 10,
         Call(Enter 7,
-         Sync((12, 6),
-          Pause,
-          Call(Exit 13,
-           Finish))))),
+         sync126))),
       Call(Exit 10,
        Call(Enter 7,
-        Sync((12, 6),
-         Pause,
-         Call(Exit 13,
-          Finish))))))))),
- Sync((12, 6),
-  Pause,
-  Call(Exit 13,
-   Finish)))
+        sync126))))))),
+ sync126)
 
 let test6 =
 Test(Selection 6,
@@ -113,25 +110,18 @@ Test(Selection 6,
       Call(Emit (msv "b"),
        Call(Exit 4,
         Call(Enter 1,
-         Sync((12, 6),
-          Pause,
-          Call(Exit 13,
-           Finish))))),
+         sync126))),
       Call(Exit 4,
        Call(Enter 1,
-        Sync((12, 6),
-         Pause,
-         Call(Exit 13,
-          Finish))))) )))),
- Sync((12, 6),
-  Pause,
-  Call(Exit 13,
-   Finish)))
+        sync126))) )))),
+ sync126)
 
 let () =
+  let f = (fun fg -> Call (Exit 10000000, Finish)) in
   let test6', test12' =
-    Grc.Schedule.replace_join test6 test12 (fun fg -> Call (Exit 10000000, Finish))
-  in 
+    Grc.Schedule.replace_join test12 test6 f
+  in
+  (* let _, test12' = Grc.Schedule.find_and_replace f test12 sync126 in *)
   Grc.Flowgraph.pp Format.std_formatter test6';
   Format.printf "\n===============\n";
   Grc.Flowgraph.pp Format.std_formatter test12'

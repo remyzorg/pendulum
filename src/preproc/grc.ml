@@ -603,22 +603,20 @@ module Schedule = struct
 
   let rec replace_join fg1 fg2 replf =
     let res, fg2' = find_and_replace replf fg2 fg1 in
-    if res then begin
-      let fg1, fg2 = replf fg1, fg2' in
-      (* Flowgraph.pp Format.std_formatter fg1; *)
-      (* Format.printf "\n=================\n"; *)
-      (* Flowgraph.pp Format.std_formatter fg2; *)
-      (* Format.printf "\n#################\n\n"; *)
-      fg1, fg2
-    end
-    else match fg1 with
+    if res then replf fg1, fg2'
+    else
+      match fg1 with
       | Call(a, t) ->
-        let t, fg2 = replace_join t fg2 replf in
-        Call (a, t), fg2
+        let t, fg2' = replace_join t fg2 replf in
+        let fg1' = Call (a, t) in
+        fg1', fg2'
       | Sync(_ , t1, t2) | Test (_, t1, t2) | Fork (t1, t2, _) ->
-        let t1, _ = replace_join t1 fg2 replf in
-        let t2, _ = replace_join t2 fg2 replf in
-        children fg1 t1 t2, fg2
+        let fg2_r = ref fg2 in
+        let t1, t2 = replace_join t1 t2 (fun x ->
+            let x', fg2' = replace_join x fg2 replf in
+            fg2_r := fg2'; x') in
+        let fg1' = children fg1 t1 t2 in
+        fg1', !fg2_r
       | Pause | Finish -> fg1, fg2
 
 
@@ -695,6 +693,8 @@ let print_to_dot_one name ext f e =
                 (* end; *)
 
               (* TEST THE CAUSALITY TO KNOW WHICH ONE MUST MUST SCHEDULED FIRST *)
+
+              (*  *)
 
               (* Flowgraph.pp Format.std_formatter fg1; *)
               (* Format.printf "\n=================\n"; *)
