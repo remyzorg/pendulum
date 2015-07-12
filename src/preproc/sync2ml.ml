@@ -230,10 +230,8 @@ module Ocaml_gen = struct
         }]
 
   let remove_signal_renaming s =
-    Ast.(
-      {s with Ast.content =
-                String.sub s.content 0 ((String.rindex s.content '~'))
-         })
+    Ast.({s with
+          content = String.sub s.content 0 ((String.rindex s.content '~'))})
 
   let rec construct_test test =
     match test with

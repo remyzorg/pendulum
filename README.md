@@ -23,6 +23,7 @@ The core language is completely compatible with vanilla OCaml compiler >4.02.1.
 * Code generation
   * handle value for local signals !!
   * check if then else generation
+* assert fail for `construct_sequence` when 3 `||` or more
 
 
 * Documentation :

@@ -9,6 +9,11 @@ let%sync m =
   end
   ||
   loop begin
+    present b (atom (Printf.printf "%s %d\n" !!b !!a));
+    pause
+  end
+  ||
+  loop begin
     present a (emit b (if !!a mod 2 = 0 then "even" else "odd"));
     pause
   end
