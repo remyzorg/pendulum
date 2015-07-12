@@ -23,11 +23,6 @@ The core language is completely compatible with vanilla OCaml compiler >4.02.1.
 * Code generation
   * handle value for local signals !!
   * check if then else generation
-  * Fixing causality problem :
-    * in the interleave function, one have to test :
-      * which are the emited and tested signals in lhs
-      * which are the emited and tested signals in rhs
-    * Set comparison to know which branch depends of the other
 
 
 * Documentation :

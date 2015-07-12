@@ -552,6 +552,31 @@ module Schedule = struct
       | Pause | Finish -> false
     in memo_rec (module FgEmitsTbl) aux (fg, stop, s)
 
+
+  let extract_emits_tests_sets fg stop =
+    let open IdentSet in
+    let aux aux (fg, stop) =
+      match fg with
+      | fg when fg == stop -> empty, empty
+
+      | Call (Emit s, t) ->
+        let emits, tests = aux (t, stop) in
+        add s.ident emits, tests
+      | Call (_, t) -> aux (t, stop)
+
+      | Test (Signal s, t1, t2) ->
+        let emits1, tests1 = aux (t1, stop) in
+        let emits2, tests2 = aux (t2, stop) in
+        union emits1 emits2, add s (union tests1 tests2)
+      | Test (_, t1, t2) | Fork (t1, t2, _) | Sync (_ , t1, t2) ->
+        let emits1, tests1 = aux (t1, stop) in
+        let emits2, tests2 = aux (t2, stop) in
+        union emits1 emits2, union tests1 tests2
+
+      | Pause | Finish -> empty, empty
+    in memo_rec (module Fgtbl2) aux (fg, stop)
+
+
   let children fg t1 t2 =
     let children _ (fg, t1, t2) =
       let newfg = match fg with
@@ -681,33 +706,23 @@ module Schedule = struct
               let fg1 = sequence_of_fork sync t1 t2 in
               sequence_of_fork stop fg1 fg2
 
-            | Sync (_, t1, t2), fg2 ->
-              let t1, t2 = replace_join t1 t2 (sequence_of_fork stop fg2) in
-              children fg1 t1 t2
-
+            | Sync (_, t1, t2), fg2
             | Test (_, t1, t2), fg2 ->
+              let fg1_emits, fg1_tests = extract_emits_tests_sets fg1 stop in
+              let fg2_emits, fg2_tests = extract_emits_tests_sets fg2 stop in
 
-              (* Format.printf "%s %d\n" s.content !ilol; *)
-              (* if s.content = "b" then *)
-              (*   begin *)
-                  (* if !ilol = 0 then *)
-                  (* print_to_dot_one "LOL" "_interfg" Flowgraph.print_to_dot fg2; *)
-                (*   incr ilol; *)
-                (*   print_to_dot_one ("LOL" ^ string_of_int !ilol) "_interfg" Flowgraph.print_to_dot fg2 *)
-                (* end; *)
+              if IdentSet.inter fg2_emits fg1_tests <> IdentSet.empty then
+                if IdentSet.inter fg1_emits fg2_tests <> IdentSet.empty then
+                  assert false
+                else
+                  sequence_of_fork stop fg2 fg1
+              else
+                let t1, t2 =
+                  replace_join t1 t2 (sequence_of_fork stop fg2)
+                in children fg1 t1 t2
 
-              (* TEST THE CAUSALITY TO KNOW WHICH ONE MUST MUST SCHEDULED FIRST *)
 
-              (*  *)
-
-              (* Flowgraph.pp Format.std_formatter fg1; *)
-              (* Format.printf "\n=================\n"; *)
-              (* Flowgraph.pp Format.std_formatter fg2; *)
-              (* Format.printf "\n#################\n\n"; *)
-              let t1, t2 = replace_join t1 t2 (sequence_of_fork stop fg2) in
-              children fg1 t1 t2
-          in
-          Fgtbl2.add fork_tbl (fg1, fg2) fg; fg
+          in Fgtbl2.add fork_tbl (fg1, fg2) fg; fg
     in
 
     let rec visit fg =
