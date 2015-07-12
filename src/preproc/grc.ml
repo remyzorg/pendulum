@@ -541,7 +541,7 @@ module Schedule = struct
 
 
 
-  let emits =
+  let emits fg stop s =
     let aux aux (fg, stop, (s : Ast.signal)) =
       match fg with
       | Call (Emit s', t) when s.content = s'.ident.content -> true
@@ -550,10 +550,9 @@ module Schedule = struct
       | Test (_, t1, t2) | Fork (t1, t2, _) | Sync (_ , t1, t2) ->
         aux (t1, stop, s) || aux (t2, stop, s)
       | Pause | Finish -> false
-    in
-    let f = memo_rec (module FgEmitsTbl) aux in fun fg stop s -> f (fg, stop, s)
+    in memo_rec (module FgEmitsTbl) aux (fg, stop, s)
 
-  let children =
+  let children fg t1 t2 =
     let children _ (fg, t1, t2) =
       let newfg = match fg with
         | Sync (ids, _, _) -> Sync (ids, t1, t2)
@@ -562,10 +561,10 @@ module Schedule = struct
         | Call (a, _) -> Call(a, t1)
         | Pause | Finish -> fg
       in newfg
-    in let f = memo_rec (module Fgtbl3) children in fun fg t1 t2 -> f (fg, t1, t2)
+    in memo_rec (module Fgtbl3) children (fg, t1, t2)
 
 
-  let find =
+  let find fg t =
     let aux aux (fg, elt) =
       if fg == elt then Some fg
       else match fg with
@@ -573,10 +572,10 @@ module Schedule = struct
         | Sync(_ , t1, t2) | Test (_, t1, t2) | Fork (t1, t2, _) ->
           Option.mapn (aux (t1, elt)) (fun () -> aux (t2, elt))
         | Pause | Finish -> None
-    in let f = memo_rec (module Fgtbl2) aux in fun fg t -> f (fg, t)
+    in memo_rec (module Fgtbl2) aux (fg, t)
 
 
-  let find_and_replace replf =
+  let find_and_replace replf fg elt =
     let aux aux (fg, elt) =
       if fg == elt then true, replf fg
       else match fg with
@@ -590,7 +589,8 @@ module Schedule = struct
           res1 || res2,
           children fg (if res1 then t1' else t1) (if res2 then t2' else t2)
         | Pause | Finish -> false, fg
-    in let f = memo_rec (module Fgtbl2) aux in fun fg elt -> f (fg, elt)
+    in memo_rec (module Fgtbl2) aux (fg, elt)
+
 
   let rec find_join fg1 fg2 =
     Option.mapn (find fg2 fg1) begin fun () ->
@@ -601,37 +601,41 @@ module Schedule = struct
       | Pause | Finish -> None
     end
 
+
   let rec replace_join fg1 fg2 replf =
-    let res, fg2' = find_and_replace replf fg2 fg1 in
-    if res then replf fg1, fg2'
-    else
-      match fg1 with
-      | Call(a, t) ->
-        let t, fg2' = replace_join t fg2 replf in
-        let fg1' = Call (a, t) in
-        fg1', fg2'
-      | Sync(_ , t1, t2) | Test (_, t1, t2) | Fork (t1, t2, _) ->
-        let fg2_r = ref fg2 in
-        let t1, t2 = replace_join t1 t2 (fun x ->
-            let x', fg2' = replace_join x fg2 replf in
-            fg2_r := fg2'; x') in
-        let fg1' = children fg1 t1 t2 in
-        fg1', !fg2_r
-      | Pause | Finish -> fg1, fg2
+    let rec aux aux (fg1, fg2) =
+      let res, fg2' = find_and_replace replf fg2 fg1 in
+      if res then replf fg1, fg2'
+      else
+        match fg1 with
+        | Call(a, t) ->
+          let t, fg2' = aux (t, fg2) in
+          let fg1' = Call (a, t) in
+          fg1', fg2'
+        | Sync(_ , t1, t2) | Test (_, t1, t2) | Fork (t1, t2, _) ->
+          let fg2_r = ref fg2 in
+          let t1, t2 = replace_join t1 t2 (fun x ->
+              let x', fg2' = aux (x, fg2) in
+              fg2_r := fg2'; x')
+          in
+          let fg1' = children fg1 t1 t2 in
+          fg1', !fg2_r
+        | Pause | Finish -> fg1, fg2
+    in memo_rec (module Fgtbl2) aux (fg1, fg2)
 
 
   let fork_id = function
     | Flowgraph.Sync (c, _, _) -> c
     | _ -> 0, 0
 
-let print_to_dot_one name ext f e =
-  let full_name = (name ^ ext) in
-  let c = open_out (full_name ^ ".dot") in
-  let fmt = Format.formatter_of_out_channel c in
-  f fmt e;
-  close_out c;
-  ignore @@ Sys.command (Format.sprintf "dot -Tpdf %s.dot -o %s.pdf" full_name full_name);
-  (Unix.unlink (full_name ^ ".dot"))
+  let print_to_dot_one name ext f e =
+    let full_name = (name ^ ext) in
+    let c = open_out (full_name ^ ".dot") in
+    let fmt = Format.formatter_of_out_channel c in
+    f fmt e;
+    close_out c;
+    ignore @@ Sys.command (Format.sprintf "dot -Tpdf %s.dot -o %s.pdf" full_name full_name);
+    (Unix.unlink (full_name ^ ".dot"))
 
   let rec interleave fg =
     let fork_tbl = Fgtbl2.create 17 in
