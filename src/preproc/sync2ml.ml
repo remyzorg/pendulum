@@ -220,7 +220,7 @@ module Ocaml_gen = struct
   let select_env_name = "pendulum~state"
   let select_env_var = Location.(mkloc select_env_name !Ast_helper.default_loc)
   let select_env_ident = mk_ident (Ast.mk_loc select_env_name)
-  let arg_name s = {s with content = s.content ^ "~arg"}
+  (* let arg_name s = {s with content = s.content ^ "~arg"} *)
 
 
   let init nstmts (global_sigs,local_sigs) sel =
@@ -245,7 +245,7 @@ module Ocaml_gen = struct
       let sigs_step_arg =
         match global_sigs with
         | [] -> [%pat? ()]
-        | [s] -> mk_pat_var (arg_name s.ident)
+        | [s] -> mk_pat_var s.ident
         | l -> Pat.tuple @@ List.rev_map (fun s -> mk_pat_var s.ident) l
       in
       [%expr

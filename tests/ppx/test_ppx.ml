@@ -115,6 +115,22 @@ let%to_dot_grc evenodd =
     pause
   end
 
+let%sync_ast constraint_test =
+  input a 0;
+  loop begin
+    present a begin
+      atom (print_string "hello\n");
+      pause;
+      atom (print_string "world\n");
+      pause;
+    end begin
+      atom (print_string "bonjour\n");
+      pause;
+      atom (print_string "le monde\n");
+      pause;
+    end
+  end
+
 
 let par_deps ctx = assert_equal
     (let%sync_ast ast =

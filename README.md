@@ -21,10 +21,19 @@ The core language is completely compatible with vanilla OCaml compiler >4.02.1.
 # TODO :
 
 * Code generation
-  * handle value for local signals !!
-  * check if then else generation
+
   * weird error when forgotting `;` after the last signal decl
   * remove initialization syntax on global signals
+
+  * ideas for addings runs and local signals(!!) (same problem actually)
+    * add calls to run and define local in grc (both have only one child => less work)
+    * for surface and depth : if i'm not selected,
+      * I initialize the signal with the default value (may have to recreate a new one)
+      * I Initialize the machine with the corrects inputs then I run one step
+    * If I'm not, 
+      * I do nothing 
+      * I run one step
+    * both must be defined globally :/ that might a problem for machines :> or maybe not
 
 
 * Documentation :
