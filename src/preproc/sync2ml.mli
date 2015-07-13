@@ -30,6 +30,6 @@ val grc2ml : int list array -> Grc.Flowgraph.t -> ml_sequence
 
 val generate:
   ?sigs:(
-    Parsetree.expression Ast.valued_signal list *
+    Ast.signal list *
     Parsetree.expression Ast.valued_signal list) ->
   Ast.Tagged.t -> Parsetree.expression

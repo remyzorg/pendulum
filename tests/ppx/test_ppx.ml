@@ -50,7 +50,7 @@ let test_every ctx = assert_equal
 
 let cyclic_grc ctx = assert_equal
   (let%sync_ast ast =
-    input i (), s ();
+    input i, s;
     (nothing
      ||
      present i begin
@@ -62,7 +62,7 @@ let cyclic_grc ctx = assert_equal
 
 let par_deps ctx = assert_equal
     (let%sync_ast ast =
-      input s1 (), s2 ();
+      input s1, s2;
       present s1 (emit s2 ())
       ||
       present s2 (atom begin
@@ -72,7 +72,7 @@ let par_deps ctx = assert_equal
 
 let par_deps ctx = assert_equal
     (let%sync_ast ast =
-      input s1 (), s2 ();
+      input s1, s2;
       present s1 (emit s2 ())
       ||
       present s2 begin
@@ -84,7 +84,7 @@ let par_deps ctx = assert_equal
 
 let par_deps ctx = assert_equal
     (let%sync_ast ast =
-      input s1 (), s2 ();
+      input s1, s2;
       present s1 (emit s2 ())
       ||
       present s2 begin
@@ -98,8 +98,8 @@ let par_deps ctx = assert_equal
     (Par (Present_then ("S1", emit "S2"), Present_then ("S2", Atom)))
 
 let%to_dot_grc evenodd =
-  input a 0;
-  output b false;
+  input a;
+  output b;
   loop begin
     present b (atom (Printf.printf "%s %d\n" !!b !!a));
     pause
@@ -116,7 +116,8 @@ let%to_dot_grc evenodd =
   end
 
 let%sync_ast constraint_test =
-  input a 0;
+  input a, b;
+
   loop begin
     present a begin
       atom (print_string "hello\n");
@@ -134,7 +135,7 @@ let%sync_ast constraint_test =
 
 let par_deps ctx = assert_equal
     (let%sync_ast ast =
-      input s1 (), s2 ();
+      input s1, s2;
       present s1 (emit s2 ())
       ||
       present s2 begin

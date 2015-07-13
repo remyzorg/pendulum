@@ -53,12 +53,9 @@ end
 
 type error =
   | Unbound_identifier of string
-  | Syntax
 exception Error of Location.t * error
 val error : loc:Location.t -> error -> 'a
 val print_error : Format.formatter -> error -> unit
-val syntax_error : loc:Location.t -> unit -> 'a
-val syntax_error_reason : loc:Location.t -> string -> 'a
 
 module Tagged : sig
 
@@ -88,7 +85,7 @@ module Tagged : sig
     local_signals : Parsetree.expression valued_signal list;
   }
 
-  val of_ast : ?sigs:(Parsetree.expression valued_signal list) -> Derived.statement -> t * env
+  val of_ast : ?sigs:(signal list) -> Derived.statement -> t * env
 
   val print_to_dot : Format.formatter -> t -> unit
 end

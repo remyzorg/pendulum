@@ -237,7 +237,7 @@ module Ocaml_gen = struct
              ) [%expr ()] local_sigs)
         in
         let set_globals = (List.fold_left (fun acc signal ->
-             [%expr set_absent [%e Exp.ident @@ mk_ident signal.ident]; [%e acc]]
+             [%expr set_absent [%e Exp.ident @@ mk_ident signal]; [%e acc]]
            ) set_locals global_sigs)
         in
         [%expr let set_absent () = [%e set_globals] in [%e e]]
@@ -245,8 +245,8 @@ module Ocaml_gen = struct
       let sigs_step_arg =
         match global_sigs with
         | [] -> [%pat? ()]
-        | [s] -> mk_pat_var s.ident
-        | l -> Pat.tuple @@ List.rev_map (fun s -> mk_pat_var s.ident) l
+        | [s] -> mk_pat_var s
+        | l -> Pat.tuple @@ List.rev_map (fun s -> mk_pat_var s) l
       in
       [%expr
         let open Pendulum.Runtime_misc in

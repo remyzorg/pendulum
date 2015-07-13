@@ -47,7 +47,7 @@ module Derived = struct
 end
 
 
-type error = Unbound_identifier of string | Syntax
+type error = Unbound_identifier of string
 exception Error of Location.t * error
 let error ~loc e = raise (Error (loc, e))
 
@@ -56,14 +56,7 @@ let print_error fmt e =
   fprintf fmt "%s"
     begin match e with
       | Unbound_identifier s -> sprintf "unbound signal %s" s
-      | Syntax -> "Syntax error"
     end
-
-let syntax_error ~loc () = raise (Location.Error (
-    Location.error ~loc ("[pendulum] Syntax error")))
-
-let syntax_error_reason ~loc s = raise (Location.Error (
-    Location.error ~loc ("[pendulum] Syntax error : " ^ s)))
 
 
 module IntMap = Map.Make(struct
@@ -151,7 +144,7 @@ module Tagged = struct
   let create_env sigs = {
     labels = IdentMap.empty;
     signals = List.fold_left (fun accmap s ->
-        IdentMap.add s.ident 0 accmap )
+        IdentMap.add s 0 accmap )
         IdentMap.empty sigs;
     all_local_signals = [];
     local_signals = [];

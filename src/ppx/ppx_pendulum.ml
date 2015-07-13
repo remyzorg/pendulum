@@ -9,24 +9,57 @@ open Preproc
 
 open Utils
 
-let check_ident_string e =
-  let open Ast in
-  match e.pexp_desc with
-  (* | Pexp_construct ({txt = Lident s; loc}, None) *)
-  | Pexp_ident {txt = Lident s; loc} ->
-    {loc; content = s}
-  | _ -> Ast.syntax_error_reason ~loc:e.pexp_loc "variable name expected"
 
 module Error = struct
 
+  type syntax = Forgot_sem | Keyword | Variable_name | Signal_decl_at_start
+
+  type 'a t =
+    | Value_missing of string
+    | Syntax of syntax
+    | Non_recursive_let
+    | Only_on_let
+    | Other_err of 'a * (Format.formatter -> 'a -> unit)
+
+
+  let print_syntax_rsn fmt rsn =
+    let open Format in
+    match rsn with
+    | Forgot_sem -> fprintf fmt "maybe you forgot a `;`"
+    | Keyword -> fprintf fmt "keyword expected"
+    | Variable_name -> fprintf fmt "variable name expected"
+    | Signal_decl_at_start -> fprintf fmt "signal declarations must be on the top"
+
+
+  let print_error fmt e =
+    let open Format in
+    fprintf fmt "[pendulum] ";
+    match e with
+    | Value_missing s -> fprintf fmt "Signal value of %s is missing" s
+    | Syntax rsn -> fprintf fmt "Syntax error : %a" print_syntax_rsn rsn
+    | Non_recursive_let -> fprintf fmt "recursive `let` not allowed"
+    | Only_on_let -> fprintf fmt "only allowed on let"
+    | Other_err (e, f) -> fprintf fmt "%a" f e
+
   let error ~loc rsn =
     raise (Location.Error (
-        Location.error ~loc ("[pendulum] " ^ rsn)))
+        Location.error ~loc (Format.asprintf "%a" print_error rsn)))
+
+  let syntax_error ~loc r = error ~loc (Syntax r)
+
+  let check_ident_string e =
+    let open Ast in
+    match e.pexp_desc with
+    (* | Pexp_construct ({txt = Lident s; loc}, None) *)
+    | Pexp_ident {txt = Lident s; loc} ->
+      {loc; content = s}
+    | _ -> syntax_error ~loc:e.pexp_loc Variable_name
 
   let signal_value_missing e s =
-    error ~loc:e.pexp_loc
-      ("signal value of " ^
-       (check_ident_string s).Ast.content ^ " is missing")
+    error ~loc:e.pexp_loc (Value_missing (check_ident_string s).Ast.content)
+
+
+
 end
 
 let check_ident_string e =
@@ -35,28 +68,34 @@ let check_ident_string e =
   (* | Pexp_construct ({txt = Lident s; loc}, None) *)
   | Pexp_ident {txt = Lident s; loc} ->
     {loc; content = s}
-  | _ -> Ast.syntax_error_reason ~loc:e.pexp_loc "variable name expected"
+  | _ -> Error.(syntax_error ~loc:e.pexp_loc Variable_name)
 
 let pop_signals_decl e =
   let cont e =
     match e with
-    | [%expr [%e? e_var] [%e? e_value]] -> Ast.mk_vsig (check_ident_string e_var) e_value
-    | [%expr [%e? e_var]] -> Error.signal_value_missing e e_var
+    | [%expr [%e? e_var] [%e? _]] ->
+      Error.(syntax_error ~loc:e_var.pexp_loc Forgot_sem)
+    | [%expr [%e? e_var]] -> check_ident_string e_var
   in
   let rec aux sigs p =
     match p with
+    | [%expr [%e? params], [%e? e2]] ->
+      Error.(syntax_error ~loc:e2.pexp_loc Forgot_sem)
     | [%expr [%e? params]; [%e? e2] ] ->
       begin match params.pexp_desc with
-        | Pexp_tuple ([%expr input [%e? e_var] [%e? e_value]] :: ids)
-        | Pexp_tuple ([%expr output [%e? e_var] [%e? e_value]] :: ids)->
+        | Pexp_tuple ([%expr input [%e? e_var]] :: ids)
+        | Pexp_tuple ([%expr output [%e? e_var]] :: ids)->
           aux
-            (List.rev @@ Ast.mk_vsig (check_ident_string e_var) e_value
+            (List.rev @@ check_ident_string e_var
              :: ((List.map cont ids) @ sigs)) e2
         | _ ->
           begin match params with
-            | [%expr input [%e? e_var] [%e? e_value]]
-            | [%expr output [%e? e_var] [%e? e_value]] ->
-              aux ((Ast.mk_vsig (check_ident_string e_var) e_value) :: sigs) e2
+            | [%expr input [%e? e_var]]
+            | [%expr output [%e? e_var]] ->
+              aux ((check_ident_string e_var) :: sigs) e2
+            | [%expr input [%e? e_var] [%e? _]]
+            | [%expr output [%e? e_var] [%e? _]] ->
+              Error.(syntax_error ~loc:e_var.pexp_loc Forgot_sem)
             | _ -> p, sigs
           end
       end
@@ -89,6 +128,10 @@ let ast_of_expr e =
     | [%expr loop [%e? e]] ->
       Loop (visit e)
 
+    | [%expr output [%e? _ ] ; [%e? _]]
+    | [%expr input [%e? _ ] ; [%e? _]] ->
+      Error.(syntax_error ~loc:e.pexp_loc Signal_decl_at_start)
+
     | [%expr [%e? e1]; [%e? e2]] ->
       Seq (visit e1, visit e2)
 
@@ -114,7 +157,6 @@ let ast_of_expr e =
     | [%expr halt ] ->
       Halt
 
-
     | [%expr sustain [%e? signal] [%e? e_value]] ->
       Sustain (Ast.mk_vsig (check_ident_string signal) e_value)
 
@@ -137,10 +179,9 @@ let ast_of_expr e =
     | [%expr every [%e? e] [%e? signal]] ->
       Every (check_ident_string signal, visit e)
 
-
     | [%expr nothing [%e? e_err]]
     | [%expr pause [%e? e_err]]
-    | [%expr emit [%e? _] [%e? e_err]]
+    | [%expr emit [%e? _] [%e? _] [%e? e_err]]
     | [%expr exit [%e? _] [%e? e_err]]
     | [%expr atom [%e? _] [%e? e_err]]
     | [%expr loop [%e? _] [%e? e_err]]
@@ -155,13 +196,13 @@ let ast_of_expr e =
     | [%expr await [%e? _][%e? e_err]]
     | [%expr abort [%e? _] [%e? _] [%e? e_err]]
     | [%expr loopeach [%e? _] [%e? _][%e? e_err]]
-    | [%expr every [%e? _] [%e? _] [%e? e_err]] ->
-      Ast.(syntax_error_reason ~loc:e_err.pexp_loc "maybe you forgot a `;`")
+    | [%expr every [%e? _] [%e? _] [%e? e_err]]
+    | [%expr input [%e? _ ] [%e? _] [%e? e_err]]
+    | [%expr output [%e? _ ] [%e? _] [%e? e_err]] ->
+      Error.(syntax_error ~loc:e_err.pexp_loc Forgot_sem)
 
-    | [%expr input [%e? _ ] ; [%e? _]] ->
-      Error.error ~loc:e.pexp_loc "signal declarations must be at the begining"
 
-    | e -> Ast.(syntax_error_reason ~loc:e.pexp_loc "keyword expected")
+    | e -> Error.(syntax_error ~loc:e.pexp_loc Keyword)
   in visit e
 
 let parse_ast loc ext e =
@@ -174,7 +215,7 @@ let parse_ast loc ext e =
       let ast = ast_of_expr e in
       let tast, env = Ast.Tagged.of_ast ~sigs ast in
       Pendulum_misc.print_to_dot loc tast;
-      let ocaml_expr =
+      let _ocaml_expr =
         Sync2ml.generate ~sigs:(sigs, env.Ast.Tagged.all_local_signals) tast in
       (* Format.printf "%a@." Pprintast.expression ocaml_expr; *)
       [%expr [%e Pendulum_misc.expr_of_ast ast]]
@@ -213,7 +254,7 @@ let extend_mapper argv = {
       | { pstr_desc = Pstr_extension (({ txt = ext }, PStr [
           { pstr_desc = Pstr_value (Recursive, _) }]), _); pstr_loc }
         when StringSet.mem ext expected_ext ->
-            Error.error ~loc:pstr_loc "non recursive `let` expected"
+            Error.(error ~loc:pstr_loc Non_recursive_let)
 
       | x -> default_mapper.structure_item mapper x
       );
@@ -229,17 +270,17 @@ let extend_mapper argv = {
                     Exp.let_ Nonrecursive (gen_bindings ext vbl)
                       @@ mapper.expr mapper e
                   | Pexp_let (Recursive, vbl, e) ->
-                    Error.error ~loc "non recursive `let` expected"
+                    Error.(error ~loc Non_recursive_let)
                   | _ ->
-                    Error.error ~loc "`let` expected"
+                    Error.(error ~loc Only_on_let)
                 end
-              | _ -> Error.error ~loc "only allowed on let"
+              | _ -> Error.(error ~loc Only_on_let)
             end
           with
           | Ast.Error (loc, e) ->
-            Error.error ~loc (Format.asprintf "%a" Ast.print_error e)
+            Error.(error ~loc (Other_err (e, Ast.print_error)))
           | Sync2ml.Error (loc, e) ->
-            Error.error ~loc (Format.asprintf "%a" Sync2ml.print_error e)
+            Error.(error ~loc (Other_err (e, Sync2ml.print_error)))
         end
       | x -> default_mapper.expr mapper x;
   }
