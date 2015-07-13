@@ -22,9 +22,6 @@ The core language is completely compatible with vanilla OCaml compiler >4.02.1.
 
 * Code generation
 
-  * weird error when forgotting `;` after the last signal decl
-  * remove initialization syntax on global signals
-
   * ideas for addings runs and local signals(!!) (same problem actually)
     * add calls to run and define local in grc (both have only one child => less work)
     * for surface and depth : if i'm not selected,
