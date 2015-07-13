@@ -109,6 +109,11 @@ let%to_dot_grc evenodd =
     present a (emit b (if !!a mod 2 = 0 then "even" else "odd"));
     pause
   end
+  ||
+  loop begin
+    present a (emit b (if !!a mod 2 = 0 then "even" else "odd"));
+    pause
+  end
 
 
 let par_deps ctx = assert_equal

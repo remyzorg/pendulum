@@ -41,6 +41,36 @@ and ml_ast =
   | MLfinish
 
 
+let rec pp_type_ml_sequence lvl fmt =
+  let indent = String.init lvl (fun _ -> ' ') in
+  Format.(function
+      (* | Seq (Seqlist [], s) | Seq (s, Seqlist[]) -> pp_type_ml_sequence lvl fmt s *)
+
+      | Seqlist ml_asts ->
+        fprintf fmt "%sSeqlist [\n%a]"
+          indent (MList.pp_iter ~sep:";\n" (pp_type_ml_ast (lvl + 2))) ml_asts
+
+      | Seq (mlseq1, mlseq2) ->
+        fprintf fmt "%sSeq (\n%a,\n%a)" indent (pp_type_ml_sequence (lvl + 1))
+          mlseq1 (pp_type_ml_sequence (lvl + 2)) mlseq2
+    )
+
+and pp_type_ml_ast lvl fmt =
+  let indent = String.init lvl (fun _ -> ' ') in
+  Format.(function
+    | MLemit s -> fprintf fmt "%sEmit %s" indent s.ident.content
+    | MLif (mltest_expr, mlseq1, mlseq2) ->
+      fprintf fmt "%sMLif(%a, \n%a, \n%a)"
+        indent pp_ml_test_expr mltest_expr
+        (pp_type_ml_sequence (lvl + 2)) mlseq1
+        (pp_type_ml_sequence (lvl + 2)) mlseq2
+    | MLenter i -> fprintf fmt "%sEnter %d" indent i
+    | MLexit i -> fprintf fmt "%sExit %d" indent i
+    | MLexpr e -> fprintf fmt "%s%s" indent (asprintf "%a" Pprintast.expression e.exp)
+    | MLpause -> fprintf fmt "%sPause" indent
+    | MLfinish -> fprintf fmt "%sFinish" indent
+    )
+
 let rec pp_ml_sequence lvl fmt =
   Format.(function
       | Seqlist [] | Seq (Seqlist [], Seqlist []) -> assert false
@@ -241,8 +271,11 @@ module Ocaml_gen = struct
     | MLfinished -> [%expr Bitset.mem [%e Exp.ident select_env_ident] 0]
 
   let rec construct_sequence depl mlseq =
+    (* pp_type_ml_sequence 0 Format.std_formatter mlseq; *)
+    (* Format.printf "\n=================\n"; *)
     match mlseq with
-    | Seq (Seqlist [], Seqlist []) | Seqlist [] -> assert false
+    | Seq (Seqlist [], Seqlist []) | Seqlist [] ->
+      assert false
     | Seq (mlseq, Seqlist []) | Seq (Seqlist [], mlseq) ->
       construct_sequence depl mlseq
     | Seqlist ml_asts ->
@@ -260,9 +293,11 @@ module Ocaml_gen = struct
       [%expr set_present_value [%e Exp.ident @@ mk_ident s.ident] [%e s.value]]
 
     | MLif (test, mlseq1, mlseq2) ->
-      begin match mlseq2 with
-        | Seqlist [] | Seq (Seqlist [], Seqlist []) ->
+      begin match mlseq1, mlseq2 with
+        | mlseq1, (Seqlist [] | Seq (Seqlist [], Seqlist [])) ->
           [%expr if [%e construct_test test] then [%e construct_sequence depl mlseq1]]
+        | (Seqlist [] | Seq (Seqlist [], Seqlist [])), mseq2 ->
+          [%expr if not [%e construct_test test] then [%e construct_sequence depl mlseq2]]
         | _ ->
           [%expr if [%e construct_test test] then
                    [%e construct_sequence depl mlseq1]
