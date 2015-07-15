@@ -97,7 +97,7 @@ let par_deps ctx = assert_equal
      in ast)
     (Par (Present_then ("S1", emit "S2"), Present_then ("S2", Atom)))
 
-let%to_dot_grc evenodd =
+let%sync_ast evenodd =
   input a;
   output b;
   loop begin

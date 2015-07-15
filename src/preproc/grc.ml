@@ -316,6 +316,8 @@ module Of_ast = struct
       | Nothing -> endp
       | Atom f -> Atom f >> endp
 
+
+
       | Suspend (q, _) ->
         enter_node p
         @@ surface env q pause
@@ -327,9 +329,11 @@ module Of_ast = struct
         @@ exit_node p endp
 
       | Seq (q,r) ->
-        enter_node p
-        @@ surface env q pause
-        @@ surface env r pause endp
+        enter_node p @@
+        if env.under_suspend || Ast.Analysis.blocking q then
+          surface env q pause endp
+        else
+          surface env q pause @@ surface env r pause endp
 
       | Present (s, q, r) ->
         let end_pres = exit_node p endp in
@@ -385,10 +389,25 @@ module Of_ast = struct
 
       | Atom f -> endp
       | Exit _ -> endp
-      | Loop q -> depth env q pause (surface env q pause pause)
+      | Loop q ->
+        let surf_q = surface env q pause pause in
+        depth env q pause surf_q
 
       | Seq (q, r) ->
         let end_seq = exit_node p endp in
+
+
+        let surf_r = surface env r pause end_seq in
+        let depth_r = depth env r pause end_seq in
+
+        let in_q = depth env q pause surf_r in
+
+        (* Format.printf "%a\n---------------\n" Ast.Tagged.print_to_dot r; *)
+        (* Format.printf "%a\n---------------\n" Flowgraph.pp end_seq; *)
+        (* Format.printf "%a\n---------------\n" Flowgraph.pp surf_r; *)
+        (* Format.printf "%a\n===============\n" Flowgraph.pp depth_r; *)
+
+
         if env.under_suspend || Ast.Analysis.blocking q then
           test_node (Selection q.id) (
             depth env q pause (surface env r pause end_seq),
