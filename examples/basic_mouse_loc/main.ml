@@ -1,53 +1,53 @@
 
 let%sync m =
-  input a 0;
-  output b "";
+  input btn_up;
+  input move;
+  input ex;
 
   loop begin
-    present b (atom (
-        Printf.printf "%s %d\n" !!b !!a
+    present btn_up (
+      atom (
+        Graphics.draw_string (Format.sprintf "%dx%d" (fst !!move) (snd !!move));
       ));
     pause
   end
   ||
   loop begin
-    present a (emit b (if !!a mod 2 = 0 then "even" else "odd"));
+    present move (
+      atom (
+        Graphics.moveto (fst !!move) (snd !!move);
+      ));
+    pause
+  end
+  ||
+  loop begin
+    present ex (atom (Graphics.close_graph ()));
     pause
   end
 
-let%sync m2 =
-  input a ();
-  loop begin
-    present a begin
-      atom (print_string "hello\n");
-      pause;
-      atom (print_string "world\n");
-      pause;
-    end begin
-      atom (print_string "bonjour\n");
-      pause;
-      atom (print_string "le monde\n");
-      pause;
-    end
-  end
+open Graphics
 
 let () =
-  let open Pendulum.Machine in
-  let a = make_signal 0 in
-  let b = make_signal "" in
-  let step = m.instantiate (a, b) in
-  for i = 1 to 10 do
-    set_present_value a i;
-    ignore (step ());
+  let open Pendulum in
+  let open Machine in
+  Graphics.open_graph " 300x300";
+
+  let btn_up = Machine.make_signal () in
+  let move = Machine.make_signal (0,0) in
+  (* let btn_up = Machine.make_signal () in *)
+  (* let circle = Machine.make_signal (100, 100) in *)
+  let ext = Machine.make_signal () in
+  let step = m.instantiate (btn_up, move, ext) in
+  while true do
+    let status =
+      Graphics.(wait_next_event [Mouse_motion; Button_down; Key_pressed])
+    in
+    Machine.set_present_value move (status.mouse_x, status.mouse_y);
+    if status.button then Machine.set_present_value btn_up ();
+    if status.keypressed && status.key ='q' then Machine.set_present_value ext ();
+    ignore(step ())
   done
 
-let () = Format.printf "@."
 
-let () =
-  let open Pendulum.Machine in
-  let a = make_signal () in
-  let step = m2.instantiate a in
-  for i = 0 to 9 do
-    if i mod 3 = 0 then set_present a;
-    ignore (step ());
-  done
+
+

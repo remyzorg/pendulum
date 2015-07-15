@@ -115,23 +115,36 @@ let%to_dot_grc evenodd =
     pause
   end
 
-let%sync_ast constraint_test =
-  input a, b;
+let%sync_ast m = (* Grc.Error  (_, _) *)
+  input btn_up;
+  input move;
+  input ex;
 
-  loop begin
-    present a begin
-      atom (print_string "hello\n");
-      pause;
-      atom (print_string "world\n");
-      pause;
-    end begin
-      atom (print_string "bonjour\n");
-      pause;
-      atom (print_string "le monde\n");
-      pause;
+  trap ex begin
+    loop begin
+      present btn_up (atom ())
     end
-  end
+    ||
+    loop begin
+      present move (
+        atom ());
+      pause
+    end
+    ||
+    loop begin
+      present ex (exit ex);
+      pause
+    end
+  end;
+  atom ()
 
+let%sync_ast m = (* Bad grc generation : loop that doesn't loop *)
+  input click;
+  input move;
+  loop begin
+    pause;
+    atom (Format.printf "step@\n");
+  end
 
 let par_deps ctx = assert_equal
     (let%sync_ast ast =
