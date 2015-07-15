@@ -215,7 +215,7 @@ let parse_ast ext vb =
       let pat =
         match vb.pvb_pat.ppat_desc with
         | Ppat_var id -> id.txt
-        | _ -> ""
+        | _ -> "unnamed"
       in
       let ast = ast_of_expr e in
       let tast, env = Ast.Tagged.of_ast ~sigs ast in
@@ -248,20 +248,31 @@ let expected_ext = Utils.StringSet.(
 
 let extend_mapper argv = {
   default_mapper with
-    structure_item = (fun mapper stri -> match stri with
-      | { pstr_desc = Pstr_extension (({ txt = ext }, PStr [
-          { pstr_desc = Pstr_value (Nonrecursive, vbs) }]), attrs); pstr_loc }
-        when StringSet.mem ext expected_ext ->
+  structure_item = (fun mapper stri ->
 
-        (Str.value Nonrecursive (gen_bindings ext vbs))
+      begin try
+          match stri with
+          | { pstr_desc = Pstr_extension (({ txt = ext }, PStr [
+              { pstr_desc = Pstr_value (Nonrecursive, vbs) }]), attrs); pstr_loc }
+            when StringSet.mem ext expected_ext ->
 
-      | { pstr_desc = Pstr_extension (({ txt = ext }, PStr [
-          { pstr_desc = Pstr_value (Recursive, _) }]), _); pstr_loc }
-        when StringSet.mem ext expected_ext ->
+            (Str.value Nonrecursive (gen_bindings ext vbs))
+
+          | { pstr_desc = Pstr_extension (({ txt = ext }, PStr [
+              { pstr_desc = Pstr_value (Recursive, _) }]), _); pstr_loc }
+            when StringSet.mem ext expected_ext ->
             Error.(error ~loc:pstr_loc Non_recursive_let)
 
-      | x -> default_mapper.structure_item mapper x
-      );
+          | x -> default_mapper.structure_item mapper x
+        with
+        | Ast.Error (loc, e) ->
+          Error.(error ~loc (Other_err (e, Ast.print_error)))
+        | Sync2ml.Error (loc, e) ->
+          Error.(error ~loc (Other_err (e, Sync2ml.print_error)))
+        | Grc.Error (loc, e) ->
+          Error.(error ~loc (Other_err (e, Grc.print_error)))
+      end
+    );
 
     expr = fun mapper expr -> match expr with
       | { pexp_desc = Pexp_extension ({ txt = ext; loc }, e)}
