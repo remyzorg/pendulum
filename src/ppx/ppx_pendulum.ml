@@ -201,20 +201,25 @@ let ast_of_expr e =
     | [%expr output [%e? _ ] [%e? _] [%e? e_err]] ->
       Error.(syntax_error ~loc:e_err.pexp_loc Forgot_sem)
 
-
     | e -> Error.(syntax_error ~loc:e.pexp_loc Keyword)
   in visit e
 
-let parse_ast loc ext e =
-  let e, sigs = pop_signals_decl e in
+let parse_ast ext vb =
+  let e, sigs = pop_signals_decl vb.pvb_expr in
+  let loc = vb.pvb_loc in
   begin match ext with
     | "sync_ast" ->
       [%expr ([%e Pendulum_misc.expr_of_ast @@ ast_of_expr e])]
 
     | "to_dot_grc" ->
+      let pat =
+        match vb.pvb_pat.ppat_desc with
+        | Ppat_var id -> id.txt
+        | _ -> ""
+      in
       let ast = ast_of_expr e in
       let tast, env = Ast.Tagged.of_ast ~sigs ast in
-      Pendulum_misc.print_to_dot loc tast;
+      Pendulum_misc.print_to_dot loc pat tast;
       let _ocaml_expr =
         Sync2ml.generate ~sigs:(sigs, env.Ast.Tagged.all_local_signals) tast in
       (* Format.printf "%a@." Pprintast.expression ocaml_expr; *)
@@ -230,10 +235,9 @@ let parse_ast loc ext e =
     | _ -> assert false
   end
 
-
 let gen_bindings ext vbl =
   List.map (fun vb ->
-      {vb with pvb_expr = parse_ast vb.pvb_loc ext vb.pvb_expr}
+      {vb with pvb_expr = parse_ast ext vb}
     ) vbl
 
 
@@ -281,6 +285,8 @@ let extend_mapper argv = {
             Error.(error ~loc (Other_err (e, Ast.print_error)))
           | Sync2ml.Error (loc, e) ->
             Error.(error ~loc (Other_err (e, Sync2ml.print_error)))
+          | Grc.Error (loc, e) ->
+            Error.(error ~loc (Other_err (e, Grc.print_error)))
         end
       | x -> default_mapper.expr mapper x;
   }

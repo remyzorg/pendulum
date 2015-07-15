@@ -44,6 +44,16 @@ module Flowgraph : sig
 
 end
 
+type error =
+  | Unbound_label of string
+  | Cyclic_causality of Flowgraph.t
+  | Par_leads_to_finish of Flowgraph.t
+
+exception Error of Location.t * error
+
+val print_error : Format.formatter -> error -> unit
+
+
 module Of_ast : sig
   val flowgraph : Ast.Tagged.t -> Flowgraph.t
   val construct : Ast.Tagged.t -> Selection_tree.t * Flowgraph.t

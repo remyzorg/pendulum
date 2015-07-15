@@ -138,7 +138,7 @@ let%sync_ast m = (* Grc.Error  (_, _) *)
   end;
   atom ()
 
-let%sync_ast m = (* Bad grc generation : loop that doesn't loop *)
+let%to_dot_grc loop_pause_atom = (* Bad grc generation : loop that doesn't loop *)
   input click;
   input move;
   loop begin

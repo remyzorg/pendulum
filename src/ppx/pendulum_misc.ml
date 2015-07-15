@@ -90,15 +90,14 @@ let print_to_dot_one name ext f e =
   (Unix.unlink (full_name ^ ".dot"))
 
 
-let print_to_dot loc =
+let print_to_dot loc pat =
   let open Location in
-  let n = ref 0 in
   fun e ->
     let name = Filename.(
         loc.loc_start.Lexing.pos_fname
         |> chop_extension
         |> basename
-      ) ^ ("_" ^ (string_of_int !n))
+      ) ^ ("_" ^ pat)
     in
     print_to_dot_one name "_tagged" Ast.Tagged.print_to_dot e;
     let sel, fg = Grc.Of_ast.construct e in
