@@ -3,7 +3,7 @@
 let%sync m =
   input btn_up;
   input move;
-  input ex1;
+  input ex;
 
   loop begin
     present btn_up (

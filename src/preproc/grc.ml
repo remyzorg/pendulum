@@ -285,10 +285,7 @@ module Of_ast = struct
 
   type flow_builder = env -> Tagged.t -> Flowgraph.t -> Flowgraph.t -> Flowgraph.t
 
-  let memo_rec :
-    (int, Flowgraph.t) Hashtbl.t ->
-    (flow_builder -> flow_builder) ->
-    flow_builder =
+  let memo_rec =
     fun h f ->
       let open Tagged in
       let rec g env x p e =
@@ -329,11 +326,12 @@ module Of_ast = struct
         @@ exit_node p endp
 
       | Seq (q,r) ->
-        enter_node p @@
-        if env.under_suspend || Ast.Analysis.blocking q then
-          surface env q pause endp
-        else
-          surface env q pause @@ surface env r pause endp
+
+        let surf_r = (surface env r pause @@ exit_node p endp) in
+        Hashtbl.remove h r.id;
+        enter_node p
+        @@ surface env q pause
+        @@ surf_r
 
       | Present (s, q, r) ->
         let end_pres = exit_node p endp in
@@ -684,12 +682,12 @@ module Schedule = struct
 
 
 
-            (* | Finish, fg2 -> Finish *)
-            (* | Pause, fg2 -> Pause *)
+            (* | Finish, fg2 -> fg2 *)
+            (* | Pause, fg2 -> fg2 *)
 
             | (Finish | Pause), fg
             | fg, (Finish | Pause) ->
-              error ~loc:Ast.dummy_loc (Par_leads_to_finish fg1)
+              error ~loc:Ast.dummy_loc (Par_leads_to_finish fg2)
 
             | Test (Signal s, t1, t2), fg2 ->
               if emits fg2 stop s then
