@@ -682,9 +682,13 @@ module Schedule = struct
             | fg1, fg2 when fork_id fg1 = fork_id stop
               -> sequence_of_fork stop fg2 fg1
 
-            | (Pause | Finish), _ ->
-              error ~loc:Ast.dummy_loc (Par_leads_to_finish fg2)
-            | _, (Finish | Pause) ->
+
+
+            (* | Finish, fg2 -> Finish *)
+            (* | Pause, fg2 -> Pause *)
+
+            | (Finish | Pause), fg
+            | fg, (Finish | Pause) ->
               error ~loc:Ast.dummy_loc (Par_leads_to_finish fg1)
 
             | Test (Signal s, t1, t2), fg2 ->

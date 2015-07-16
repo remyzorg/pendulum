@@ -112,7 +112,7 @@ let%sync_ast evenodd =
     pause
   end
 
-let%sync_ast m = (* Grc.Error  (_, _) *)
+let%to_dot_grc m = (* Grc.Error  (_, _) *)
   input btn_up;
   input move;
   input ex;
@@ -123,27 +123,12 @@ let%sync_ast m = (* Grc.Error  (_, _) *)
     end
     ||
     loop begin
-      present move (
-        atom ());
-      pause
-    end
-    ||
-    loop begin
       present ex (exit ex);
       pause
     end
   end;
   atom ()
 
-let%sync loop_pause_atom = (* Bad grc generation : loop that doesn't loop *)
-  input click;
-  input move;
-  loop begin
-    pause;
-    emit click ();
-    present click (
-    atom (Format.printf "step@\n"));
-  end
 
 let par_deps ctx = assert_equal
     (let%sync_ast ast =
