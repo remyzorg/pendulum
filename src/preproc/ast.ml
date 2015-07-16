@@ -55,7 +55,7 @@ let print_error fmt e =
   let open Format in
   fprintf fmt "%s"
     begin match e with
-      | Unbound_identifier s -> sprintf "unbound signal %s" s
+      | Unbound_identifier s -> sprintf "Unbound signal %s" s
     end
 
 
@@ -136,7 +136,6 @@ module Tagged = struct
   let rename env s p =
     IdentMap.(match find s env with
         | exception Not_found ->
-          iter (fun a b -> Format.printf "%s %d @\n" a.content b) env;
           error ~loc:p.loc @@ Unbound_identifier s.content
         | 0 -> s
         | i -> {s with content = Format.sprintf "%s~%d" s.content i})
@@ -160,7 +159,9 @@ module Tagged = struct
       | Derived.Loop t -> mk_tagged (Loop (visit env t)) !+id
 
       | Derived.Seq (st1, st2) ->
-        mk_tagged (Seq (visit env st1, visit env st2)) !+id
+        let st1 = visit env st1 in
+        let st2 = visit env st2 in
+        mk_tagged (Seq (st1, st2)) !+id
 
       | Derived.Par (st1, st2) ->
         mk_tagged (Par (visit env st1, visit env st2)) !+id
@@ -172,17 +173,18 @@ module Tagged = struct
       | Derived.Await s -> mk_tagged (Await (rename env.signals s ast)) !+id
 
       | Derived.Suspend (t, s) ->
-        mk_tagged (Suspend (visit env t, rename env.signals s ast)) !+id
+        let s = rename env.signals s ast in
+        mk_tagged (Suspend (visit env t, s)) !+id
 
       | Derived.Trap (Label s, t) ->
         let labels, s = add_label env.labels s in
         mk_tagged (Trap (Label s, visit {env with labels} t)) !+id
 
-      | Derived.Exit (Label s) -> mk_tagged (Exit (Label (rename env.labels s ast))) !+id
+      | Derived.Exit (Label s) ->
+        mk_tagged (Exit (Label (rename env.labels s ast))) !+id
       | Derived.Present (s, t1, t2) ->
-        mk_tagged (Present(
-            rename env.signals s ast, visit env t1, visit env t2))
-          !+id
+        let s = rename env.signals s ast in
+        mk_tagged (Present(s, visit env t1, visit env t2)) !+id
       | Derived.Atom f -> mk_tagged (Atom {
           locals = List.map (fun x -> x.ident) env.local_signals;
           exp = f
@@ -195,7 +197,8 @@ module Tagged = struct
 
       | Derived.Halt -> mk_tagged (Loop (mk_tagged Pause !+id)) !+id
       | Derived.Sustain s -> mk_tagged (Loop (mk_tagged (Emit s) !+id)) !+id
-      | Derived.Present_then (s, st) -> mk_tagged (Present (s, (visit env st), mk_tagged Nothing !+id) ) !+id
+      | Derived.Present_then (s, st) ->
+        visit env Derived.(mkl @@ Present (s, st, mkl @@ Nothing))
       | Derived.Await_imm s ->
         mk_tagged (Trap (trap_signal,
               mk_tagged (Loop (

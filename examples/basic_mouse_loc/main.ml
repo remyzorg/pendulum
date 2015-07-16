@@ -1,8 +1,9 @@
 
+
 let%sync m =
   input btn_up;
   input move;
-  input ex;
+  input ex1;
 
   loop begin
     present btn_up (
@@ -47,7 +48,3 @@ let () =
     if status.keypressed && status.key ='q' then Machine.set_present_value ext ();
     ignore(step ())
   done
-
-
-
-

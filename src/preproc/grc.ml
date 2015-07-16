@@ -395,19 +395,6 @@ module Of_ast = struct
 
       | Seq (q, r) ->
         let end_seq = exit_node p endp in
-
-
-        let surf_r = surface env r pause end_seq in
-        let depth_r = depth env r pause end_seq in
-
-        let in_q = depth env q pause surf_r in
-
-        (* Format.printf "%a\n---------------\n" Ast.Tagged.print_to_dot r; *)
-        (* Format.printf "%a\n---------------\n" Flowgraph.pp end_seq; *)
-        (* Format.printf "%a\n---------------\n" Flowgraph.pp surf_r; *)
-        (* Format.printf "%a\n===============\n" Flowgraph.pp depth_r; *)
-
-
         if env.under_suspend || Ast.Analysis.blocking q then
           test_node (Selection q.id) (
             depth env q pause (surface env r pause end_seq),

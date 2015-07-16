@@ -265,7 +265,8 @@ module Ocaml_gen = struct
 
   let rec construct_test test =
     match test with
-    | MLsig s -> [%expr !?[%e Exp.ident @@ mk_ident s]]
+    | MLsig s ->
+      [%expr !?[%e Exp.ident ~loc:s.loc @@ mk_ident s]]
     | MLselect i -> [%expr Bitset.mem [%e Exp.ident select_env_ident] [%e int_const i]]
     | MLor (mlte1, mlte2) -> [%expr [%e construct_test mlte1 ] || [%e construct_test mlte2]]
     | MLfinished -> [%expr Bitset.mem [%e Exp.ident select_env_ident] 0]
@@ -290,7 +291,7 @@ module Ocaml_gen = struct
   and construct_ml_ast depl ast =
     match ast with
     | MLemit s ->
-      [%expr set_present_value [%e Exp.ident @@ mk_ident s.ident] [%e s.value]]
+      [%expr set_present_value [%e Exp.ident ~loc:s.ident.loc @@ mk_ident s.ident] [%e s.value]]
 
     | MLif (test, mlseq1, mlseq2) ->
       begin match mlseq1, mlseq2 with

@@ -104,13 +104,10 @@ let%sync_ast evenodd =
     present b (atom (Printf.printf "%s %d\n" !!b !!a));
     pause
   end
-  ||
-  loop begin
-    present a (emit b (if !!a mod 2 = 0 then "even" else "odd"));
+  || loop begin present a (emit b (if !!a mod 2 = 0 then "even" else "odd"));
     pause
   end
-  ||
-  loop begin
+  || loop begin
     present a (emit b (if !!a mod 2 = 0 then "even" else "odd"));
     pause
   end
@@ -138,12 +135,14 @@ let%sync_ast m = (* Grc.Error  (_, _) *)
   end;
   atom ()
 
-let%to_dot_grc loop_pause_atom = (* Bad grc generation : loop that doesn't loop *)
+let%sync loop_pause_atom = (* Bad grc generation : loop that doesn't loop *)
   input click;
   input move;
   loop begin
     pause;
-    atom (Format.printf "step@\n");
+    emit click ();
+    present click (
+    atom (Format.printf "step@\n"));
   end
 
 let par_deps ctx = assert_equal
