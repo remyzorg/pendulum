@@ -6,7 +6,6 @@ module Selection_tree = struct
   open Tagged
 
   type t = {label : int; t : repr; mutable tested : bool}
-      [@@deriving show]
   and repr =
     | Bottom
     | Pause
@@ -313,8 +312,6 @@ module Of_ast = struct
       | Nothing -> endp
       | Atom f -> Atom f >> endp
 
-
-
       | Suspend (q, _) ->
         enter_node p
         @@ surface env q pause
@@ -341,7 +338,7 @@ module Of_ast = struct
           surface env r pause end_pres
         )
 
-      | Loop q -> enter_node p @@ surface env q pause endp
+      | Loop q -> enter_node p @@ surface env q pause pause
 
       | Par (q, r) ->
         let syn = try Hashtbl.find env.synctbl (q.id, r.id) with
@@ -656,15 +653,6 @@ module Schedule = struct
   let fork_id = function
     | Flowgraph.Sync (c, _, _) -> c
     | _ -> 0, 0
-
-  let print_to_dot_one name ext f e =
-    let full_name = (name ^ ext) in
-    let c = open_out (full_name ^ ".dot") in
-    let fmt = Format.formatter_of_out_channel c in
-    f fmt e;
-    close_out c;
-    ignore @@ Sys.command (Format.sprintf "dot -Tpdf %s.dot -o %s.pdf" full_name full_name);
-    (Unix.unlink (full_name ^ ".dot"))
 
   let rec interleave fg =
     let fork_tbl = Fgtbl2.create 17 in

@@ -112,7 +112,7 @@ let%sync_ast evenodd =
     pause
   end
 
-let%to_dot_grc loop_pause_atom = (* Bad grc generation : loop that doesn't loop *)
+let%sync_ast loop_pause_atom = (* Bad grc generation : loop that doesn't loop *)
   input click;
   input move;
   loop begin
@@ -120,16 +120,30 @@ let%to_dot_grc loop_pause_atom = (* Bad grc generation : loop that doesn't loop 
     atom (Format.printf "step@\n");
   end
 
+
+
 let%to_dot_grc m = (* Grc.Error  (_, _) *)
-  input btn_up;
-  input move;
   input ex;
 
   trap t (
     loop (
       present ex (exit t);
-      pause))
-  ; atom (ignore 2)
+      pause;
+    );
+  )
+
+let%sync_ast m = (* Grc.Error  (_, _) *)
+  input btn_up;
+  input move;
+  input ex;
+
+  trap t (
+    ((exit t);
+     pause)
+    ||
+    (atom (ignore 255);
+     pause)
+  )
 
 
 let par_deps ctx = assert_equal

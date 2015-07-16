@@ -23,8 +23,6 @@ The core language is completely compatible with vanilla OCaml compiler >4.02.1.
 * Code generation
 
   * Find a way to handle correctly parallels in trap
-    * compile the grc in different way ?
-    * ignore the arc to end ?
 
   * ideas for addings runs and local signals(!!) (same problem actually)
     * add calls to run and define local in grc (both have only one child => less work)

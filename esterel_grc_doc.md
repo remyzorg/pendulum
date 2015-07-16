@@ -237,7 +237,6 @@ with a test on the selection state of the root node. The final end
 node is a *call* which set `finished` to true.
 
 
-
 ## From statement to flowgraph
 
 The symbole 
@@ -308,3 +307,39 @@ test_node q.id
 		-> pause
 		-> endp
 ```
+
+
+## Interleaving nodes
+
+* Algorithm to handle scheduling with `par` in `trap`
+
+``ocaml
+
+let rec inter (p1, p2, stop) =
+
+match leads_to_end stop p1, leads_to_end stop p2 with
+  | Some n1, Some n2 when n1 >= n2 -> p1
+  | Some n1, Some n2 -> p2
+  | Some _ , None -> p1
+  | None, Some _ -> p2
+  | None, None -> interleave p1 p2
+
+
+``
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
