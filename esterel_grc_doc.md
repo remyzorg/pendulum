@@ -313,7 +313,7 @@ test_node q.id
 
 * Algorithm to handle scheduling with `par` in `trap`
 
-``ocaml
+```ocaml
 
 let rec inter (p1, p2, stop) =
 
@@ -325,7 +325,7 @@ match leads_to_end stop p1, leads_to_end stop p2 with
   | None, None -> interleave p1 p2
 
 
-``
+```
 
 
 

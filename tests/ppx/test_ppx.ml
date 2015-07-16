@@ -122,9 +122,8 @@ let%sync_ast loop_pause_atom = (* Bad grc generation : loop that doesn't loop *)
 
 
 
-let%to_dot_grc m = (* Grc.Error  (_, _) *)
+let%sync_ast trap_loop =
   input ex;
-
   trap t (
     loop (
       present ex (exit t);
@@ -132,18 +131,19 @@ let%to_dot_grc m = (* Grc.Error  (_, _) *)
     );
   )
 
-let%sync_ast m = (* Grc.Error  (_, _) *)
+let%to_dot_grc m = (* Grc.Error  (_, _) *)
   input btn_up;
   input move;
   input ex;
 
   trap t (
-    ((exit t);
+    (present ex (exit t);
      pause)
     ||
-    (atom (ignore 255);
+    (atom (ignore 256);
      pause)
-  )
+  );
+  atom (ignore 512)
 
 
 let par_deps ctx = assert_equal

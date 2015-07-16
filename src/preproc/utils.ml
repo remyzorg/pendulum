@@ -52,4 +52,10 @@ module Option = struct
   let mapn v f =
     match v with None -> f () | Some v -> Some v
 
+  let map2 v1 v2 f =
+    match v1, v2 with
+    | None, None -> None
+    | Some v, None | None, Some v -> Some v
+    | Some v1, Some v2 -> Some (f v1 v2)
+
 end

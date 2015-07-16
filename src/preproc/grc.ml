@@ -627,6 +627,14 @@ module Schedule = struct
       | Pause | Finish -> None
     end
 
+  let leads_to_end stop fg =
+    let aux aux (stop, fg) = match fg with
+      | fg when fg == stop -> None
+      | Call (Exit n, t) -> Option.map (max n) (aux (stop, t))
+      | Call (a, t) -> aux (stop, t)
+      | Sync(_ , t1, t2) | Test (_, t1, t2) | Fork (t1, t2, _) -> None
+      | Pause | Finish -> Some 0
+    in memo_rec (module Fgtbl2) aux (stop, fg)
 
   let rec replace_join fg1 fg2 replf =
     let rec aux aux (fg1, fg2) =
@@ -665,13 +673,19 @@ module Schedule = struct
             | fg1, fg2 when fork_id fg1 = fork_id fg2 &&
                             fork_id fg1 = fork_id stop
               -> fg1
+
             | fg1, fg2 when fork_id fg1 = fork_id stop
               -> sequence_of_fork stop fg2 fg1
 
-
-
-            (* | Finish, fg2 -> fg2 *)
-            (* | Pause, fg2 -> fg2 *)
+            | fg1, fg2 when leads_to_end stop fg1 != None
+                            || leads_to_end stop fg2 != None ->
+              begin match leads_to_end stop fg1, leads_to_end stop fg2 with
+                | Some n1, Some n2 when n1 >= n2 -> fg1
+                | Some n1, Some n2 -> fg2
+                | Some _, None -> fg1
+                | None, Some _ -> fg2
+                | None, None -> assert false
+              end
 
             | (Finish | Pause), fg
             | fg, (Finish | Pause) ->
