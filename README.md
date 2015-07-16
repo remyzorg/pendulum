@@ -22,8 +22,6 @@ The core language is completely compatible with vanilla OCaml compiler >4.02.1.
 
 * Code generation
 
-  * grc is wrong when having : `loop begin pause; atom () end`
-  * no localization on `Unbound value` errors in `present <signal>`
   * Grc.Error (?) with trap
 
   * ideas for addings runs and local signals(!!) (same problem actually)
