@@ -34,6 +34,7 @@ type ml_sequence =
 and ml_ast =
   | MLemit of Parsetree.expression Ast.valued_signal
   | MLif of ml_test_expr * ml_sequence * ml_sequence
+  | MLassign of Parsetree.expression Ast.valued_signal
   | MLenter of int
   | MLexit of int
   | MLexpr of Ast.atom [@printer fun fmt e -> Pprintast.expression fmt e.exp]
@@ -64,6 +65,7 @@ and pp_type_ml_ast lvl fmt =
         indent pp_ml_test_expr mltest_expr
         (pp_type_ml_sequence (lvl + 2)) mlseq1
         (pp_type_ml_sequence (lvl + 2)) mlseq2
+    | MLassign vs -> fprintf fmt "%sMLassign %s" indent vs.ident.content
     | MLenter i -> fprintf fmt "%sEnter %d" indent i
     | MLexit i -> fprintf fmt "%sExit %d" indent i
     | MLexpr e -> fprintf fmt "%s%s" indent (asprintf "%a" Pprintast.expression e.exp)
@@ -86,10 +88,11 @@ and pp_ml_ast lvl fmt =
   let indent = String.init lvl (fun _ -> ' ') in
   Format.(function
     | MLemit s -> fprintf fmt "%semit %s" indent s.ident.content
+    | MLassign vs ->
+      fprintf fmt "%s := %a" vs.ident.content Pprintast.expression vs.value
     | MLif (mltest_expr, mlseq1, mlseq2) ->
-      fprintf fmt "%sif %a then (\n" indent pp_ml_test_expr mltest_expr;
-      (pp_ml_sequence (lvl + 2)) fmt mlseq1;
-      fprintf fmt "\n%s)" indent;
+      fprintf fmt "%sif %a then (\n%a\n%s)" indent pp_ml_test_expr mltest_expr
+        (pp_ml_sequence (lvl + 2)) mlseq1 indent;
       begin match mlseq2 with
        | Seqlist [] | Seq (Seqlist [], Seqlist []) -> ()
        | mlseq2 ->
@@ -122,6 +125,7 @@ let construct_ml_action deps mr a =
   | Atom e -> mls @@ MLexpr e
   | Enter i -> mls @@ MLenter i
   | Exit i -> ml @@ MLexit i :: List.map (fun x -> MLexit x) deps.(i)
+  | Local_signal vs -> assert false (* TODO *)
 
 let (<::) sel l =
   let open Grc.Selection_tree in
@@ -304,6 +308,9 @@ module Ocaml_gen = struct
                    [%e construct_sequence depl mlseq1]
                  else [%e construct_sequence depl mlseq2]]
       end
+
+    | MLassign vs ->
+      [%expr [%e Exp.ident ~loc:vs.ident.loc @@ mk_ident vs.ident] := [%e vs.value]]
 
     | MLenter i ->
       [%expr Bitset.add

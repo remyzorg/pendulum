@@ -22,17 +22,29 @@ The core language is completely compatible with vanilla OCaml compiler >4.02.1.
 
 * Code generation
 
-  * Find a way to handle correctly parallels in trap
+  * just add the code generation for `Signal` in grc
 
   * ideas for addings runs and local signals(!!) (same problem actually)
     * add calls to run and define local in grc (both have only one child => less work)
-    * for surface and depth : if i'm not selected,
-      * I initialize the signal with the default value (may have to recreate a new one)
-      * I Initialize the machine with the corrects inputs then I run one step
-    * If I'm not, 
-      * I do nothing 
-      * I run one step
+    * for GRC gen (surface and depth) :
+      * if i'm not selected,
+        * I initialize the signal with the default value (may have to recreate a new one)
+        * I Initialize the machine with the corrects inputs then I run one step
+      * If I am, 
+        * I do nothing 
+        * I run one step
     * both must be defined globally :/ that might a problem for machines :> or maybe not
+
+  * Machine inputs and outputs from ML world
+    * `instantiates` must no longer take signals but only
+      * initial values for inputs
+      * callback functions for ouputs ?
+        * what does it implies for `run` ?
+    * `instantiates` gives two values :
+      * `step : unit -> Machine.state`
+      * `(t1 -> unit) * ... * (ti -> unit)` : one function for each input signal.
+      It set the signal present and its value. So the function is very linked to the machine and
+      cannot be shared between machines.
 
 
 * Documentation :

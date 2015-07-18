@@ -18,6 +18,7 @@ type ml_sequence =
 and ml_ast =
   | MLemit of Parsetree.expression Ast.valued_signal
   | MLif of ml_test_expr * ml_sequence * ml_sequence
+  | MLassign of Parsetree.expression Ast.valued_signal
   | MLenter of int
   | MLexit of int
   | MLexpr of Ast.atom

@@ -71,6 +71,7 @@ module Flowgraph = struct
     | Atom of Ast.atom
     | Enter of int
     | Exit of int
+    | Local_signal of Parsetree.expression Ast.valued_signal
 
   let pp_action_dot fmt a =
     Format.(fprintf fmt "%s" begin
@@ -79,6 +80,7 @@ module Flowgraph = struct
         | Atom e -> asprintf "%a" Pprintast.expression e.Ast.exp
         | Enter i -> sprintf "enter %d" i
         | Exit i -> sprintf "exit %d" i
+        | Local_signal vs -> asprintf "signal %s (%a)" vs.ident.content Pprintast.expression vs.value
       end)
 
   let pp_action fmt a =
@@ -88,6 +90,7 @@ module Flowgraph = struct
         | Atom e -> asprintf "Atom (%a)" Pprintast.expression e.Ast.exp
         | Enter i -> sprintf "Enter %d" i
         | Exit i -> sprintf "Exit %d" i
+        | Local_signal vs -> asprintf "Local_signal %s" vs.ident.content
       end)
 
   type test_value =
@@ -203,7 +206,7 @@ module Flowgraph = struct
 
   let style_of_node = function
     | Call (a, _) -> "shape=oval" ^ begin match a with
-        | Emit s ->", fontcolor=blue, "
+        | Emit _ | Local_signal _ ->", fontcolor=blue, "
         | Atom _ -> ", "
         | Enter i -> ", fontcolor=darkgreen, "
         | Exit i -> ", fontcolor=red, "

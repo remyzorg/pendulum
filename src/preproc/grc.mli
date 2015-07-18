@@ -21,6 +21,7 @@ module Flowgraph : sig
     | Atom of Ast.atom
     | Enter of int
     | Exit of int
+    | Local_signal of Parsetree.expression Ast.valued_signal
 
   type test_value =
     | Signal of Ast.signal
