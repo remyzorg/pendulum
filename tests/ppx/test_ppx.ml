@@ -120,8 +120,6 @@ let%sync_ast loop_pause_atom = (* Bad grc generation : loop that doesn't loop *)
     atom (Format.printf "step@\n");
   end
 
-
-
 let%sync_ast trap_loop =
   input ex;
   trap t (
@@ -131,7 +129,7 @@ let%sync_ast trap_loop =
     );
   )
 
-let%to_dot_grc m = (* Grc.Error  (_, _) *)
+let%sync_ast trap_seq = (* Grc.Error  (_, _) *)
   input btn_up;
   input move;
   input ex;
@@ -144,6 +142,24 @@ let%to_dot_grc m = (* Grc.Error  (_, _) *)
      pause)
   );
   atom (ignore 512)
+
+let%to_dot_grc locals =
+  input s;
+  input s1;
+
+  signal s "" (
+    loop (
+      present s1 (emit s "bonjour");
+      pause;
+    )
+    ||
+    loop (
+      present s (atom (Printf.printf "here : %s\n" !!s));
+      pause
+    )
+  )
+
+
 
 
 let par_deps ctx = assert_equal

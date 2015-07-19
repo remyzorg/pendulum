@@ -321,12 +321,12 @@ module Of_ast = struct
         @@ exit_node p endp
 
       | Signal (s, q) ->
-        enter_node p
-        @@ surface env q pause
-        @@ exit_node p endp
+        enter_node p (
+          Local_signal s
+          >> surface env q pause
+          @@ exit_node p endp)
 
       | Seq (q,r) ->
-
         let surf_r = (surface env r pause @@ exit_node p endp) in
         Hashtbl.remove h r.id;
         enter_node p

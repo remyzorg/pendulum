@@ -22,7 +22,6 @@ The core language is completely compatible with vanilla OCaml compiler >4.02.1.
 
 * Code generation
 
-  * just add the code generation for `Signal` in grc
 
   * ideas for addings runs and local signals(!!) (same problem actually)
     * add calls to run and define local in grc (both have only one child => less work)

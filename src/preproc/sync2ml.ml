@@ -125,7 +125,7 @@ let construct_ml_action deps mr a =
   | Atom e -> mls @@ MLexpr e
   | Enter i -> mls @@ MLenter i
   | Exit i -> ml @@ MLexit i :: List.map (fun x -> MLexit x) deps.(i)
-  | Local_signal vs -> assert false (* TODO *)
+  | Local_signal vs -> mls @@ MLassign vs
 
 let (<::) sel l =
   let open Grc.Selection_tree in
@@ -200,7 +200,7 @@ module Ocaml_gen = struct
 
   let mk_pat_var s = Pat.(Asttypes.(var @@ Location.mkloc s.content s.loc))
 
-  let mk_ident s = Location.(mkloc (Longident.Lident s.content) s.loc)
+  let mk_ident s = Exp.ident ~loc:s.loc Location.(mkloc (Longident.Lident s.content) s.loc)
 
   let mk_value_binding ?(pvb_loc=Location.none) ?(pvb_attributes=[]) pvb_pat pvb_expr =
     { pvb_pat; pvb_expr; pvb_attributes; pvb_loc; }
@@ -231,17 +231,17 @@ module Ocaml_gen = struct
     let open Grc.Selection_tree in
     fun e ->
       let let_sigs e = List.fold_left (fun acc signal ->
-          [%expr let [%p mk_pat_var signal.ident] = make_signal [%e signal.value] in [%e acc]]
+          [%expr let [%p mk_pat_var signal.ident] = ref make_signal [%e signal.value] in [%e acc]]
         ) e (local_sigs)
       in
       let set_sigs e =
         let set_locals =
           (List.fold_left (fun acc signal ->
-               [%expr set_absent [%e Exp.ident @@ mk_ident signal.ident]; [%e acc]]
+               [%expr set_absent ![%e mk_ident signal.ident]; [%e acc]]
              ) [%expr ()] local_sigs)
         in
         let set_globals = (List.fold_left (fun acc signal ->
-             [%expr set_absent [%e Exp.ident @@ mk_ident signal]; [%e acc]]
+             [%expr set_absent [%e mk_ident signal]; [%e acc]]
            ) set_locals global_sigs)
         in
         [%expr let set_absent () = [%e set_globals] in [%e e]]
@@ -270,10 +270,10 @@ module Ocaml_gen = struct
   let rec construct_test test =
     match test with
     | MLsig s ->
-      [%expr !?[%e Exp.ident ~loc:s.loc @@ mk_ident s]]
-    | MLselect i -> [%expr Bitset.mem [%e Exp.ident select_env_ident] [%e int_const i]]
+      [%expr !?[%e mk_ident s]]
+    | MLselect i -> [%expr Bitset.mem [%e select_env_ident] [%e int_const i]]
     | MLor (mlte1, mlte2) -> [%expr [%e construct_test mlte1 ] || [%e construct_test mlte2]]
-    | MLfinished -> [%expr Bitset.mem [%e Exp.ident select_env_ident] 0]
+    | MLfinished -> [%expr Bitset.mem [%e select_env_ident] 0]
 
   let rec construct_sequence depl mlseq =
     (* pp_type_ml_sequence 0 Format.std_formatter mlseq; *)
@@ -295,7 +295,7 @@ module Ocaml_gen = struct
   and construct_ml_ast depl ast =
     match ast with
     | MLemit s ->
-      [%expr set_present_value [%e Exp.ident ~loc:s.ident.loc @@ mk_ident s.ident] [%e s.value]]
+      [%expr set_present_value [%e mk_ident s.ident] [%e s.value]]
 
     | MLif (test, mlseq1, mlseq2) ->
       begin match mlseq1, mlseq2 with
@@ -310,16 +310,16 @@ module Ocaml_gen = struct
       end
 
     | MLassign vs ->
-      [%expr [%e Exp.ident ~loc:vs.ident.loc @@ mk_ident vs.ident] := [%e vs.value]]
+      [%expr [%e mk_ident vs.ident] := make_signal [%e vs.value]]
 
     | MLenter i ->
       [%expr Bitset.add
-               [%e Exp.ident select_env_ident]
+               [%e select_env_ident]
                [%e int_const i]]
 
     | MLexit i ->
         [%expr Bitset.remove
-                 [%e Exp.ident select_env_ident]
+                 [%e select_env_ident]
                  [%e int_const i]]
 
     | MLexpr pexpr ->
@@ -327,15 +327,12 @@ module Ocaml_gen = struct
         [%expr let () = [%e pexpr.exp] in ()]
       in
       (List.fold_left (fun acc x ->
-           Exp.let_ Asttypes.Nonrecursive
-             [(mk_value_binding
-                 (mk_pat_var (remove_signal_renaming x))
-                 (Exp.ident (mk_ident x)))]
-             acc
+           [%expr let [%p (mk_pat_var (remove_signal_renaming x))] =
+                    ![%e mk_ident x] in [%e acc]]
          ) atom_expr pexpr.locals)
 
     | MLpause -> [%expr set_absent (); Pause]
-    | MLfinish -> [%expr set_absent (); Bitset.add [%e Exp.ident select_env_ident] 0; Finish]
+    | MLfinish -> [%expr set_absent (); Bitset.add [%e select_env_ident] 0; Finish]
 
   let instantiate dep_array sigs sel ml =
     init (Array.length dep_array) sigs sel (construct_sequence dep_array ml)

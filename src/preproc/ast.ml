@@ -192,7 +192,8 @@ module Tagged = struct
 
       | Derived.Signal (s,t) ->
         let env, s = add_env env s in
-        mk_tagged (Signal (s, visit env t)) !+id
+        let s_ident = rename env.signals s.ident ast in
+        mk_tagged (Signal ({s with ident = s_ident}, visit env t)) !+id
 
 
       | Derived.Halt -> mk_tagged (Loop (mk_tagged Pause !+id)) !+id
