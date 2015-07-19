@@ -128,7 +128,7 @@ We get the `step` function from the instantiation. Then we call it in a *for
 loop* to trigger the instant 10 times. Now you would like to add input signals
 to your machine. So you can give it parameters at each instants.
 
-First, modify your reactive program this way, by defining an input signal : 
+First, modify your reactive program this way, by defining inputs signals : 
 
 ```ocaml
 let%sync hw_loop =
@@ -143,13 +143,19 @@ Then you must create the signal in the OCaml world.
 
 ```ocaml
 let () = 
-  let s1 = make_signal "" in
-  let s2 = make_signal "" in
+  let s1 = make_signal () in (* signals values have the type unit here *)
+  let s2 = make_signal () in
   let step = hw_loop.instantiate (s1, s2) in
+
+  (* ... *)
 
 ```
 
-You may want to play with it :
+You may want to play with it in the reactive program. We use the reactive
+expression `present` which tests if the signal has been emited (or set present
+in the OCaml world) during this instant. If so, it executes the corresponding
+alternative. As you can see, you only have to write one alternative is the
+second does `nothing`.
 
 ```ocaml
 let%sync hw_loop =
