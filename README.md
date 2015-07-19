@@ -22,6 +22,18 @@ The core language is completely compatible with vanilla OCaml compiler >4.02.1.
 
 * Code generation
 
+  * Machine inputs from ML world
+    * `instantiates` must no longer take signals but only
+      * initial values for inputs
+    * `instantiates` gives two values :
+      * `step : unit -> Machine.state`
+      It set the signal present and its value. So the function is very linked to the machine and
+      cannot be shared between machines.
+
+  * handle output keyword
+      * `(t1 -> unit) * ... * (ti -> unit)` : one function for each input signal.
+      * callback functions for ouputs ?
+        * what does it implies for `run` ?
 
   * ideas for addings runs and local signals(!!) (same problem actually)
     * add calls to run and define local in grc (both have only one child => less work)
@@ -33,17 +45,6 @@ The core language is completely compatible with vanilla OCaml compiler >4.02.1.
         * I do nothing 
         * I run one step
     * both must be defined globally :/ that might a problem for machines :> or maybe not
-
-  * Machine inputs and outputs from ML world
-    * `instantiates` must no longer take signals but only
-      * initial values for inputs
-      * callback functions for ouputs ?
-        * what does it implies for `run` ?
-    * `instantiates` gives two values :
-      * `step : unit -> Machine.state`
-      * `(t1 -> unit) * ... * (ti -> unit)` : one function for each input signal.
-      It set the signal present and its value. So the function is very linked to the machine and
-      cannot be shared between machines.
 
 
 * Documentation :

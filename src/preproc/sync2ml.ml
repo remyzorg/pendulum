@@ -220,6 +220,7 @@ module Ocaml_gen = struct
         env := (sel.label, l) :: !env; sel.label :: l
     in ignore (visit sel); !env
 
+  let setter_arg = Ast.mk_loc "set~arg"
 
   let select_env_name = "pendulum~state"
   let select_env_var = Location.(mkloc select_env_name !Ast_helper.default_loc)
@@ -230,27 +231,41 @@ module Ocaml_gen = struct
   let init nstmts (global_sigs,local_sigs) sel =
     let open Grc.Selection_tree in
     fun e ->
-      let let_sigs e = List.fold_left (fun acc signal ->
-          [%expr let [%p mk_pat_var signal.ident] = ref make_signal [%e signal.value] in [%e acc]]
-        ) e (local_sigs)
-      in
-      let set_sigs e =
-        let set_locals =
-          (List.fold_left (fun acc signal ->
-               [%expr set_absent ![%e mk_ident signal.ident]; [%e acc]]
-             ) [%expr ()] local_sigs)
-        in
-        let set_globals = (List.fold_left (fun acc signal ->
-             [%expr set_absent [%e mk_ident signal]; [%e acc]]
-           ) set_locals global_sigs)
-        in
-        [%expr let set_absent () = [%e set_globals] in [%e e]]
-      in
       let sigs_step_arg =
         match global_sigs with
         | [] -> [%pat? ()]
         | [s] -> mk_pat_var s
         | l -> Pat.tuple @@ List.rev_map (fun s -> mk_pat_var s) l
+      in
+      let let_sigs_global e = List.fold_left (fun acc signal ->
+          [%expr let [%p mk_pat_var signal] = make_signal [%e mk_ident signal] in [%e acc]]
+        ) e (global_sigs)
+      in
+      let let_sigs_local e = List.fold_left (fun acc signal ->
+          [%expr let [%p mk_pat_var signal.ident] = ref (make_signal [%e signal.value])
+                 in [%e acc]]
+        ) (let_sigs_global e) (local_sigs)
+      in
+      let set_sigs_absent e =
+        let set_absent_locals =
+          (List.fold_left (fun acc signal ->
+               [%expr set_absent ![%e mk_ident signal.ident]; [%e acc]]
+             ) [%expr ()] local_sigs)
+        in
+        let set_absent_globals = (List.fold_left (fun acc signal ->
+             [%expr set_absent [%e mk_ident signal]; [%e acc]]
+           ) set_absent_locals global_sigs)
+        in
+        [%expr let set_absent () = [%e set_absent_globals] in [%e e]]
+      in
+      let return_input_setters =
+        match global_sigs with
+        | [] -> [%expr ()]
+        | [s] -> [%expr fun s -> set_present_value [%e mk_ident s] s~arg]
+        | l -> Exp.tuple @@ List.rev_map (fun s ->
+            [%expr fun [%p mk_pat_var setter_arg ] ->
+                   set_present_value [%e mk_ident s] [%e mk_ident setter_arg]]
+          ) global_sigs
       in
       [%expr
         let open Pendulum.Runtime_misc in
@@ -259,7 +274,8 @@ module Ocaml_gen = struct
               let [%p Pat.var select_env_var] =
                 Bitset.make [%e int_const (1 + nstmts)]
               in
-              [%e let_sigs (set_sigs [%expr fun () ->
+              [%e let_sigs_local (set_sigs_absent [%expr
+                                    [%e return_input_setters], fun () ->
                          [%e e]])]
         }]
 
