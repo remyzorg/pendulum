@@ -146,119 +146,27 @@ let%sync_ast trap_seq = (* Grc.Error  (_, _) *)
 
 let%sync locals_no_inputs = loop pause
 
-(* let locals_no_inputs =  *)
-(* let open Pendulum.Runtime_misc in *)
-(*   let open Pendulum.Machine in *)
-(*     { *)
-(*       instantiate = *)
-(*         (fun ()  -> *)
-(*            let pendulum_state = Bitset.make 4 in *)
-(*            let set_absent () = () in *)
-(*            ((), *)
-(*              (fun ()  -> *)
-(*                 if Bitset.mem pendulum_state 0 *)
-(*                 then (set_absent (); Bitset.add pendulum_state 0; Finish) *)
-(*                 else *)
-(*                   (if Bitset.mem pendulum_state 2 *)
-(*                    then Bitset.remove pendulum_state 1 *)
-(*                    else Bitset.add pendulum_state 2; *)
-(*                    Bitset.add pendulum_state 1; *)
-(*                    set_absent (); *)
-(*                    Pause)))) *)
-(*     } *)
-
-let (), b = locals_no_inputs.Pendulum.Machine.instantiate ()
+let (), b = locals_no_inputs ()
 
 
-(* let%to_dot_grc locals = *)
-(*   input s; *)
-(*   input s1; *)
+let%sync locals =
+  input s;
+  input s1;
 
-(*   signal s "" ( *)
-(*     loop ( *)
-(*       present s1 (emit s "bonjour"); *)
-(*       pause; *)
-(*     ) *)
-(*     || *)
-(*     loop ( *)
-(*       present s (atom (Printf.printf "here : %s\n" !!s)); *)
-(*       pause *)
-(*     ) *)
-(*   ) *)
+  signal s "" (
+    loop (
+      present s1 (emit s "bonjour");
+      pause;
+    )
+    ||
+    loop (
+      present s (atom (Printf.printf "here : %s\n" !!s));
+      pause
+    )
+  )
 
-let locals =
-  let open Pendulum.Runtime_misc in
-  let open Pendulum.Machine in
-  {
-    instantiate =
-      (fun (s,s1)  ->
-         let pendulum_state = Bitset.make 16 in
-         let s_1 = ref (make_signal "") in
-         let s = make_signal s in
-         let s1 = make_signal s1 in
-         let set_absent () =
-           set_absent s; set_absent s1; set_absent (!s_1); () in
-         (((fun set_arg  -> set_present_value s set_arg),
-           (fun set_arg  -> set_present_value s1 set_arg)),
-          (fun ()  ->
-             if Bitset.mem pendulum_state 0
-             then (set_absent (); Bitset.add pendulum_state 0; Finish)
-             else
-               (if Bitset.mem pendulum_state 14
-                then
-                  (if Bitset.mem pendulum_state 12
-                   then
-                     (Bitset.remove pendulum_state 10;
-                      Bitset.remove pendulum_state 11;
-                      Bitset.add pendulum_state 11;
-                      Bitset.add pendulum_state 9;
-                      if !? s1 then set_present_value s_1 "bonjour";
-                      Bitset.remove pendulum_state 9;
-                      Bitset.add pendulum_state 10);
-                   if Bitset.mem pendulum_state 6
-                   then
-                     (Bitset.remove pendulum_state 4;
-                      Bitset.remove pendulum_state 5;
-                      Bitset.add pendulum_state 5;
-                      Bitset.add pendulum_state 3;
-                      if !? s_1
-                      then
-                        (let s = !s_1 in
-                         let () = Printf.printf "here : %s\n" (!! s) in ());
-                      Bitset.remove pendulum_state 3;
-                      Bitset.add pendulum_state 4))
-                else
-                  (Bitset.add pendulum_state 14;
-                   s_1 := (make_signal "");
-                   Bitset.add pendulum_state 13;
-                   Bitset.add pendulum_state 12;
-                   Bitset.add pendulum_state 6;
-                   Bitset.add pendulum_state 11;
-                   Bitset.add pendulum_state 5;
-                   Bitset.add pendulum_state 9;
-                   Bitset.add pendulum_state 3;
-                   if !? s1 then set_present_value s_1 "bonjour";
-                   Bitset.remove pendulum_state 9;
-                   if !? s_1
-                   then
-                     (let s = !s_1 in
-                      let () = Printf.printf "here : %s\n" (!! s) in ());
-                   Bitset.remove pendulum_state 3;
-                   Bitset.add pendulum_state 10;
-                   Bitset.add pendulum_state 4);
-                if
-                  (Bitset.mem pendulum_state 12) ||
-                  (Bitset.mem pendulum_state 6)
-                then (set_absent (); Pause)
-                else
-                  (Bitset.remove pendulum_state 13;
-                   Bitset.remove pendulum_state 14;
-                   set_absent ();
-                   Bitset.add pendulum_state 0;
-                   Finish)))))
-  }
 
-let (set_s, set_s1), b = locals.Pendulum.Machine.instantiate (0,"")
+let (set_s, set_s1), b = locals (0,"")
 
 
 let par_deps ctx = assert_equal

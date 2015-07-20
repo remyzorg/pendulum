@@ -62,7 +62,7 @@ end
 
 module Schedule : sig
 
-  val check_causality_cycles : 'a * Flowgraph.t -> Flowgraph.t list Ast.IdentMap.t
+  val check_causality_cycles : 'a * Flowgraph.t -> Flowgraph.t list Ast.SignalMap.t
 
   val tag_tested_stmts : Selection_tree.t -> Flowgraph.t -> unit
 

@@ -25,8 +25,8 @@ let rec expr_of_ast e =
     | Pause ->
       [%expr Pause]
 
-    | Emit signal ->
-      [%expr Emit [%e string_const signal.ident]]
+    | Emit vs ->
+      [%expr Emit [%e string_const vs.sname]]
 
     | Exit (Label label) ->
       [%expr Exit (Label [%e string_const label])]
@@ -46,8 +46,8 @@ let rec expr_of_ast e =
     | Present (signal, e1, e2) ->
       [%expr Present ([%e string_const signal], [%e visit e1], [%e visit e2])]
 
-    | Signal (signal, e) ->
-      [%expr Signal ([%e string_const signal.ident], [%e visit e])]
+    | Signal (vid, e) ->
+      [%expr Signal ([%e string_const vid.sname], [%e visit e])]
 
     | Suspend (e, signal) ->
       [%expr Suspend ([%e visit e], [%e string_const signal])]
@@ -58,8 +58,8 @@ let rec expr_of_ast e =
     | Halt ->
       [%expr Halt]
 
-    | Sustain signal ->
-      [%expr Sustain ([%e string_const signal.ident])]
+    | Sustain vid ->
+      [%expr Sustain ([%e string_const vid.sname])]
 
     | Present_then (signal, e) ->
       [%expr Present_then ([%e string_const signal], [%e visit e])]

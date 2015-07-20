@@ -76,21 +76,21 @@ module Flowgraph = struct
   let pp_action_dot fmt a =
     Format.(fprintf fmt "%s" begin
         match a with
-        | Emit s -> "emit <B>" ^ s.ident.content ^ "</B>"
+        | Emit vs -> "emit <B>" ^ vs.signal.ident.content ^ "</B>"
         | Atom e -> asprintf "%a" Pprintast.expression e.Ast.exp
         | Enter i -> sprintf "enter %d" i
         | Exit i -> sprintf "exit %d" i
-        | Local_signal vs -> asprintf "signal %s (%a)" vs.ident.content Pprintast.expression vs.value
+        | Local_signal vs -> asprintf "signal %s (%a)" vs.signal.ident.content Pprintast.expression vs.value
       end)
 
   let pp_action fmt a =
     Format.(fprintf fmt "%s" begin
         match a with
-        | Emit s -> "Emit " ^ s.ident.content
+        | Emit vs -> "Emit " ^ vs.signal.ident.content
         | Atom e -> asprintf "Atom (%a)" Pprintast.expression e.Ast.exp
         | Enter i -> sprintf "Enter %d" i
         | Exit i -> sprintf "Exit %d" i
-        | Local_signal vs -> asprintf "Local_signal %s" vs.ident.content
+        | Local_signal vs -> asprintf "Local_signal %s" vs.signal.ident.content
       end)
 
   type test_value =
@@ -101,7 +101,7 @@ module Flowgraph = struct
   let pp_test_value_dot fmt tv =
     Format.(begin
         match tv with
-        | Signal s -> fprintf fmt "%s" s.content
+        | Signal s -> fprintf fmt "%s" s.ident.content
         | Selection i -> fprintf fmt "%d" i
         | Finished -> fprintf fmt "finished"
       end)
@@ -109,7 +109,7 @@ module Flowgraph = struct
   let pp_test_value fmt tv =
     Format.(begin
         match tv with
-        | Signal s -> fprintf fmt "Signal %s" s.content
+        | Signal s -> fprintf fmt "Signal %s" s.ident.content
         | Selection i -> fprintf fmt "Selection %d" i
         | Finished -> fprintf fmt "Finished"
       end)
@@ -166,10 +166,10 @@ module Flowgraph = struct
     end)
 
   module FgEmitsTbl = Hashtbl.Make(struct
-      type t = flowgraph * flowgraph * Ast.ident
+      type t = flowgraph * flowgraph * Ast.signal
       let hash = Hashtbl.hash
       let equal (fg, stop, s) (fg', stop', s') =
-        fg == fg' && stop = stop' && s.content = s'.content
+        fg == fg' && stop = stop' && s.ident.content = s'.ident.content
     end)
 
   module Fgtbl2 = Hashtbl.Make(struct
@@ -471,17 +471,18 @@ module Schedule = struct
   open Flowgraph
 
   let check_causality_cycles grc =
+    let open SignalMap in
     let st, fg = grc in
     let rec visit m fg =
       match fg with
       | Test (Signal s, t1, t2) ->
-        let prev = try IdentMap.find s m with
+        let prev = try find s m with
           | Not_found -> []
         in
-        let m = IdentMap.add s (fg :: prev) m in
+        let m = add s (fg :: prev) m in
         let m1 = visit m t1 in
         let m2 = visit m t2 in
-        IdentMap.merge (fun k v1 v2 ->
+        merge (fun k v1 v2 ->
             match v1, v2 with
             | Some v1, Some v2 -> Some (v1 @ v2)
             | Some v, None | None, Some v -> Some v
@@ -491,7 +492,7 @@ module Schedule = struct
       | Fork (t1, t2, _) | Sync (_, t1, t2) ->
         let m1 = visit m t1 in
         let m2 = visit m t2 in
-        IdentMap.merge (fun k v1 v2 ->
+        merge (fun k v1 v2 ->
             match v1, v2 with
             | Some v1, Some v2 -> Some (v1 @ v2)
             | Some v, None | None, Some v -> Some v
@@ -499,14 +500,14 @@ module Schedule = struct
           ) m1 m2
 
       | Call(Emit s, t) ->
-        begin match IdentMap.find s.ident m with
+        begin match find s.signal m with
           | h :: fgs -> error ~loc:Ast.dummy_loc @@ Cyclic_causality h
           | [] -> m
           | exception Not_found -> m
         end
       | _ -> m
     in
-    visit IdentMap.empty fg
+    visit empty fg
 
   let memo_rec (type a) (module H : Hashtbl.S with type key = a) =
     let h = H.create 17 in
@@ -548,7 +549,7 @@ module Schedule = struct
   let emits fg stop s =
     let aux aux (fg, stop, (s : Ast.signal)) =
       match fg with
-      | Call (Emit s', t) when s.content = s'.ident.content -> true
+      | Call (Emit vs, t) when s.ident.content = vs.signal.ident.content -> true
       | fg when fg == stop -> false
       | Call (_, t) -> aux (t, stop, s)
       | Test (_, t1, t2) | Fork (t1, t2, _) | Sync (_ , t1, t2) ->
@@ -558,14 +559,14 @@ module Schedule = struct
 
 
   let extract_emits_tests_sets fg stop =
-    let open IdentSet in
+    let open SignalSet in
     let aux aux (fg, stop) =
       match fg with
       | fg when fg == stop -> empty, empty
 
       | Call (Emit s, t) ->
         let emits, tests = aux (t, stop) in
-        add s.ident emits, tests
+        add s.signal emits, tests
       | Call (_, t) -> aux (t, stop)
 
       | Test (Signal s, t1, t2) ->
@@ -724,8 +725,9 @@ module Schedule = struct
               let fg1_emits, fg1_tests = extract_emits_tests_sets fg1 stop in
               let fg2_emits, fg2_tests = extract_emits_tests_sets fg2 stop in
 
-              if IdentSet.inter fg2_emits fg1_tests <> IdentSet.empty then
-                if IdentSet.inter fg1_emits fg2_tests <> IdentSet.empty then
+              let open SignalSet in
+              if inter fg2_emits fg1_tests <> empty then
+                if inter fg1_emits fg2_tests <> empty then
                   assert false
                 else
                   sequence_of_fork stop fg2 fg1
