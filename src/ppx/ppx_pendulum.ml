@@ -71,11 +71,11 @@ let check_ident_string e =
   | _ -> Error.(syntax_error ~loc:e.pexp_loc Variable_name)
 
 let pop_signals_decl e =
-  let cont e =
+  let cont origin e =
     match e with
     | [%expr [%e? e_var] [%e? _]] ->
       Error.(syntax_error ~loc:e_var.pexp_loc Forgot_sem)
-    | [%expr [%e? e_var]] -> check_ident_string e_var
+    | [%expr [%e? e_var]] -> Ast.(mk_signal ~origin @@ check_ident_string e_var)
   in
   let rec aux sigs p =
     match p with
@@ -83,16 +83,20 @@ let pop_signals_decl e =
       Error.(syntax_error ~loc:e2.pexp_loc Forgot_sem)
     | [%expr [%e? params]; [%e? e2] ] ->
       begin match params.pexp_desc with
-        | Pexp_tuple ([%expr input [%e? e_var]] :: ids)
+        | Pexp_tuple ([%expr input [%e? e_var]] :: ids) ->
+          aux
+            Ast.(List.rev @@ (mk_signal ~origin:Input @@ check_ident_string e_var)
+             :: ((List.map (cont Input) ids) @ sigs)) e2
         | Pexp_tuple ([%expr output [%e? e_var]] :: ids)->
           aux
-            (List.rev @@ check_ident_string e_var
-             :: ((List.map cont ids) @ sigs)) e2
+            Ast.(List.rev @@ (mk_signal ~origin:Output @@ check_ident_string e_var)
+             :: ((List.map (cont Output) ids) @ sigs)) e2
         | _ ->
           begin match params with
-            | [%expr input [%e? e_var]]
+            | [%expr input [%e? e_var]] ->
+              aux Ast.(mk_signal ~origin:Input (check_ident_string e_var) :: sigs) e2
             | [%expr output [%e? e_var]] ->
-              aux ((check_ident_string e_var) :: sigs) e2
+              aux Ast.(mk_signal ~origin:Output (check_ident_string e_var) :: sigs) e2
             | [%expr input [%e? e_var] [%e? _]]
             | [%expr output [%e? e_var] [%e? _]] ->
               Error.(syntax_error ~loc:e_var.pexp_loc Forgot_sem)
@@ -114,7 +118,7 @@ let ast_of_expr e =
       Pause
 
     | [%expr emit [%e? signal] [%e? e_value]] ->
-      Emit (Ast.mk_vsig (check_ident_string signal) e_value)
+      Emit (Ast.mk_vid (check_ident_string signal) e_value)
 
     | [%expr emit [%e? signal]] ->
       Error.signal_value_missing e signal
@@ -143,7 +147,7 @@ let ast_of_expr e =
 
 
     | [%expr signal [%e? signal] [%e? e_value] [%e? e]] ->
-      Signal (Ast.mk_vsig (check_ident_string signal) e_value, visit e)
+      Signal (Ast.mk_vid (check_ident_string signal) e_value, visit e)
 
     | [%expr signal [%e? signal] [%e? _]] ->
       Error.signal_value_missing e signal
@@ -158,7 +162,7 @@ let ast_of_expr e =
       Halt
 
     | [%expr sustain [%e? signal] [%e? e_value]] ->
-      Sustain (Ast.mk_vsig (check_ident_string signal) e_value)
+      Sustain (Ast.mk_vid (check_ident_string signal) e_value)
 
     | [%expr sustain [%e? signal]] ->
       Error.signal_value_missing e signal

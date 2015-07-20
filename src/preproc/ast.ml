@@ -8,14 +8,22 @@ let dummy_loc = Location.none
 
 type ident = string location
 
-type signal = ident
-type 'a valued_signal = {ident : ident; value : 'a}
+type signal_origin = Local | Input | Output
+
+type signal = { ident : ident; origin : signal_origin }
+
+type 'a valued_signal = {signal : signal ; value : 'a}
+type 'a valued_ident = {sname : ident ; value : 'a}
 type label = Label of ident
 
 type atom = { locals : signal list; exp : Parsetree.expression}
 
 let mk_loc ?(loc=dummy_loc) content = {loc; content}
-let mk_vsig ident value = {ident; value}
+let mk_signal ?(origin=Local) ident = {ident; origin}
+
+let mk_vid sname value = {sname; value}
+let mk_vsig signal value = {signal; value}
+
 let mk_atom ?(locals = []) exp = {locals; exp}
 
 module Derived = struct
@@ -24,26 +32,26 @@ module Derived = struct
   | Loop of statement
   | Seq of statement * statement
   | Par of statement * statement
-  | Emit of Parsetree.expression valued_signal
+  | Emit of Parsetree.expression valued_ident
   | Nothing
   | Pause
-  | Suspend of statement * signal
+  | Suspend of statement * ident
   | Trap of label * statement
   | Exit of label
-  | Present of signal * statement * statement
+  | Present of ident * statement * statement
   | Atom of Parsetree.expression
-  | Signal of Parsetree.expression valued_signal * statement
+  | Signal of Parsetree.expression valued_ident * statement
 
   | Halt
-  | Sustain of Parsetree.expression valued_signal
-  | Present_then of signal * statement
-  | Await of signal
-  | Await_imm of signal
-  | Suspend_imm of statement * signal
-  | Abort of statement * signal
-  | Weak_abort of statement * signal
-  | Loop_each of statement * signal
-  | Every of signal * statement
+  | Sustain of Parsetree.expression valued_ident
+  | Present_then of ident * statement
+  | Await of ident
+  | Await_imm of ident
+  | Suspend_imm of statement * ident
+  | Abort of statement * ident
+  | Weak_abort of statement * ident
+  | Loop_each of statement * ident
+  | Every of ident * statement
 end
 
 
@@ -72,6 +80,16 @@ module StringMap = Map.Make(struct
 module IdentMap = Map.Make(struct
     type t = ident
     let compare a b = compare a.content b.content
+  end)
+
+module SignalMap = Map.Make(struct
+    type t = signal
+    let compare a b = compare a.ident.content b.ident.content
+  end)
+
+module SignalSet = Set.Make(struct
+    type t = signal
+    let compare a b = compare a.ident.content b.ident.content
   end)
 
 module IdentSet = Set.Make(struct
@@ -111,40 +129,50 @@ module Tagged = struct
 
   type env = {
     labels : int IdentMap.t;
-    signals : int IdentMap.t;
+    signals : (int * signal_origin) SignalMap.t;
     mutable all_local_signals : Parsetree.expression valued_signal list;
     local_signals : Parsetree.expression valued_signal list;
   }
 
   let add_env (env : env) s =
-    let signals, s' = IdentMap.(match find s.ident env.signals with
+    let signals, s' = SignalMap.(match find (mk_signal s.sname) env.signals with
       | exception Not_found ->
-        add s.ident 0 env.signals, s.ident
-      | i ->
-        add s.ident (i + 1) env.signals,
-        {s.ident with content = Format.sprintf "%s~%d" s.ident.content (i + 1)}
+        let s = mk_signal s.sname in
+        add s (0, Local) env.signals, s
+      | (i, orig) ->
+        let s = mk_signal s.sname in
+        add s ((i + 1), Local) env.signals,
+        {s with ident = {s.ident with content = Format.sprintf "%s~%d" s.ident.content (i + 1)}}
       )
     in
-    env.all_local_signals <- {s with ident = s'} :: env.all_local_signals;
-    {env with signals; local_signals = {s with ident = s'} :: env.local_signals}, s
+    let s' = {signal = s'; value = s.value} in
+    env.all_local_signals <- s' :: env.all_local_signals;
+    {env with signals; local_signals = s' :: env.local_signals}, s'
 
   let add_label env s = IdentMap.(match find s env with
       | exception Not_found -> add s 0 env, s
       | i -> add s (i + 1) env,
              {s with content = Format.sprintf "%s%d" s.content (i + 1)})
 
-  let rename env s p =
+  let rename_label env s p =
     IdentMap.(match find s env with
         | exception Not_found ->
           error ~loc:p.loc @@ Unbound_identifier s.content
         | 0 -> s
         | i -> {s with content = Format.sprintf "%s~%d" s.content i})
 
+  let rename env s p =
+    SignalMap.(match find (mk_signal s) env with
+        | exception Not_found ->
+          error ~loc:p.loc @@ Unbound_identifier s.content
+        | (0, origin) -> {ident = s; origin}
+        | (i, origin) -> {ident = mk_loc ~loc:s.loc (Format.sprintf "%s~%d" s.content i); origin})
+
   let create_env sigs = {
     labels = IdentMap.empty;
     signals = List.fold_left (fun accmap s ->
-        IdentMap.add s 0 accmap )
-        IdentMap.empty sigs;
+        SignalMap.add s (0, s.origin) accmap )
+        SignalMap.empty sigs;
     all_local_signals = [];
     local_signals = [];
   }
@@ -166,7 +194,7 @@ module Tagged = struct
       | Derived.Par (st1, st2) ->
         mk_tagged (Par (visit env st1, visit env st2)) !+id
 
-      | Derived.Emit s -> mk_tagged (Emit {s with ident = (rename env.signals s.ident ast)}) !+id
+      | Derived.Emit s -> mk_tagged (Emit {signal = (rename env.signals s.sname ast); value = s.value}) !+id
       | Derived.Nothing -> mk_tagged Nothing !+id
       | Derived.Pause -> mk_tagged Pause !+id
 
@@ -181,23 +209,23 @@ module Tagged = struct
         mk_tagged (Trap (Label s, visit {env with labels} t)) !+id
 
       | Derived.Exit (Label s) ->
-        mk_tagged (Exit (Label (rename env.labels s ast))) !+id
+        mk_tagged (Exit (Label (rename_label env.labels s ast))) !+id
+
       | Derived.Present (s, t1, t2) ->
         let s = rename env.signals s ast in
         mk_tagged (Present(s, visit env t1, visit env t2)) !+id
       | Derived.Atom f -> mk_tagged (Atom {
-          locals = List.map (fun x -> x.ident) env.local_signals;
+          locals = List.map (fun x -> x.signal) env.local_signals;
           exp = f
         }) !+id
 
       | Derived.Signal (s,t) ->
         let env, s = add_env env s in
-        let s_ident = rename env.signals s.ident ast in
-        mk_tagged (Signal ({s with ident = s_ident}, visit env t)) !+id
+        mk_tagged (Signal (s, visit env t)) !+id
 
 
       | Derived.Halt -> mk_tagged (Loop (mk_tagged Pause !+id)) !+id
-      | Derived.Sustain s -> mk_tagged (Loop (mk_tagged (Emit s) !+id)) !+id
+      | Derived.Sustain s -> visit env Derived.(mkl @@ Loop ((mkl@@ Emit s)))
       | Derived.Present_then (s, st) ->
         visit env Derived.(mkl @@ Present (s, st, mkl @@ Nothing))
       | Derived.Await_imm s ->
@@ -207,8 +235,8 @@ module Tagged = struct
                     visit env Derived.(mkl @@ Present_then (s, mkl @@ Exit trap_signal)),
                     mk_tagged Pause !+id)) !+id)) !+id)) !+id
       | Derived.Suspend_imm (st, s) ->
-        mk_tagged (Suspend (visit env Derived.(
-          mkl @@ Present_then (s, mkl @@ Seq (mkl Pause, st))), s)) !+id
+        visit env Derived.(mkl @@ Suspend ((
+          mkl @@ Present_then (s, mkl @@ Seq (mkl Pause, st))), s))
       | Derived.Abort (st, s) ->
         mk_tagged (Trap (trap_signal, mk_tagged (
             Par (mk_tagged (
@@ -252,13 +280,13 @@ let print_to_dot fmt tagged =
       fprintf fmt "N%d -> N%d ;@\n" x.id st2.id;
       visit st1;
       visit st2;
-    | Emit s -> fprintf fmt "N%d [label=\"%d emit(%s)\"];@\n"  x.id x.id s.ident.content
+    | Emit vs -> fprintf fmt "N%d [label=\"%d emit(%s)\"];@\n"  x.id x.id vs.signal.ident.content
     | Nothing  ->
       fprintf fmt "N%d [label=\"%d nothing\"]; @\n" x.id x.id
     | Pause  ->
       fprintf fmt "N%d [label=\"%d pause\"]; @\n" x.id x.id
     | Suspend (st, s) ->
-      fprintf fmt "N%d [label=\"%d suspend(%s)\"]; @\n" x.id x.id s.content;
+      fprintf fmt "N%d [label=\"%d suspend(%s)\"]; @\n" x.id x.id s.ident.content;
       fprintf fmt "N%d -> N%d ;@\n" x.id st.id;
       visit st
     | Trap (Label s, st) ->
@@ -268,15 +296,15 @@ let print_to_dot fmt tagged =
     | Exit (Label s) -> fprintf fmt "N%d [label=\"%d exit(%s)\"]; @\n" x.id x.id s.content
     | Atom f -> fprintf fmt "N%d [label=\"%d atom\"]; @\n" x.id x.id
     | Present (s, st1, st2) ->
-      fprintf fmt "N%d [label=\"%d present(%s)\"]; @\n" x.id x.id s.content;
+      fprintf fmt "N%d [label=\"%d present(%s)\"]; @\n" x.id x.id s.ident.content;
       fprintf fmt "N%d -> N%d ;@\n" x.id st1.id;
       fprintf fmt "N%d -> N%d ;@\n" x.id st2.id;
       visit st1;
       visit st2;
     | Await s ->
-      fprintf fmt "N%d [label=\"%d await(%s)\"]; @\n" x.id x.id s.content
-    | Signal (s, st) ->
-      fprintf fmt "N%d [label=\"%d signal(%s)\"]; @\n" x.id x.id s.ident.content;
+      fprintf fmt "N%d [label=\"%d await(%s)\"]; @\n" x.id x.id s.ident.content
+    | Signal (vs, st) ->
+      fprintf fmt "N%d [label=\"%d signal(%s)\"]; @\n" x.id x.id vs.signal.ident.content;
       fprintf fmt "N%d -> N%d ;@\n" x.id st.id;
       visit st
   in

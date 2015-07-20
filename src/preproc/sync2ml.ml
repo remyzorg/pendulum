@@ -22,7 +22,7 @@ type ml_test_expr =
   | MLfinished
 
 let rec pp_ml_test_expr fmt = Format.(function
-  | MLsig s -> fprintf fmt "present %s" s.content
+  | MLsig s -> fprintf fmt "present %s" s.ident.content
   | MLselect i -> fprintf fmt "select %d" i
   | MLfinished -> fprintf fmt "finished"
   | MLor (mlt1, mlt2) -> fprintf fmt "%a || %a" pp_ml_test_expr mlt1 pp_ml_test_expr mlt2
@@ -59,13 +59,13 @@ let rec pp_type_ml_sequence lvl fmt =
 and pp_type_ml_ast lvl fmt =
   let indent = String.init lvl (fun _ -> ' ') in
   Format.(function
-    | MLemit s -> fprintf fmt "%sEmit %s" indent s.ident.content
+    | MLemit vs -> fprintf fmt "%sEmit %s" indent vs.signal.ident.content
     | MLif (mltest_expr, mlseq1, mlseq2) ->
       fprintf fmt "%sMLif(%a, \n%a, \n%a)"
         indent pp_ml_test_expr mltest_expr
         (pp_type_ml_sequence (lvl + 2)) mlseq1
         (pp_type_ml_sequence (lvl + 2)) mlseq2
-    | MLassign vs -> fprintf fmt "%sMLassign %s" indent vs.ident.content
+    | MLassign vs -> fprintf fmt "%sMLassign %s" indent vs.signal.ident.content
     | MLenter i -> fprintf fmt "%sEnter %d" indent i
     | MLexit i -> fprintf fmt "%sExit %d" indent i
     | MLexpr e -> fprintf fmt "%s%s" indent (asprintf "%a" Pprintast.expression e.exp)
@@ -87,9 +87,9 @@ let rec pp_ml_sequence lvl fmt =
 and pp_ml_ast lvl fmt =
   let indent = String.init lvl (fun _ -> ' ') in
   Format.(function
-    | MLemit s -> fprintf fmt "%semit %s" indent s.ident.content
+    | MLemit vs -> fprintf fmt "%semit %s" indent vs.signal.ident.content
     | MLassign vs ->
-      fprintf fmt "%s := %a" vs.ident.content Pprintast.expression vs.value
+      fprintf fmt "%s := %a" vs.signal.ident.content Pprintast.expression vs.value
     | MLif (mltest_expr, mlseq1, mlseq2) ->
       fprintf fmt "%sif %a then (\n%a\n%s)" indent pp_ml_test_expr mltest_expr
         (pp_ml_sequence (lvl + 2)) mlseq1 indent;
@@ -121,7 +121,7 @@ let (++) c1 c2 = Seq (c1, c2)
 let construct_ml_action deps mr a =
   let open Grc.Flowgraph in
   match a with
-  | Emit s -> mr := IdentSet.add s.ident !mr; mls @@ MLemit s
+  | Emit vs -> mr := SignalSet.add vs.signal !mr; mls @@ MLemit vs
   | Atom e -> mls @@ MLexpr e
   | Enter i -> mls @@ MLenter i
   | Exit i -> ml @@ MLexit i :: List.map (fun x -> MLexit x) deps.(i)
@@ -149,13 +149,13 @@ let deplist sel =
 let construct_test_expr mr tv =
   let open Grc.Flowgraph in
   match tv with
-  | Signal s -> mr := IdentSet.add s !mr; MLsig s
+  | Signal vs -> mr := SignalSet.add vs !mr; MLsig vs
   | Selection i -> MLselect i
   | Finished -> MLfinished
 
 let grc2ml dep_array fg =
   let open Grc.Flowgraph in
-  let sigs = ref IdentSet.empty in
+  let sigs = ref SignalSet.empty in
   let rec construct stop fg =
     match stop with
     | Some fg' when fg == fg' && fg' <> Finish && fg' <> Pause ->
@@ -220,6 +220,7 @@ module Ocaml_gen = struct
         env := (sel.label, l) :: !env; sel.label :: l
     in ignore (visit sel); !env
 
+  let setter_arg = Ast.mk_loc "set~arg"
 
   let select_env_name = "pendulum~state"
   let select_env_var = Location.(mkloc select_env_name !Ast_helper.default_loc)
@@ -230,54 +231,73 @@ module Ocaml_gen = struct
   let init nstmts (global_sigs,local_sigs) sel =
     let open Grc.Selection_tree in
     fun e ->
-      let let_sigs e = List.fold_left (fun acc signal ->
-          [%expr let [%p mk_pat_var signal.ident] = ref make_signal [%e signal.value] in [%e acc]]
-        ) e (local_sigs)
-      in
-      let set_sigs e =
-        let set_locals =
-          (List.fold_left (fun acc signal ->
-               [%expr set_absent ![%e mk_ident signal.ident]; [%e acc]]
-             ) [%expr ()] local_sigs)
-        in
-        let set_globals = (List.fold_left (fun acc signal ->
-             [%expr set_absent [%e mk_ident signal]; [%e acc]]
-           ) set_locals global_sigs)
-        in
-        [%expr let set_absent () = [%e set_globals] in [%e e]]
-      in
       let sigs_step_arg =
         match global_sigs with
         | [] -> [%pat? ()]
-        | [s] -> mk_pat_var s
-        | l -> Pat.tuple @@ List.rev_map (fun s -> mk_pat_var s) l
+        | [s] -> mk_pat_var s.ident
+        | l -> Pat.tuple @@ List.rev_map (fun s -> mk_pat_var s.ident) l
+      in
+      let let_sigs_global e = List.fold_left (fun acc s ->
+          [%expr let [%p mk_pat_var s.ident] = make_signal [%e mk_ident s.ident] in [%e acc]]
+        ) e (global_sigs)
+      in
+      let let_sigs_local e = List.fold_left (fun acc vs ->
+          [%expr let [%p mk_pat_var vs.signal.ident] = ref (make_signal [%e vs.value])
+                 in [%e acc]]
+        ) (let_sigs_global e) (local_sigs)
+      in
+      let set_sigs_absent e =
+        let set_absent_locals =
+          (List.fold_left (fun acc vs ->
+               [%expr set_absent ![%e mk_ident vs.signal.ident]; [%e acc]]
+             ) [%expr ()] local_sigs)
+        in
+        let set_absent_globals = (List.fold_left (fun acc s ->
+             [%expr set_absent [%e mk_ident s.ident]; [%e acc]]
+           ) set_absent_locals global_sigs)
+        in
+        [%expr let set_absent () = [%e set_absent_globals] in [%e e]]
+      in
+      let empty_params, return_input_setters =
+        match global_sigs with
+        | [] -> true, [%expr ()]
+        | [s] -> false, [%expr fun [%p mk_pat_var setter_arg] ->
+               set_present_value [%e mk_ident s.ident] [%e mk_ident setter_arg]]
+        | l -> false, Exp.tuple @@ List.rev_map (fun s ->
+            [%expr fun [%p mk_pat_var setter_arg ] ->
+                   set_present_value [%e mk_ident s.ident] [%e mk_ident setter_arg]]
+          ) global_sigs
+      in
+      let returns =
+        if empty_params then [%expr fun () -> [%e e]]
+        else [%expr [%e return_input_setters], fun () -> [%e e]]
       in
       [%expr
         let open Pendulum.Runtime_misc in
         let open Pendulum.Machine in
-        { instantiate = fun [%p sigs_step_arg] ->
+        fun [%p sigs_step_arg] ->
               let [%p Pat.var select_env_var] =
                 Bitset.make [%e int_const (1 + nstmts)]
               in
-              [%e let_sigs (set_sigs [%expr fun () ->
-                         [%e e]])]
-        }]
+              [%e let_sigs_local (set_sigs_absent returns)]]
 
   let remove_signal_renaming s =
     Ast.({s with
           content = String.sub s.content 0 ((String.rindex s.content '~'))})
 
+  let add_ref_local s =
+    match s.origin with
+    | Local -> [%expr ![%e mk_ident s.ident]]
+    | _ -> [%expr [%e mk_ident s.ident]]
+
   let rec construct_test test =
     match test with
-    | MLsig s ->
-      [%expr !?[%e mk_ident s]]
+    | MLsig s -> [%expr !?[%e add_ref_local s]]
     | MLselect i -> [%expr Bitset.mem [%e select_env_ident] [%e int_const i]]
     | MLor (mlte1, mlte2) -> [%expr [%e construct_test mlte1 ] || [%e construct_test mlte2]]
     | MLfinished -> [%expr Bitset.mem [%e select_env_ident] 0]
 
   let rec construct_sequence depl mlseq =
-    (* pp_type_ml_sequence 0 Format.std_formatter mlseq; *)
-    (* Format.printf "\n=================\n"; *)
     match mlseq with
     | Seq (Seqlist [], Seqlist []) | Seqlist [] ->
       assert false
@@ -294,8 +314,8 @@ module Ocaml_gen = struct
 
   and construct_ml_ast depl ast =
     match ast with
-    | MLemit s ->
-      [%expr set_present_value [%e mk_ident s.ident] [%e s.value]]
+    | MLemit vs ->
+      [%expr set_present_value [%e add_ref_local vs.signal] [%e vs.value]]
 
     | MLif (test, mlseq1, mlseq2) ->
       begin match mlseq1, mlseq2 with
@@ -310,7 +330,7 @@ module Ocaml_gen = struct
       end
 
     | MLassign vs ->
-      [%expr [%e mk_ident vs.ident] := make_signal [%e vs.value]]
+      [%expr [%e mk_ident vs.signal.ident] := make_signal [%e vs.value]]
 
     | MLenter i ->
       [%expr Bitset.add
@@ -327,8 +347,8 @@ module Ocaml_gen = struct
         [%expr let () = [%e pexpr.exp] in ()]
       in
       (List.fold_left (fun acc x ->
-           [%expr let [%p (mk_pat_var (remove_signal_renaming x))] =
-                    ![%e mk_ident x] in [%e acc]]
+           [%expr let [%p (mk_pat_var (remove_signal_renaming x.ident))] =
+                    ![%e mk_ident x.ident] in [%e acc]]
          ) atom_expr pexpr.locals)
 
     | MLpause -> [%expr set_absent (); Pause]

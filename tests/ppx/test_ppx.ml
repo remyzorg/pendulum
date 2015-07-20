@@ -143,7 +143,12 @@ let%sync_ast trap_seq = (* Grc.Error  (_, _) *)
   );
   atom (ignore 512)
 
-let%to_dot_grc locals =
+
+let%sync locals_no_inputs = loop pause
+let b = locals_no_inputs ()
+
+
+let%sync locals =
   input s;
   input s1;
 
@@ -158,8 +163,7 @@ let%to_dot_grc locals =
       pause
     )
   )
-
-
+let (set_s, set_s1), b = locals (0,"")
 
 
 let par_deps ctx = assert_equal

@@ -1,7 +1,7 @@
 
 let%sync m =
-  input a 0;
-  output b "";
+  input a;
+  output b;
 
   loop begin
     present b (atom (
@@ -16,7 +16,7 @@ let%sync m =
   end
 
 let%sync m2 =
-  input a ();
+  input a;
   loop begin
     present a begin
       atom (print_string "hello\n");
@@ -33,11 +33,9 @@ let%sync m2 =
 
 let () =
   let open Pendulum.Machine in
-  let a = make_signal 0 in
-  let b = make_signal "" in
-  let step = m.instantiate (a, b) in
+  let (set_a, set_b), step = m (0, "") in
   for i = 1 to 10 do
-    set_present_value a i;
+    set_a i;
     ignore (step ());
   done
 
@@ -45,9 +43,8 @@ let () = Format.printf "@."
 
 let () =
   let open Pendulum.Machine in
-  let a = make_signal () in
-  let step = m2.instantiate a in
+  let set_a, step = m2 () in
   for i = 0 to 9 do
-    if i mod 3 = 0 then set_present a;
+    if i mod 3 = 0 then set_a ();
     ignore (step ());
   done
