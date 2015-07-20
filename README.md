@@ -18,7 +18,7 @@ The core language is completely compatible with vanilla OCaml compiler >4.02.1.
 
 # Documentation
 
-see a slight [documentation](pendulum_doc.md)
+see a slight [documentation](pendulum_doc.md) and [examples](examples/)
 
 # Install
 
@@ -44,14 +44,6 @@ opam `1.2` with `switch 4.02.1` (minimum) is required
 # TODO :
 
 * Code generation
-
-  * Machine inputs from ML world
-    * `instantiates` must no longer take signals but only
-      * initial values for inputs
-    * `instantiates` gives two values :
-      * `step : unit -> Machine.state`
-      It set the signal present and its value. So the function is very linked to the machine and
-      cannot be shared between machines.
 
   * handle output keyword
       * `(t1 -> unit) * ... * (ti -> unit)` : one function for each input signal.
