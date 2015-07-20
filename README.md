@@ -17,6 +17,26 @@ The core language is completely compatible with vanilla OCaml compiler >4.02.1.
 
 **Please do not use pendulum for now, as it is an early prototype**
 
+# Install
+
+### with opam (easier)
+
+opam `1.2` with `switch 4.02.1` (minimum) is required
+
+* `opam pin add pendulum git://github.com/remyzorg/pendulum.git`
+
+(Bonus)
+* an example to use pendulum as syntax extension with ocamlbuild
+
+`ocamlbuild -package pendulum -cflags "-ppx ppx_pendulum" <file-without-ext>.byte`
+
+### without opam
+
+1. `git clone git://github.com/remyzorg/pendulum.git`
+2. `cd pendulum`
+3. `./configure`
+4. `make`
+5. `make install `
 
 # TODO :
 
@@ -66,25 +86,3 @@ The core language is completely compatible with vanilla OCaml compiler >4.02.1.
   * n-ary parallel operator and/or gathering (at signals definition)
 * DOM
   * try setTimeout and requestAnimationFrames as global clocks
-
-
-# Install
-
-### with opam (easier)
-
-opam `1.2` with `switch 4.02.1` (minimum) is required
-
-* `opam pin add pendulum git://github.com/remyzorg/pendulum.git`
-
-(Bonus)
-* an example to use pendulum as syntax extension with ocamlbuild
-
-`ocamlbuild -package pendulum -cflags "-ppx ppx_pendulum" main.byte`
-
-### without opam
-
-1. `git clone git://github.com/remyzorg/pendulum.git`
-2. `cd pendulum`
-3. `./configure`
-4. `make`
-5. `make install `
