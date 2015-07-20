@@ -88,16 +88,18 @@ let%sync my_machine = (* pendulum program *)
 
 ```
 
-It generates a value `my_machine` of type `Pendulum.Machine.t`.
-This value only has a field `instantiate : 'a -> (unit -> Machine.state)`. 
-
+`my_machine` is now a function with one parameters corresponding to a tuple of
+initial values for inputs arguments. 
 ```ocaml
-let step = my_machine.instantiate ( ... )
+let (* ... *), step = my_machine ( ... )
 ```
 
-Calling `my_machine.instatiate ( ... )` will create one particular instantiation
-of this reactive program description, represented by its *step* or *moving
-forward* function.
+Calling `my_machine ( ... )` will create one particular instantiation
+of this reactive program description, represented by a couple of two values :
+
+* first one is the tuple of setters of inputs arguments : 
+* the second one is the *step* or *moving forward* function with executes one
+  instant of the reactive program instatiation.
 
 ## Quick example
 
@@ -118,17 +120,18 @@ Now I want to execute it :
 
 ```ocaml
 let () = 
-  let step = hw_loop.instantiate () in
+  let step = hw_loop () in
   for i = 0 to 9 do
     ignore (step ())
   done
 ```
 
-We get the `step` function from the instantiation. Then we call it in a *for
-loop* to trigger the instant 10 times. Now you would like to add input signals
-to your machine. So you can give it parameters at each instants.
+We get the `step` function from the instantiation (`hw_loop` has no params). Then we call it in a *for
+loop* to trigger the instant 10 times.
 
-First, modify your reactive program this way, by defining inputs signals : 
+Now you would like to add input signals to your machine. So you can give it
+parameters at each instants. First, modify your reactive program this way, by
+defining inputs signals :
 
 ```ocaml
 let%sync hw_loop =
@@ -136,22 +139,19 @@ let%sync hw_loop =
   input s2;
 
   (* ... *)
-
 ```
 
-Then you must create the signal in the OCaml world.
+Then you must pass signal initial values to the instantiation call and get back
+the setters functions for inputs :
 
 ```ocaml
-let () = 
-  let s1 = make_signal () in (* signals values have the type unit here *)
-  let s2 = make_signal () in
-  let step = hw_loop.instantiate (s1, s2) in
+let () =
+  let (set_s1, set_s2), step = hw_loop ((), ()) in
 
   (* ... *)
-
 ```
 
-You may want to play with it in the reactive program. We use the reactive
+You may want to play with your inputs in the reactive program. We use the reactive
 expression `present` which tests if the signal has been emited (or set present
 in the OCaml world) during this instant. If so, it executes the corresponding
 alternative. As you can see, you only have to write one alternative is the
@@ -175,13 +175,11 @@ And eventually call the `step` in the for loop :
 
 ```ocaml
 let () = 
-  let s1 = make_signal () in
-  let s2 = make_signal () in
-  let step = hw_loop.instantiate (s1, s2) in
+  let (set_s1, set_s1), step = hw_loop ((), ()) in
   for i = 0 to 9 do
-    if i mod 2 = then set_present s1    (* s1 is present only on even i *)
-    else set_present s2;                (* s2 is present only on odd i *)
-    if i mod 5 = 0 then set_present s1; (* if i is a multiple of 5 then both are presents *)
+    if i mod 2 = then set_s1    (* s1 is present only on even i *)
+    else set_s2;                (* s2 is present only on odd i *)
+    if i mod 5 = 0 then set_s1; (* if i is a multiple of 5 then both are presents *)
     ignore (step ())
   done
 ```
