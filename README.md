@@ -14,8 +14,11 @@
 
 The core language is completely compatible with vanilla OCaml compiler >4.02.1.
 
-
 **Please do not use pendulum for now, as it is an early prototype**
+
+# Documentation
+
+see a slight [documentation](pendulum_doc.md)
 
 # Install
 
