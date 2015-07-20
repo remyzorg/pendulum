@@ -145,7 +145,6 @@ let%sync_ast trap_seq = (* Grc.Error  (_, _) *)
 
 
 let%sync locals_no_inputs = loop pause
-
 let (), b = locals_no_inputs ()
 
 
@@ -164,10 +163,12 @@ let%sync locals =
       pause
     )
   )
-
-
 let (set_s, set_s1), b = locals (0,"")
 
+
+let%sync no_params =
+  loop pause
+let (), step_no_params = no_params ()
 
 let par_deps ctx = assert_equal
     (let%sync_ast ast =
