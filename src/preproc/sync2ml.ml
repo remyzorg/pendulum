@@ -258,15 +258,19 @@ module Ocaml_gen = struct
         in
         [%expr let set_absent () = [%e set_absent_globals] in [%e e]]
       in
-      let return_input_setters =
+      let empty_params, return_input_setters =
         match global_sigs with
-        | [] -> [%expr ()]
-        | [s] -> [%expr fun [%p mk_pat_var setter_arg] ->
+        | [] -> true, [%expr ()]
+        | [s] -> false, [%expr fun [%p mk_pat_var setter_arg] ->
                set_present_value [%e mk_ident s.ident] [%e mk_ident setter_arg]]
-        | l -> Exp.tuple @@ List.rev_map (fun s ->
+        | l -> false, Exp.tuple @@ List.rev_map (fun s ->
             [%expr fun [%p mk_pat_var setter_arg ] ->
                    set_present_value [%e mk_ident s.ident] [%e mk_ident setter_arg]]
           ) global_sigs
+      in
+      let returns =
+        if empty_params then [%expr fun () -> [%e e]]
+        else [%expr [%e return_input_setters], fun () -> [%e e]]
       in
       [%expr
         let open Pendulum.Runtime_misc in
@@ -275,10 +279,7 @@ module Ocaml_gen = struct
               let [%p Pat.var select_env_var] =
                 Bitset.make [%e int_const (1 + nstmts)]
               in
-              [%e let_sigs_local (set_sigs_absent [%expr
-                                    [%e return_input_setters], fun () ->
-                         [%e e]])]
-        ]
+              [%e let_sigs_local (set_sigs_absent returns)]]
 
   let remove_signal_renaming s =
     Ast.({s with
