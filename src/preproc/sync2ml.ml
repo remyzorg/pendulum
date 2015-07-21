@@ -282,8 +282,10 @@ module Ocaml_gen = struct
               [%e let_sigs_local (set_sigs_absent returns)]]
 
   let remove_signal_renaming s =
-    Ast.({s with
-          content = String.sub s.content 0 ((String.rindex s.content '~'))})
+    try
+      Ast.(Some {s with
+            content = String.sub s.content 0 ((String.rindex s.content '~'))})
+    with Not_found -> None
 
   let add_ref_local s =
     match s.origin with
@@ -320,9 +322,11 @@ module Ocaml_gen = struct
     | MLif (test, mlseq1, mlseq2) ->
       begin match mlseq1, mlseq2 with
         | mlseq1, (Seqlist [] | Seq (Seqlist [], Seqlist [])) ->
-          [%expr if [%e construct_test test] then [%e construct_sequence depl mlseq1]]
+          [%expr if [%e construct_test test]
+                 then [%e construct_sequence depl mlseq1]]
         | (Seqlist [] | Seq (Seqlist [], Seqlist [])), mseq2 ->
-          [%expr if not [%e construct_test test] then [%e construct_sequence depl mlseq2]]
+          [%expr if not [%e construct_test test]
+                 then [%e construct_sequence depl mlseq2]]
         | _ ->
           [%expr if [%e construct_test test] then
                    [%e construct_sequence depl mlseq1]
@@ -347,8 +351,10 @@ module Ocaml_gen = struct
         [%expr let () = [%e pexpr.exp] in ()]
       in
       (List.fold_left (fun acc x ->
-           [%expr let [%p (mk_pat_var (remove_signal_renaming x.ident))] =
-                    ![%e mk_ident x.ident] in [%e acc]]
+           match remove_signal_renaming x.ident with
+           | Some ident -> [%expr
+             let [%p mk_pat_var ident] = ![%e mk_ident x.ident] in [%e acc]]
+           | None -> acc
          ) atom_expr pexpr.locals)
 
     | MLpause -> [%expr set_absent (); Pause]

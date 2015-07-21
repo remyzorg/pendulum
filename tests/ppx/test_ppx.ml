@@ -144,27 +144,55 @@ let%sync_ast trap_seq = (* Grc.Error  (_, _) *)
   atom (ignore 512)
 
 
-let%sync locals_no_inputs = loop pause
-let b = locals_no_inputs ()
+let%sync_ast locals_no_inputs = loop pause
+(* let b = locals_no_inputs () *)
 
 
-let%sync locals =
+let%sync_ast locals =
   input s;
   input s1;
 
-  signal s "" (
-    loop (
-      present s1 (emit s "bonjour");
-      pause;
+  signal s () (
+    signal s "" (
+      loop (
+        present s1 (emit s "bonjour");
+        pause;
+      )
     )
     ||
-    loop (
-      present s (atom (Printf.printf "here : %s\n" !!s));
-      pause
+    signal s 0 (
+      loop (
+        present s (atom (Printf.printf "here : %d\n" !!s));
+        pause
+      )
     )
   )
-let (set_s, set_s1), b = locals (0,"")
 
+(* let (set_s, set_s1), b = locals ("","") *)
+
+let%sync mouse_loc =
+  input btn_up;
+  input move;
+  input ex;
+
+  signal s () (
+    loop begin
+      present btn_up (
+        atom ());
+      pause
+    end
+    ||
+    loop begin
+      present move (
+        atom ());
+      pause
+    end
+    ||
+      loop begin
+        present ex (atom ());
+        pause
+      end
+  )
 
 let par_deps ctx = assert_equal
     (let%sync_ast ast =

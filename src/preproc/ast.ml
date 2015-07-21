@@ -66,17 +66,6 @@ let print_error fmt e =
       | Unbound_identifier s -> sprintf "Unbound signal %s" s
     end
 
-
-module IntMap = Map.Make(struct
-    type t = int
-    let compare = compare
-  end)
-
-module StringMap = Map.Make(struct
-    type t = string
-    let compare = compare
-  end)
-
 module IdentMap = Map.Make(struct
     type t = ident
     let compare a b = compare a.content b.content
@@ -103,8 +92,6 @@ let (!+) a = incr a; !a
 
 module Tagged = struct
 
-
-
   type t = {id : int; st : tagged}
 
 
@@ -129,25 +116,40 @@ module Tagged = struct
 
   type env = {
     labels : int IdentMap.t;
+    global_namespace : int SignalMap.t ref;
     signals : (int * signal_origin) SignalMap.t;
-    mutable all_local_signals : Parsetree.expression valued_signal list;
+    all_local_signals : Parsetree.expression valued_signal list ref;
     local_signals : Parsetree.expression valued_signal list;
   }
 
-  let add_env (env : env) s =
-    let signals, s' = SignalMap.(match find (mk_signal s.sname) env.signals with
+  let add_signal (env : env) vi =
+    let signals, s' = SignalMap.(match find (mk_signal vi.sname) env.signals with
       | exception Not_found ->
-        let s = mk_signal s.sname in
-        add s (0, Local) env.signals, s
+
+        let i, sname' = match find (mk_signal vi.sname) !(env.global_namespace) with
+          | exception Not_found -> 0, vi.sname
+          | i -> i, {vi.sname with content = Format.sprintf "%s~%d" vi.sname.content (i + 1)}
+        in
+        let s = mk_signal sname' in
+        env.global_namespace := add s (i + 1) !(env.global_namespace);
+        add (mk_signal vi.sname) (i, Local) env.signals, s
+
       | (i, orig) ->
-        let s = mk_signal s.sname in
+        let i = match find (mk_signal vi.sname) !(env.global_namespace) with
+          | exception Not_found -> assert false
+          | i -> i
+        in
+        let s = mk_signal vi.sname in
+        env.global_namespace := add s (i + 1) !(env.global_namespace);
         add s ((i + 1), Local) env.signals,
         {s with ident = {s.ident with content = Format.sprintf "%s~%d" s.ident.content (i + 1)}}
       )
     in
-    let s' = {signal = s'; value = s.value} in
-    env.all_local_signals <- s' :: env.all_local_signals;
-    {env with signals; local_signals = s' :: env.local_signals}, s'
+    let s' = {signal = s'; value = vi.value} in
+    env.all_local_signals := s' :: !(env.all_local_signals);
+    let env, s' = {env with signals; local_signals = s' :: env.local_signals}, s' in
+    env, s'
+
 
   let add_label env s = IdentMap.(match find s env with
       | exception Not_found -> add s 0 env, s
@@ -170,20 +172,26 @@ module Tagged = struct
 
   let create_env sigs = {
     labels = IdentMap.empty;
+    global_namespace = ref (List.fold_left (fun accmap s ->
+        SignalMap.add s 0 accmap )
+        SignalMap.empty sigs);
+
     signals = List.fold_left (fun accmap s ->
         SignalMap.add s (0, s.origin) accmap )
         SignalMap.empty sigs;
-    all_local_signals = [];
+
+    all_local_signals = ref [];
     local_signals = [];
   }
 
   let rec of_ast ?(sigs=[]) ast =
     let id = ref 0 in
-    let env = create_env sigs in
+    let start_env = create_env sigs in
     let rec visit : env -> Derived.statement -> t = fun env ast ->
       let mk_tagged tagged = mk_tagged ~loc:ast.loc tagged in
       let mkl stmt = mk_loc ~loc:ast.loc stmt in
       match ast.content with
+
       | Derived.Loop t -> mk_tagged (Loop (visit env t)) !+id
 
       | Derived.Seq (st1, st2) ->
@@ -192,7 +200,9 @@ module Tagged = struct
         mk_tagged (Seq (st1, st2)) !+id
 
       | Derived.Par (st1, st2) ->
-        mk_tagged (Par (visit env st1, visit env st2)) !+id
+        let st1 = visit env st1 in
+        let st2 = visit env st2 in
+        mk_tagged (Par (st1, st2)) !+id
 
       | Derived.Emit s -> mk_tagged (Emit {signal = (rename env.signals s.sname ast); value = s.value}) !+id
       | Derived.Nothing -> mk_tagged Nothing !+id
@@ -220,7 +230,7 @@ module Tagged = struct
         }) !+id
 
       | Derived.Signal (s,t) ->
-        let env, s = add_env env s in
+        let env, s = add_signal env s in
         mk_tagged (Signal (s, visit env t)) !+id
 
 
@@ -258,8 +268,8 @@ module Tagged = struct
                                         (mkl @@ Derived.Loop_each (st, s)))) !+id
 
     in
-    let tagged = visit env ast in
-    tagged, env
+    let tagged = visit start_env ast in
+    tagged, start_env
 
 let print_to_dot fmt tagged =
   let open Format in

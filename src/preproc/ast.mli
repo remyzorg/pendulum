@@ -20,8 +20,6 @@ val mk_vid : ident -> 'a -> 'a valued_ident
 type atom = { locals : signal list; exp : Parsetree.expression}
 val mk_atom : ?locals:signal list -> Parsetree.expression -> atom
 
-module IntMap : Map.S with type key = int
-module StringMap : Map.S with type key = string
 module IdentMap : Map.S with type key = ident
 module IdentSet : Set.S with type elt = ident
 module SignalMap : Map.S with type key = signal
@@ -85,10 +83,12 @@ module Tagged : sig
     | Await of signal
   and tagged = tagged_ast location
 
+
   type env = {
     labels : int IdentMap.t;
+    global_namespace : int SignalMap.t ref;
     signals : (int * signal_origin) SignalMap.t;
-    mutable all_local_signals : Parsetree.expression valued_signal list;
+    all_local_signals : Parsetree.expression valued_signal list ref;
     local_signals : Parsetree.expression valued_signal list;
   }
 
