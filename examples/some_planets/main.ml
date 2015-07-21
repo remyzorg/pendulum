@@ -14,7 +14,7 @@ let (@>) s coerce =
 
 let%sync mouse_machine =
   input tarea;
-  input move;
+  input origin;
 
   loop begin
     present move (
@@ -25,12 +25,18 @@ let%sync mouse_machine =
     pause
   end
 
+let pi = 3.14159265
+
 let _ =
   let open Dom_html in
   window##.onload := handler (fun _ ->
       let area = "tarea" @> CoerceTo.a in
-      (* let c = "canvas" @> CoerceTo.canvas in *)
-      (* let ctx = canvas##getContext (Dom_html._2d_) in *)
+      let c = "canvas" @> CoerceTo.canvas in
+      let ctx = c##getContext (Dom_html._2d_) in
+
+      ctx##beginPath;
+      ctx##arc 150. 150. 20. 0. (pi*.2.) Js._true;
+      ctx##fill;
 
       let (set_tarea, set_move), step =
         mouse_machine (area, (0,0))

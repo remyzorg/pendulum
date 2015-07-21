@@ -148,11 +148,11 @@ let%sync_ast locals_no_inputs = loop pause
 (* let b = locals_no_inputs () *)
 
 
-let%sync_ast locals =
+let%sync locals =
   input s;
   input s1;
 
-  signal s () (
+  signal s "" (
     signal s "" (
       loop (
         present s1 (emit s "bonjour");
@@ -170,7 +170,7 @@ let%sync_ast locals =
 
 (* let (set_s, set_s1), b = locals ("","") *)
 
-let%sync mouse_loc =
+let%sync_ast mouse_loc =
   input btn_up;
   input move;
   input ex;

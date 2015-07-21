@@ -251,26 +251,40 @@ let expected_ext = Utils.StringSet.(
 let extend_mapper argv = {
   default_mapper with
   structure_item = (fun mapper stri ->
-      begin
-        match stri with
-        | { pstr_desc = Pstr_extension (({ txt = ext }, PStr [
-            { pstr_desc = Pstr_value (Nonrecursive, vbs) }]), attrs); pstr_loc }
-          when StringSet.mem ext expected_ext ->
+      try
+        begin
+          match stri with
+          | { pstr_desc = Pstr_extension (({ txt = ext }, PStr [
+              { pstr_desc = Pstr_value (Nonrecursive, vbs) }]), attrs); pstr_loc }
+            when StringSet.mem ext expected_ext ->
 
-          (Str.value Nonrecursive (gen_bindings ext vbs))
+            (Str.value Nonrecursive (gen_bindings ext vbs))
 
-        | { pstr_desc = Pstr_extension (({ txt = ext }, PStr [
-            { pstr_desc = Pstr_value (Recursive, _) }]), _); pstr_loc }
-          when StringSet.mem ext expected_ext ->
-          Error.(error ~loc:pstr_loc Non_recursive_let)
+          | { pstr_desc = Pstr_extension (({ txt = ext }, PStr [
+              { pstr_desc = Pstr_value (Recursive, _) }]), _); pstr_loc }
+            when StringSet.mem ext expected_ext ->
+            Error.(error ~loc:pstr_loc Non_recursive_let)
 
-        | x -> default_mapper.structure_item mapper x
-      end
+          | x -> default_mapper.structure_item mapper x
+        end
+      with
+      | Ast.Error (loc, e) ->
+        Error.(error ~loc (Other_err (e, Ast.print_error)))
+      | Sync2ml.Error (loc, e) ->
+        Error.(error ~loc (Other_err (e, Sync2ml.print_error)))
+      | Grc.Error (loc, e) ->
+        Error.(error ~loc (Other_err (e, Grc.print_error)))
+      | e->
+        Error.(error ~loc:Ast.dummy_loc
+                 (Other_err (e, fun fmt e ->
+                      Format.fprintf fmt "%s" (Printexc.to_string e))))
     );
 
-  expr = fun mapper expr -> match expr with
-    | { pexp_desc = Pexp_extension ({ txt = ext; loc }, e)}
-      when StringSet.mem ext expected_ext ->
+  expr = fun mapper expr ->
+    try
+      begin match expr with
+        | { pexp_desc = Pexp_extension ({ txt = ext; loc }, e)}
+          when StringSet.mem ext expected_ext ->
           begin match e with
             | PStr [{ pstr_desc = Pstr_eval (e, _)}] ->
               begin match e.pexp_desc with
@@ -283,21 +297,22 @@ let extend_mapper argv = {
                   Error.(error ~loc Only_on_let)
               end
             | _ -> Error.(error ~loc Only_on_let)
-        end
-    | x -> default_mapper.expr mapper x;
+          end
+        | x -> default_mapper.expr mapper x;
+      end
+
+    with
+    | Ast.Error (loc, e) ->
+      Error.(error ~loc (Other_err (e, Ast.print_error)))
+    | Sync2ml.Error (loc, e) ->
+      Error.(error ~loc (Other_err (e, Sync2ml.print_error)))
+    | Grc.Error (loc, e) ->
+      Error.(error ~loc (Other_err (e, Grc.print_error)))
+    | e->
+      Error.(error ~loc:Ast.dummy_loc
+               (Other_err (e, fun fmt e ->
+                    Format.fprintf fmt "%s" (Printexc.to_string e))))
 }
 
 let () =
-  try
-    register "pendulum" extend_mapper
-  with
-  | Ast.Error (loc, e) ->
-    Error.(error ~loc (Other_err (e, Ast.print_error)))
-  | Sync2ml.Error (loc, e) ->
-    Error.(error ~loc (Other_err (e, Sync2ml.print_error)))
-  | Grc.Error (loc, e) ->
-    Error.(error ~loc (Other_err (e, Grc.print_error)))
-  | _ -> Format.printf "WTF\n"
-    (* Error.(error ~loc:Ast.dummy_loc *)
-    (*          (Other_err (e, fun fmt e -> *)
-    (*               Format.fprintf fmt "%s" (Printexc.to_string e)))) *)
+  register "pendulum" extend_mapper
