@@ -12,9 +12,21 @@ let (@>) s coerce =
   Js.Opt.get (coerce @@ Dom_html.getElementById s)
     (fun () -> error "can't find element %s" s)
 
+
+
+
+let draw_circle ctx centerx centery radius color =
+  let pi = 3.14159265 in
+  ctx##.fillStyle := (Js.string color);
+  ctx##beginPath;
+  ctx##arc 150. 150. 20. 0. (pi*.2.) Js._true;
+  ctx##fill
+
+(* let move_circle ctx centerx centery radius (pi*.2.) Js._true *)
+
 let%sync mouse_machine =
   input tarea;
-  input origin;
+  input move;
 
   loop begin
     present move (
@@ -25,7 +37,6 @@ let%sync mouse_machine =
     pause
   end
 
-let pi = 3.14159265
 
 let _ =
   let open Dom_html in
@@ -34,9 +45,8 @@ let _ =
       let c = "canvas" @> CoerceTo.canvas in
       let ctx = c##getContext (Dom_html._2d_) in
 
-      ctx##beginPath;
-      ctx##arc 150. 150. 20. 0. (pi*.2.) Js._true;
-      ctx##fill;
+      draw_circle ctx 150. 150. 20. "green";
+
 
       let (set_tarea, set_move), step =
         mouse_machine (area, (0,0))
