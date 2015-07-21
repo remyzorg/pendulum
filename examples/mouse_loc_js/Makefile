@@ -1,9 +1,7 @@
 
 all: main.ml
-	ocamlbuild main.byte -use-ocamlfind \
-		-pkgs js_of_ocaml,js_of_ocaml.syntax \
-		-syntax camlp4o
-	js_of_ocaml main.byte
+	ocamlbuild -use-ocamlfind \
+		-package js_of_ocaml -package js_of_ocaml.ppx main.byte
 
 clean:
 	ocamlbuild -clean

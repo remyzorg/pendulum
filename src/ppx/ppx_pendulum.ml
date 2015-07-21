@@ -229,8 +229,6 @@ let parse_ast ext vb =
     | "sync" ->
       let ast = ast_of_expr e in
       let tast, env = Ast.Tagged.of_ast ~sigs ast in
-      List.iter Ast.(fun k -> Format.printf "AT THE END : %s\n"
-                        k.signal.ident.content) !(env.Ast.Tagged.all_local_signals);
       let ocaml_expr =
         Sync2ml.generate ~sigs:(sigs, !(env.Ast.Tagged.all_local_signals)) tast in
 
