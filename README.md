@@ -12,7 +12,7 @@
  values, and run them on signals arguments. The compilation of concurrency in pendulum is
  completely sequential and static.
 
-The core language is completely compatible with vanilla OCaml compiler >4.02.1.
+The core language is completely compatible with vanilla OCaml compiler.
 
 **Please do not use pendulum for now, as it is an early prototype**
 
@@ -24,11 +24,10 @@ see a slight [documentation](pendulum_doc.md) and [examples](examples/)
 
 ### with opam (easier)
 
-opam `1.2` with `switch 4.02.1` (minimum) is required
+opam `1.2` with `switch 4.02.2` (minimum) is required
 
 * `opam pin add pendulum git://github.com/remyzorg/pendulum.git`
 
-(Bonus)
 * an example to use pendulum as syntax extension with ocamlbuild
 
 `ocamlbuild -package pendulum -cflags "-ppx ppx_pendulum" <file-without-ext>.byte`
