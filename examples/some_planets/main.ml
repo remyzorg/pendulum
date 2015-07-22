@@ -12,51 +12,61 @@ let (@>) s coerce =
   Js.Opt.get (coerce @@ Dom_html.getElementById s)
     (fun () -> error "can't find element %s" s)
 
+type circle = {x : float; y : float; radius : float; color : string}
 
 
-
-let draw_circle ctx centerx centery radius color =
+let draw_circle ctx c =
   let pi = 3.14159265 in
-  ctx##.fillStyle := (Js.string color);
+  ctx##.fillStyle := (Js.string c.color);
   ctx##beginPath;
-  ctx##arc 150. 150. 20. 0. (pi*.2.) Js._true;
+  ctx##arc c.x c.y c.radius 0. (pi*.2.) Js._true;
   ctx##fill
 
-(* let move_circle ctx centerx centery radius (pi*.2.) Js._true *)
+let move_circle ctx c x y =
+  draw_circle ctx {c with color ="white"; radius = c.radius +. 1.};
+  draw_circle ctx {c with x; y}
+
 
 let%sync mouse_machine =
-  input tarea;
+  input ctx;
   input move;
 
-  loop begin
-    present move (
-      atom (
-        (!!tarea)##.textContent := Js.some (Js.string @@
-          Format.sprintf "%dx%d" (fst !!move) (snd !!move))
-      ));
-    pause
-  end
+  signal circle ({x = fst (!!move); y = 10.; radius = 20.; color = "green"})
+    begin
+      loop (present move (
+          atom (
+            move_circle !!ctx !!circle (fst !!move) !!circle.y
+          );
+          emit circle {!!circle with x = fst !!move; y = snd !!move}
+        ); pause)
+    end
+  ||
+  signal circle ({x = 10.; y = snd (!!move); radius = 20.; color = "green"})
+    begin
+      loop (present move (
+          atom (
+            move_circle !!ctx !!circle !!circle.x (snd !!move)
+          );
+          emit circle {!!circle with x = fst !!move; y = snd !!move}
+        ); pause)
+    end
 
 
 let _ =
   let open Dom_html in
   window##.onload := handler (fun _ ->
-      let area = "tarea" @> CoerceTo.a in
       let c = "canvas" @> CoerceTo.canvas in
       let ctx = c##getContext (Dom_html._2d_) in
 
-      draw_circle ctx 150. 150. 20. "green";
-
-
-      let (set_tarea, set_move), step =
-        mouse_machine (area, (0,0))
+      let (set_ctx, set_move), step =
+        mouse_machine (ctx, (0.,0.))
       in
 
       window##.onmousemove := handler (fun e ->
-          set_move (e##.clientX, e##.clientY);
+          let x, y = (float @@ e##.clientX, float @@ e##.clientY) in
+          set_move (x, y);
           ignore @@ step ();
           Js._false);
 
-      Js._false
-    )
+      Js._false)
 
