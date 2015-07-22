@@ -237,14 +237,14 @@ module Ocaml_gen = struct
         | [s] -> mk_pat_var s.ident
         | l -> Pat.tuple @@ List.rev_map (fun s -> mk_pat_var s.ident) l
       in
-      let let_sigs_global e = List.fold_left (fun acc s ->
-          [%expr let [%p mk_pat_var s.ident] = make_signal [%e mk_ident s.ident] in [%e acc]]
-        ) e (global_sigs)
-      in
       let let_sigs_local e = List.fold_left (fun acc vs ->
           [%expr let [%p mk_pat_var vs.signal.ident] = ref (make_signal [%e vs.value])
                  in [%e acc]]
-        ) (let_sigs_global e) (local_sigs)
+        ) e (local_sigs)
+      in
+      let let_sigs_global e = List.fold_left (fun acc s ->
+          [%expr let [%p mk_pat_var s.ident] = make_signal [%e mk_ident s.ident] in [%e acc]]
+        ) (let_sigs_local e) (global_sigs)
       in
       let set_sigs_absent e =
         let set_absent_locals =
@@ -283,9 +283,9 @@ module Ocaml_gen = struct
 
   let remove_signal_renaming s =
     try
-      Ast.(Some {s with
+      Ast.({s with
             content = String.sub s.content 0 ((String.rindex s.content '~'))})
-    with Not_found -> None
+    with Not_found -> s
 
   let add_ref_local s =
     match s.origin with
@@ -351,10 +351,9 @@ module Ocaml_gen = struct
         [%expr let () = [%e pexpr.exp] in ()]
       in
       (List.fold_left (fun acc x ->
-           match remove_signal_renaming x.ident with
-           | Some ident -> [%expr
-             let [%p mk_pat_var ident] = ![%e mk_ident x.ident] in [%e acc]]
-           | None -> acc
+           [%expr let [%p mk_pat_var @@ remove_signal_renaming x.ident] =
+                    ![%e mk_ident x.ident]
+                  in [%e acc]]
          ) atom_expr pexpr.locals)
 
     | MLpause -> [%expr set_absent (); Pause]
