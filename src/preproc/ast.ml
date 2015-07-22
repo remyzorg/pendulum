@@ -117,39 +117,27 @@ module Tagged = struct
 
   type env = {
     labels : int IdentMap.t;
-    global_namespace : int SignalMap.t ref;
+    global_namespace : int IdentMap.t ref;
     signals : (int * signal_origin) SignalMap.t;
     all_local_signals : Parsetree.expression valued_signal list ref;
     local_signals : Parsetree.expression valued_signal list;
   }
 
-  let add_signal (env : env) vi =
-    let signals, s' = SignalMap.(match find (mk_signal vi.sname) env.signals with
+  let add_signal env vi =
+    let signals, s' = match IdentMap.find vi.sname !(env.global_namespace) with
       | exception Not_found ->
-
-        let i, sname' = match find (mk_signal vi.sname) !(env.global_namespace) with
-          | exception Not_found -> 0, vi.sname
-          | i -> i, {vi.sname with content = Format.sprintf "%s~%d" vi.sname.content (i + 1)}
-        in
-        let s = mk_signal sname' in
-        env.global_namespace := add s (i + 1) !(env.global_namespace);
-        add (mk_signal vi.sname) (i, Local) env.signals, s
-
-      | (i, orig) ->
-        let i = match find (mk_signal vi.sname) !(env.global_namespace) with
-          | exception Not_found -> assert false
-          | i -> i
-        in
         let s = mk_signal vi.sname in
-        env.global_namespace := add s (i + 1) !(env.global_namespace);
-        add s ((i + 1), Local) env.signals,
-        {s with ident = {s.ident with content = Format.sprintf "%s~%d" s.ident.content (i + 1)}}
-      )
+        env.global_namespace := IdentMap.add vi.sname 0 !(env.global_namespace);
+        SignalMap.add (mk_signal vi.sname) (0, Local) env.signals, s
+      | i ->
+        let s = mk_signal vi.sname in
+        env.global_namespace := IdentMap.add vi.sname (succ i) !(env.global_namespace);
+        SignalMap.add (mk_signal vi.sname) (succ i, Local) env.signals,
+        {s with ident = {s.ident with content = Format.sprintf "%s~%d" s.ident.content (succ i)}}
     in
-    let s' = {signal = s'; value = vi.value} in
-    env.all_local_signals := s' :: !(env.all_local_signals);
-    let env, s' = {env with signals; local_signals = s' :: env.local_signals}, s' in
-    env, s'
+    let vs = {signal = s'; value = vi.value} in
+    env.all_local_signals := vs :: !(env.all_local_signals);
+    {env with signals; local_signals = vs :: env.local_signals}, vs
 
 
   let add_label env s = IdentMap.(match find s env with
@@ -173,9 +161,9 @@ module Tagged = struct
 
   let create_env sigs = {
     labels = IdentMap.empty;
-    global_namespace = ref (List.fold_left (fun accmap s ->
-        SignalMap.add s 0 accmap )
-        SignalMap.empty sigs);
+    global_namespace = ref IdentMap.(List.fold_left (fun accmap s ->
+        add s.ident 0 accmap )
+        empty sigs);
 
     signals = List.fold_left (fun accmap s ->
         SignalMap.add s (0, s.origin) accmap )
@@ -236,8 +224,8 @@ module Tagged = struct
       | Derived.Signal (s,t) ->
         let locals = List.map (fun x -> x.signal) env.local_signals in
         let svid = mk_vid s.sname (mk_atom ~locals s.value) in
-        let env, s = add_signal env svid in
-        mk_tagged (Signal (s, visit env t)) !+id
+        let env, s' = add_signal env svid in
+        mk_tagged (Signal (s', visit env t)) !+id
 
 
       | Derived.Halt -> mk_tagged (Loop (mk_tagged Pause !+id)) !+id

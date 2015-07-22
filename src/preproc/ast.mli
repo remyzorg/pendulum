@@ -88,7 +88,7 @@ module Tagged : sig
 
   type env = {
     labels : int IdentMap.t;
-    global_namespace : int SignalMap.t ref;
+    global_namespace : int IdentMap.t ref;
     signals : (int * signal_origin) SignalMap.t;
     all_local_signals : Parsetree.expression valued_signal list ref;
     local_signals : Parsetree.expression valued_signal list;
