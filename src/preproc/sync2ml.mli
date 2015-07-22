@@ -33,4 +33,4 @@ val generate:
   ?sigs:(
     Ast.signal list *
     Parsetree.expression Ast.valued_signal list) ->
-  Ast.Tagged.t -> Parsetree.expression
+  Parsetree.expression Ast.Tagged.t -> Parsetree.expression

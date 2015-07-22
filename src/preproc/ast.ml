@@ -28,31 +28,31 @@ let mk_vsig signal locals exp = {signal; value = {locals; exp}}
 let mk_atom ?(locals = []) exp = {locals; exp}
 
 module Derived = struct
-  type statement = statement_tree location
-  and statement_tree =
-  | Loop of statement
-  | Seq of statement * statement
-  | Par of statement * statement
-  | Emit of Parsetree.expression valued_ident
+  type 'a statement = ('a statement_tree) location
+  and 'a statement_tree =
+  | Loop of 'a statement
+  | Seq of 'a statement * 'a statement
+  | Par of 'a statement * 'a statement
+  | Emit of 'a valued_ident
   | Nothing
   | Pause
-  | Suspend of statement * ident
-  | Trap of label * statement
+  | Suspend of 'a statement * ident
+  | Trap of label * 'a statement
   | Exit of label
-  | Present of ident * statement * statement
-  | Atom of Parsetree.expression
-  | Signal of Parsetree.expression valued_ident * statement
+  | Present of ident * 'a statement * 'a statement
+  | Atom of 'a
+  | Signal of 'a valued_ident * 'a statement
 
   | Halt
-  | Sustain of Parsetree.expression valued_ident
-  | Present_then of ident * statement
+  | Sustain of 'a valued_ident
+  | Present_then of ident * 'a statement
   | Await of ident
   | Await_imm of ident
-  | Suspend_imm of statement * ident
-  | Abort of statement * ident
-  | Weak_abort of statement * ident
-  | Loop_each of statement * ident
-  | Every of ident * statement
+  | Suspend_imm of 'a statement * ident
+  | Abort of 'a statement * ident
+  | Weak_abort of 'a statement * ident
+  | Loop_each of 'a statement * ident
+  | Every of ident * 'a statement
 end
 
 
@@ -93,34 +93,34 @@ let (!+) a = incr a; !a
 
 module Tagged = struct
 
-  type t = {id : int; st : tagged}
+  type 'a t = {id : int; st : 'a tagged}
 
 
-  and tagged_ast =
-    | Loop of t
-    | Seq of t * t
-    | Par of t * t
-    | Emit of Parsetree.expression valued_signal
+  and 'a tagged_ast =
+    | Loop of 'a t
+    | Seq of 'a t * 'a t
+    | Par of 'a t * 'a t
+    | Emit of 'a valued_signal
     | Nothing
     | Pause
-    | Suspend of t * signal
-    | Trap of label * t
+    | Suspend of 'a t * signal
+    | Trap of label * 'a t
     | Exit of label
-    | Present of signal * t * t
-    | Atom of Parsetree.expression atom
-    | Signal of Parsetree.expression valued_signal * t
+    | Present of signal * 'a t * 'a t
+    | Atom of 'a atom
+    | Signal of 'a valued_signal * 'a t
     | Await of signal
-  and tagged = tagged_ast location
+  and 'a tagged = ('a tagged_ast) location
 
   let mk_tagged ?(loc = dummy_loc) content id =
     {id; st = {loc ; content}}
 
-  type env = {
+  type 'a env = {
     labels : int IdentMap.t;
     global_namespace : int IdentMap.t ref;
     signals : (int * signal_origin) SignalMap.t;
-    all_local_signals : Parsetree.expression valued_signal list ref;
-    local_signals : Parsetree.expression valued_signal list;
+    all_local_signals : ('a valued_signal) list ref;
+    local_signals : 'a valued_signal list;
   }
 
   let add_signal env vi =
@@ -176,7 +176,7 @@ module Tagged = struct
   let rec of_ast ?(sigs=[]) ast =
     let id = ref 0 in
     let start_env = create_env sigs in
-    let rec visit : env -> Derived.statement -> t = fun env ast ->
+    let rec visit : 'a env -> 'a Derived.statement -> 'a t = fun env ast ->
       let mk_tagged tagged = mk_tagged ~loc:ast.loc tagged in
       let mkl stmt = mk_loc ~loc:ast.loc stmt in
       match ast.content with

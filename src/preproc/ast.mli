@@ -30,32 +30,31 @@ val dummy_loc : Location.t
 val mk_loc : ?loc:Location.t -> 'a -> 'a location
 
 module Derived : sig
-  type statement = statement_tree location
-  and statement_tree =
-  | Loop of statement
-  | Seq of statement * statement
-  | Par of statement * statement
-  | Emit of Parsetree.expression valued_ident
+  type 'a statement = ('a statement_tree) location
+  and 'a statement_tree =
+  | Loop of 'a statement
+  | Seq of 'a statement * 'a statement
+  | Par of 'a statement * 'a statement
+  | Emit of 'a valued_ident
   | Nothing
   | Pause
-  | Suspend of statement * ident
-  | Trap of label * statement
+  | Suspend of 'a statement * ident
+  | Trap of label * 'a statement
   | Exit of label
-  | Present of ident * statement * statement
-  | Atom of Parsetree.expression
-  | Signal of Parsetree.expression valued_ident * statement
+  | Present of ident * 'a statement * 'a statement
+  | Atom of 'a
+  | Signal of 'a valued_ident * 'a statement
 
   | Halt
-  | Sustain of Parsetree.expression valued_ident
-  | Present_then of 
-ident * statement
+  | Sustain of 'a valued_ident
+  | Present_then of ident * 'a statement
   | Await of ident
   | Await_imm of ident
-  | Suspend_imm of statement * ident
-  | Abort of statement * ident
-  | Weak_abort of statement * ident
-  | Loop_each of statement * ident
-  | Every of ident * statement
+  | Suspend_imm of 'a statement * ident
+  | Abort of 'a statement * ident
+  | Weak_abort of 'a statement * ident
+  | Loop_each of 'a statement * ident
+  | Every of ident * 'a statement
 end
 
 type error =
@@ -67,38 +66,37 @@ val print_error : Format.formatter -> error -> unit
 module Tagged : sig
 
 
-  type t = {id : int; st : tagged}
-
-  and tagged_ast =
-    | Loop of t
-    | Seq of t * t
-    | Par of t * t
-    | Emit of Parsetree.expression valued_signal
+  type 'a t = {id : int; st : 'a tagged}
+  and 'a tagged_ast =
+    | Loop of 'a t
+    | Seq of 'a t * 'a t
+    | Par of 'a t * 'a t
+    | Emit of 'a valued_signal
     | Nothing
     | Pause
-    | Suspend of t * signal
-    | Trap of label * t
+    | Suspend of 'a t * signal
+    | Trap of label * 'a t
     | Exit of label
-    | Present of signal * t * t
-    | Atom of Parsetree.expression atom
-    | Signal of Parsetree.expression valued_signal * t
+    | Present of signal * 'a t * 'a t
+    | Atom of 'a atom
+    | Signal of 'a valued_signal * 'a t
     | Await of signal
-  and tagged = tagged_ast location
+  and 'a tagged = ('a tagged_ast) location
 
 
-  type env = {
+  type 'a env = {
     labels : int IdentMap.t;
     global_namespace : int IdentMap.t ref;
     signals : (int * signal_origin) SignalMap.t;
-    all_local_signals : Parsetree.expression valued_signal list ref;
-    local_signals : Parsetree.expression valued_signal list;
+    all_local_signals : ('a valued_signal) list ref;
+    local_signals : 'a valued_signal list;
   }
 
-  val of_ast : ?sigs:(signal list) -> Derived.statement -> t * env
+  val of_ast : ?sigs:(signal list) -> 'a Derived.statement -> 'a t * 'a env
 
-  val print_to_dot : Format.formatter -> t -> unit
+  val print_to_dot : Format.formatter -> 'a t -> unit
 end
 
 module Analysis : sig
-  val blocking : Tagged.t -> bool
+  val blocking : 'a Tagged.t -> bool
 end

@@ -24,7 +24,7 @@ module Selection_tree = struct
   }
 
   let of_ast ast =
-    let rec visit : Tagged.t -> t = fun tagged ->
+    let rec visit : Parsetree.expression Tagged.t -> t = fun tagged ->
       match tagged.st.content with
       | Emit _ | Nothing | Exit _ | Atom _ -> mk_tree Bottom tagged.id
       | Pause -> mk_tree Pause tagged.id
@@ -286,7 +286,7 @@ module Of_ast = struct
     synctbl : (int * int, Flowgraph.t) Hashtbl.t;
   }
 
-  type flow_builder = env -> Tagged.t -> Flowgraph.t -> Flowgraph.t -> Flowgraph.t
+  type flow_builder = env -> Parsetree.expression Tagged.t -> Flowgraph.t -> Flowgraph.t -> Flowgraph.t
 
   let memo_rec =
     fun h f ->

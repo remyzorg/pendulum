@@ -56,8 +56,8 @@ val print_error : Format.formatter -> error -> unit
 
 
 module Of_ast : sig
-  val flowgraph : Ast.Tagged.t -> Flowgraph.t
-  val construct : Ast.Tagged.t -> Selection_tree.t * Flowgraph.t
+  val flowgraph : Parsetree.expression Ast.Tagged.t -> Flowgraph.t
+  val construct : Parsetree.expression Ast.Tagged.t -> Selection_tree.t * Flowgraph.t
 end
 
 module Schedule : sig
