@@ -37,7 +37,7 @@ and ml_ast =
   | MLassign of Parsetree.expression Ast.valued_signal
   | MLenter of int
   | MLexit of int
-  | MLexpr of Ast.atom [@printer fun fmt e -> Pprintast.expression fmt e.exp]
+  | MLexpr of Parsetree.expression Ast.atom
   | MLpause
   | MLfinish
 
@@ -89,7 +89,7 @@ and pp_ml_ast lvl fmt =
   Format.(function
     | MLemit vs -> fprintf fmt "%semit %s" indent vs.signal.ident.content
     | MLassign vs ->
-      fprintf fmt "%s := %a" vs.signal.ident.content Pprintast.expression vs.value
+      fprintf fmt "%s := %a" vs.signal.ident.content Pprintast.expression vs.value.exp
     | MLif (mltest_expr, mlseq1, mlseq2) ->
       fprintf fmt "%sif %a then (\n%a\n%s)" indent pp_ml_test_expr mltest_expr
         (pp_ml_sequence (lvl + 2)) mlseq1 indent;
@@ -238,7 +238,7 @@ module Ocaml_gen = struct
         | l -> Pat.tuple @@ List.rev_map (fun s -> mk_pat_var s.ident) l
       in
       let let_sigs_local e = List.fold_left (fun acc vs ->
-          [%expr let [%p mk_pat_var vs.signal.ident] = ref (make_signal [%e vs.value])
+          [%expr let [%p mk_pat_var vs.signal.ident] = ref (make_signal [%e vs.value.exp])
                  in [%e acc]]
         ) e (local_sigs)
       in
@@ -279,13 +279,21 @@ module Ocaml_gen = struct
               let [%p Pat.var select_env_var] =
                 Bitset.make [%e int_const (1 + nstmts)]
               in
-              [%e let_sigs_local (set_sigs_absent returns)]]
+              [%e let_sigs_global (set_sigs_absent returns)]]
 
   let remove_signal_renaming s =
     try
       Ast.({s with
             content = String.sub s.content 0 ((String.rindex s.content '~'))})
     with Not_found -> s
+
+
+  let rebind_locals_let locals e =
+    (List.fold_left (fun acc x ->
+         [%expr let [%p mk_pat_var @@ remove_signal_renaming x.ident] =
+                  ![%e mk_ident x.ident]
+                in [%e acc]]
+       ) e locals)
 
   let add_ref_local s =
     match s.origin with
@@ -301,8 +309,7 @@ module Ocaml_gen = struct
 
   let rec construct_sequence depl mlseq =
     match mlseq with
-    | Seq (Seqlist [], Seqlist []) | Seqlist [] ->
-      assert false
+    | Seq (Seqlist [], Seqlist []) | Seqlist [] -> assert false
     | Seq (mlseq, Seqlist []) | Seq (Seqlist [], mlseq) ->
       construct_sequence depl mlseq
     | Seqlist ml_asts ->
@@ -317,8 +324,8 @@ module Ocaml_gen = struct
   and construct_ml_ast depl ast =
     match ast with
     | MLemit vs ->
-      [%expr set_present_value [%e add_ref_local vs.signal] [%e vs.value]]
-
+      let rebinded_expr = rebind_locals_let vs.value.locals vs.value.exp in
+      [%expr set_present_value [%e add_ref_local vs.signal] [%e rebinded_expr]]
     | MLif (test, mlseq1, mlseq2) ->
       begin match mlseq1, mlseq2 with
         | mlseq1, (Seqlist [] | Seq (Seqlist [], Seqlist [])) ->
@@ -334,7 +341,9 @@ module Ocaml_gen = struct
       end
 
     | MLassign vs ->
-      [%expr [%e mk_ident vs.signal.ident] := make_signal [%e vs.value]]
+      rebind_locals_let vs.value.locals
+        [%expr [%e mk_ident vs.signal.ident] := make_signal [%e vs.value.exp]]
+
 
     | MLenter i ->
       [%expr Bitset.add
@@ -347,14 +356,7 @@ module Ocaml_gen = struct
                  [%e int_const i]]
 
     | MLexpr pexpr ->
-      let atom_expr =
-        [%expr let () = [%e pexpr.exp] in ()]
-      in
-      (List.fold_left (fun acc x ->
-           [%expr let [%p mk_pat_var @@ remove_signal_renaming x.ident] =
-                    ![%e mk_ident x.ident]
-                  in [%e acc]]
-         ) atom_expr pexpr.locals)
+      rebind_locals_let pexpr.locals [%expr let () = [%e pexpr.exp] in ()]
 
     | MLpause -> [%expr set_absent (); Pause]
     | MLfinish -> [%expr set_absent (); Bitset.add [%e select_env_ident] 0; Finish]

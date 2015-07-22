@@ -68,7 +68,7 @@ module Flowgraph = struct
 
   type action =
     | Emit of Parsetree.expression Ast.valued_signal
-    | Atom of Ast.atom
+    | Atom of Parsetree.expression Ast.atom
     | Enter of int
     | Exit of int
     | Local_signal of Parsetree.expression Ast.valued_signal
@@ -80,7 +80,8 @@ module Flowgraph = struct
         | Atom e -> asprintf "%a" Pprintast.expression e.Ast.exp
         | Enter i -> sprintf "enter %d" i
         | Exit i -> sprintf "exit %d" i
-        | Local_signal vs -> asprintf "signal %s (%a)" vs.signal.ident.content Pprintast.expression vs.value
+        | Local_signal vs ->
+          asprintf "signal %s (%a)" vs.signal.ident.content Pprintast.expression vs.value.exp
       end)
 
   let pp_action fmt a =

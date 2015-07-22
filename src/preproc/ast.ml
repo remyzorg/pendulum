@@ -12,17 +12,18 @@ type signal_origin = Local | Input | Output
 
 type signal = { ident : ident; origin : signal_origin }
 
-type 'a valued_signal = {signal : signal ; value : 'a}
+type 'a atom = { locals : signal list; exp : 'a}
+
+type 'a valued_signal = {signal : signal ; value : 'a atom}
 type 'a valued_ident = {sname : ident ; value : 'a}
 type label = Label of ident
 
-type atom = { locals : signal list; exp : Parsetree.expression}
 
 let mk_loc ?(loc=dummy_loc) content = {loc; content}
 let mk_signal ?(origin=Local) ident = {ident; origin}
 
 let mk_vid sname value = {sname; value}
-let mk_vsig signal value = {signal; value}
+let mk_vsig signal locals exp = {signal; value = {locals; exp}}
 
 let mk_atom ?(locals = []) exp = {locals; exp}
 
@@ -106,7 +107,7 @@ module Tagged = struct
     | Trap of label * t
     | Exit of label
     | Present of signal * t * t
-    | Atom of atom [@printer fun fmt x -> Pprintast.expression fmt x.exp]
+    | Atom of Parsetree.expression atom
     | Signal of Parsetree.expression valued_signal * t
     | Await of signal
   and tagged = tagged_ast location
@@ -204,7 +205,11 @@ module Tagged = struct
         let st2 = visit env st2 in
         mk_tagged (Par (st1, st2)) !+id
 
-      | Derived.Emit s -> mk_tagged (Emit {signal = (rename env.signals s.sname ast); value = s.value}) !+id
+      | Derived.Emit s ->
+        let locals = (List.map (fun x -> x.signal) env.local_signals) in
+        let s' = rename env.signals s.sname ast in
+        mk_tagged (Emit {signal = s'; value = mk_atom ~locals s.value}) !+id
+
       | Derived.Nothing -> mk_tagged Nothing !+id
       | Derived.Pause -> mk_tagged Pause !+id
 
@@ -224,13 +229,14 @@ module Tagged = struct
       | Derived.Present (s, t1, t2) ->
         let s = rename env.signals s ast in
         mk_tagged (Present(s, visit env t1, visit env t2)) !+id
-      | Derived.Atom f -> mk_tagged (Atom {
-          locals = List.map (fun x -> x.signal) env.local_signals;
-          exp = f
-        }) !+id
+      | Derived.Atom f -> mk_tagged (Atom (
+          mk_atom ~locals:(List.map (fun x -> x.signal) env.local_signals) f
+        )) !+id
 
       | Derived.Signal (s,t) ->
-        let env, s = add_signal env s in
+        let locals = List.map (fun x -> x.signal) env.local_signals in
+        let svid = mk_vid s.sname (mk_atom ~locals s.value) in
+        let env, s = add_signal env svid in
         mk_tagged (Signal (s, visit env t)) !+id
 
 

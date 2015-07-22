@@ -21,7 +21,7 @@ and ml_ast =
   | MLassign of Parsetree.expression Ast.valued_signal
   | MLenter of int
   | MLexit of int
-  | MLexpr of Ast.atom
+  | MLexpr of Parsetree.expression Ast.atom
   | MLpause
   | MLfinish
 

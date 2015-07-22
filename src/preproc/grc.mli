@@ -18,7 +18,7 @@ module Flowgraph : sig
 
   type action =
     | Emit of Parsetree.expression Ast.valued_signal
-    | Atom of Ast.atom
+    | Atom of Parsetree.expression Ast.atom
     | Enter of int
     | Exit of int
     | Local_signal of Parsetree.expression Ast.valued_signal

@@ -10,15 +10,16 @@ type signal_origin = Local | Input | Output
 
 type signal = { ident : ident; origin : signal_origin }
 type label = Label of ident
+type 'a atom = { locals : signal list; exp : 'a}
 
+type 'a valued_signal = {signal : signal ; value : 'a atom}
 type 'a valued_ident = {sname : ident ; value : 'a}
-type 'a valued_signal = {signal : signal; value : 'a}
 val mk_signal : ?origin:signal_origin -> ident -> signal
-val mk_vsig : signal -> 'a -> 'a valued_signal
+
+val mk_vsig : signal -> signal list -> 'a -> 'a valued_signal
 val mk_vid : ident -> 'a -> 'a valued_ident
 
-type atom = { locals : signal list; exp : Parsetree.expression}
-val mk_atom : ?locals:signal list -> Parsetree.expression -> atom
+val mk_atom : ?locals:signal list -> 'a -> 'a atom
 
 module IdentMap : Map.S with type key = ident
 module IdentSet : Set.S with type elt = ident
@@ -46,7 +47,8 @@ module Derived : sig
 
   | Halt
   | Sustain of Parsetree.expression valued_ident
-  | Present_then of ident * statement
+  | Present_then of 
+ident * statement
   | Await of ident
   | Await_imm of ident
   | Suspend_imm of statement * ident
@@ -78,7 +80,7 @@ module Tagged : sig
     | Trap of label * t
     | Exit of label
     | Present of signal * t * t
-    | Atom of atom
+    | Atom of Parsetree.expression atom
     | Signal of Parsetree.expression valued_signal * t
     | Await of signal
   and tagged = tagged_ast location
