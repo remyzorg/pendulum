@@ -31,23 +31,23 @@ let%sync mouse_machine =
   input ctx;
   input move;
 
-  signal circle ({x = fst (!!move); y = 10.; radius = 20.; color = "green"})
+  signal circle ({x = fst (!!move); y = 50.; radius = 20.; color = "green"})
     begin
       loop (present move (
           atom (
             move_circle !!ctx !!circle (fst !!move) !!circle.y
           );
-          emit circle {!!circle with x = fst !!move; y = snd !!move}
+          emit circle {!!circle with x = fst !!move; y = !!circle.y}
         ); pause)
     end
   ||
-  signal circle ({x = 10.; y = snd (!!move); radius = 20.; color = "green"})
+  signal circle ({x = 50.; y = snd (!!move); radius = 20.; color = "green"})
     begin
       loop (present move (
           atom (
             move_circle !!ctx !!circle !!circle.x (snd !!move)
           );
-          emit circle {!!circle with x = fst !!move; y = snd !!move}
+          emit circle {!!circle with x = !!circle.x; y = snd !!move}
         ); pause)
     end
 
