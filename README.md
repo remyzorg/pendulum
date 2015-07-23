@@ -18,7 +18,7 @@ The core language is completely compatible with vanilla OCaml compiler.
 
 # Documentation
 
-see a slight [documentation](https://github.com/remyzorg/pendulum/wiki/Documentation) and [examples](examples/)
+see a slight [documentation](https://www.github.com/remyzorg/pendulum/wiki/Documentation) and [examples](examples/)
 
 
 # Install
