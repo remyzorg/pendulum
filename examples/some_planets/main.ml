@@ -22,34 +22,45 @@ let draw_circle ctx c =
   ctx##arc c.x c.y c.radius 0. (pi*.2.) Js._true;
   ctx##fill
 
+let erase_circle ctx c =
+  draw_circle ctx {c with color ="white"; radius = c.radius +. 1.}
+
 let move_circle ctx c x y =
-  draw_circle ctx {c with color ="white"; radius = c.radius +. 1.};
+  erase_circle ctx c;
   draw_circle ctx {c with x; y}
 
 
 let%sync mouse_machine =
   input ctx;
   input move;
+  input quit1;
+  input quit2;
 
+  trap exit1 (
   signal circle ({x = fst (!!move); y = 50.; radius = 20.; color = "green"})
     begin
       loop (present move (
+          present quit1 (exit exit1);
           atom (
             move_circle !!ctx !!circle (fst !!move) !!circle.y
           );
           emit circle {!!circle with x = fst !!move; y = !!circle.y}
         ); pause)
     end
+  )
   ||
+  trap exit2 (
   signal circle ({x = 50.; y = snd (!!move); radius = 20.; color = "green"})
     begin
       loop (present move (
+          present quit2 (exit exit2);
           atom (
             move_circle !!ctx !!circle !!circle.x (snd !!move)
           );
           emit circle {!!circle with x = !!circle.x; y = snd !!move}
         ); pause)
     end
+  )
 
 
 let _ =
@@ -58,9 +69,19 @@ let _ =
       let c = "canvas" @> CoerceTo.canvas in
       let ctx = c##getContext (Dom_html._2d_) in
 
-      let (set_ctx, set_move), step =
-        mouse_machine (ctx, (0.,0.))
+      let (set_ctx, set_move, set_quit1, set_quit2), step =
+        mouse_machine (ctx, (0.,0.), (), ())
       in
+      let is_eq k q = Js.Optdef.get k (fun _ -> 0) = Char.code q in
+
+      window##.onkeypress := handler (fun e ->
+          if is_eq e##.charCode 'q' then begin
+            set_quit1 ()
+          end
+          else if is_eq e##.charCode 'a' then set_quit2 ();
+          ignore @@ step ();
+          Js._false
+        );
 
       window##.onmousemove := handler (fun e ->
           let x, y = (float @@ e##.clientX, float @@ e##.clientY) in
