@@ -1,6 +1,16 @@
 (* generating the ocaml code from ast *)
 
 
+module Expression = struct
+  type t = Parsetree.expression
+  let print = Pprintast.expression
+end
+
+module Flowgraph = Grc.Flowgraph.Make (Expression)
+module Selection_tree = Grc.Selection_tree
+module Schedule = Grc.Schedule.Make (Flowgraph)
+module Of_ast = Grc.Of_ast.Make (Flowgraph)
+
 open Utils
 open Ast
 
@@ -119,7 +129,7 @@ let (++) c1 c2 = Seq (c1, c2)
 
 
 let construct_ml_action deps mr a =
-  let open Grc.Flowgraph in
+  let open Flowgraph in
   match a with
   | Emit vs -> mr := SignalSet.add vs.signal !mr; mls @@ MLemit vs
   | Atom e -> mls @@ MLexpr e
@@ -128,11 +138,11 @@ let construct_ml_action deps mr a =
   | Local_signal vs -> mls @@ MLassign vs
 
 let (<::) sel l =
-  let open Grc.Selection_tree in
+  let open Selection_tree in
   if sel.tested then sel.label :: l else l
 
 let deplist sel =
-  let open Grc.Selection_tree in
+  let open Selection_tree in
   let env = ref [] in
   let rec visit sel =
     match sel.t with
@@ -147,14 +157,14 @@ let deplist sel =
   in ignore (visit sel); !env
 
 let construct_test_expr mr tv =
-  let open Grc.Flowgraph in
+  let open Flowgraph in
   match tv with
   | Signal vs -> mr := SignalSet.add vs !mr; MLsig vs
   | Selection i -> MLselect i
   | Finished -> MLfinished
 
 let grc2ml dep_array fg =
-  let open Grc.Flowgraph in
+  let open Flowgraph in
   let sigs = ref SignalSet.empty in
   let rec construct stop fg =
     match stop with
@@ -165,7 +175,7 @@ let grc2ml dep_array fg =
         | Call (a, t) -> construct_ml_action dep_array sigs a ++ construct stop t
         | Test (tv, t1, t2) ->
           begin
-            match Grc.Schedule.find_join t1 t2 with
+            match Schedule.find_join t1 t2 with
             | Some j when j <> Finish && j <> Pause ->
               (mls @@ MLif
                  (construct_test_expr sigs tv,
@@ -206,7 +216,7 @@ module Ocaml_gen = struct
     { pvb_pat; pvb_expr; pvb_attributes; pvb_loc; }
 
   let deplist sel =
-    let open Grc.Selection_tree in
+    let open Selection_tree in
     let env = ref [] in
     let rec visit sel =
       match sel.t with
@@ -229,7 +239,7 @@ module Ocaml_gen = struct
 
 
   let init nstmts (global_sigs,local_sigs) sel =
-    let open Grc.Selection_tree in
+    let open Selection_tree in
     fun e ->
       let sigs_step_arg =
         match global_sigs with
@@ -370,8 +380,7 @@ end
 
 
 let generate ?(sigs=[],[]) tast =
-  let selection_tree, controlflow_graph as grc = Grc.Of_ast.construct tast in
-  let open Grc in
+  let selection_tree, controlflow_graph as grc = Of_ast.construct tast in
   Schedule.tag_tested_stmts selection_tree controlflow_graph;
   let _deps = Schedule.check_causality_cycles grc in
   let interleaved_cfg = Schedule.interleave controlflow_graph in

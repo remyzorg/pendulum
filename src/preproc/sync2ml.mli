@@ -1,5 +1,12 @@
 
+module Expression : sig
+  type t = Parsetree.expression
+  val print : Format.formatter -> t -> unit
+end
 
+module Flowgraph : Grc.Flowgraph.S with type exp = Expression.t
+module Schedule : Grc.Schedule.S with type fg = Flowgraph.t
+module Of_ast : Grc.Of_ast.S with type fg = Flowgraph.t and type exp = Flowgraph.exp
 
 type error = Noerr
 
@@ -27,7 +34,7 @@ and ml_ast =
 
 val pp_ml_sequence : int -> Format.formatter -> ml_sequence -> unit
 
-val grc2ml : int list array -> Grc.Flowgraph.t -> ml_sequence
+val grc2ml : int list array -> Flowgraph.t -> ml_sequence
 
 val generate:
   ?sigs:(

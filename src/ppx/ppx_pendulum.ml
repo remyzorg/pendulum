@@ -248,8 +248,9 @@ let expected_ext = Utils.StringSet.(
       add "sync_ast" (
         singleton "sync" )))
 
-let extend_mapper argv = {
-  default_mapper with
+let extend_mapper argv =
+  let open Sync2ml in
+  {default_mapper with
   structure_item = (fun mapper stri ->
       try
         begin
@@ -272,8 +273,8 @@ let extend_mapper argv = {
         Error.(error ~loc (Other_err (e, Ast.print_error)))
       | Sync2ml.Error (loc, e) ->
         Error.(error ~loc (Other_err (e, Sync2ml.print_error)))
-      | Grc.Error (loc, e) ->
-        Error.(error ~loc (Other_err (e, Grc.print_error)))
+      | Flowgraph.Error (loc, e) ->
+        Error.(error ~loc (Other_err (e, Flowgraph.print_error)))
       | e->
         Error.(error ~loc:Ast.dummy_loc
                  (Other_err (e, fun fmt e ->
@@ -306,8 +307,8 @@ let extend_mapper argv = {
       Error.(error ~loc (Other_err (e, Ast.print_error)))
     | Sync2ml.Error (loc, e) ->
       Error.(error ~loc (Other_err (e, Sync2ml.print_error)))
-    | Grc.Error (loc, e) ->
-      Error.(error ~loc (Other_err (e, Grc.print_error)))
+    | Flowgraph.Error (loc, e) ->
+      Error.(error ~loc (Other_err (e, Flowgraph.print_error)))
     | e->
       Error.(error ~loc:Ast.dummy_loc
                (Other_err (e, fun fmt e ->

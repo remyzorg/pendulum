@@ -100,11 +100,11 @@ let print_to_dot loc pat =
       ) ^ ("_" ^ pat)
     in
     print_to_dot_one name "_tagged" Ast.Tagged.print_to_dot e;
-    let sel, fg = Grc.Of_ast.construct e in
+    let sel, fg = Sync2ml.Of_ast.construct e in
     print_to_dot_one name "_sel" Grc.Selection_tree.print_to_dot sel;
-    print_to_dot_one name "_fg" Grc.Flowgraph.print_to_dot fg;
-    let fg = Grc.Schedule.interleave fg in
+    print_to_dot_one name "_fg" Sync2ml.Flowgraph.print_to_dot fg;
+    let fg = Sync2ml.Schedule.interleave fg in
     print_to_dot_one name "_interfg"
-      Grc.Flowgraph.print_to_dot fg
+      Sync2ml.Flowgraph.print_to_dot fg
     (* Format.printf "=============================@."; *)
     (* Sync2ml.(pp_ml_sequence 0 Format.std_formatter (grc2ml fg)) *)
