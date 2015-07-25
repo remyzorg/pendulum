@@ -1,7 +1,5 @@
 
 open OUnit
-
-
 open Pendulum.Runtime_ast
 
 
@@ -219,42 +217,3 @@ let suite =
     "seq">:: test_seq;
     "cyclic">:: cyclic_grc;
   ] |> run_test_tt_main
-
-
-
-
-
-(* let abro a b r o = *)
-(*   loop_each r @@ *)
-(*     await a *)
-(*     // !![await b; emit o] *)
-
-
-(* let trap_par_loop = *)
-(*   Ast.normalize @@ *)
-
-(*   trap "T" ( *)
-(*     loop [ *)
-(*       Present_then ("out", exit_l "T"); *)
-(*       pause; *)
-(*     ] // *)
-(*     loop [ *)
-(*       Present_then ("hop", emit "out"); *)
-(*       pause; *)
-(*     ] *)
-(*   ) *)
-
-
-(*
-   trap T in
-     loop
-       present OUT then exit T;
-       pause
-     end
-     loop
-       present HOP then emit OUT;
-       pause
-     end
-   end
-
-*)

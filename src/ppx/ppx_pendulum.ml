@@ -47,33 +47,31 @@ module Error = struct
 
   let syntax_error ~loc r = error ~loc (Syntax r)
 
-  let check_ident_string e =
+  let check_expr_ident e =
     let open Ast in
     match e.pexp_desc with
-    (* | Pexp_construct ({txt = Lident s; loc}, None) *)
     | Pexp_ident {txt = Lident s; loc} ->
       {loc; content = s}
     | _ -> syntax_error ~loc:e.pexp_loc Variable_name
 
+  let check_pat_ident e =
+    let open Ast in
+    match e.ppat_desc with
+    | Ppat_var {txt = s; loc} ->
+      {loc; content = s}
+    | _ -> syntax_error ~loc:e.ppat_loc Variable_name
+
   let signal_value_missing e s =
-    error ~loc:e.pexp_loc (Value_missing (check_ident_string s).Ast.content)
+    error ~loc:e.pexp_loc (Value_missing (check_expr_ident s).Ast.content)
 
 end
-
-let check_ident_string e =
-  let open Ast in
-  match e.pexp_desc with
-  (* | Pexp_construct ({txt = Lident s; loc}, None) *)
-  | Pexp_ident {txt = Lident s; loc} ->
-    {loc; content = s}
-  | _ -> Error.(syntax_error ~loc:e.pexp_loc Variable_name)
 
 let pop_signals_decl e =
   let cont origin e =
     match e with
     | [%expr [%e? e_var] [%e? _]] ->
       Error.(syntax_error ~loc:e_var.pexp_loc Forgot_sem)
-    | [%expr [%e? e_var]] -> Ast.(mk_signal ~origin @@ check_ident_string e_var)
+    | [%expr [%e? e_var]] -> Ast.(mk_signal ~origin @@ Error.check_expr_ident e_var)
   in
   let rec aux sigs p =
     match p with
@@ -83,18 +81,18 @@ let pop_signals_decl e =
       begin match params.pexp_desc with
         | Pexp_tuple ([%expr input [%e? e_var]] :: ids) ->
           aux
-            Ast.(List.rev @@ (mk_signal ~origin:Input @@ check_ident_string e_var)
+            Ast.(List.rev @@ (mk_signal ~origin:Input @@ Error.check_expr_ident e_var)
              :: ((List.map (cont Input) ids) @ sigs)) e2
         | Pexp_tuple ([%expr output [%e? e_var]] :: ids)->
           aux
-            Ast.(List.rev @@ (mk_signal ~origin:Output @@ check_ident_string e_var)
+            Ast.(List.rev @@ (mk_signal ~origin:Output @@ Error.check_expr_ident e_var)
              :: ((List.map (cont Output) ids) @ sigs)) e2
         | _ ->
           begin match params with
             | [%expr input [%e? e_var]] ->
-              aux Ast.(mk_signal ~origin:Input (check_ident_string e_var) :: sigs) e2
+              aux Ast.(mk_signal ~origin:Input (Error.check_expr_ident e_var) :: sigs) e2
             | [%expr output [%e? e_var]] ->
-              aux Ast.(mk_signal ~origin:Output (check_ident_string e_var) :: sigs) e2
+              aux Ast.(mk_signal ~origin:Output (Error.check_expr_ident e_var) :: sigs) e2
             | [%expr input [%e? e_var] [%e? _]]
             | [%expr output [%e? e_var] [%e? _]] ->
               Error.(syntax_error ~loc:e_var.pexp_loc Forgot_sem)
@@ -116,13 +114,13 @@ let ast_of_expr e =
       Pause
 
     | [%expr emit [%e? signal] [%e? e_value]] ->
-      Emit (Ast.mk_vid (check_ident_string signal) e_value)
+      Emit (Ast.mk_vid (Error.check_expr_ident signal) e_value)
 
     | [%expr emit [%e? signal]] ->
       Error.signal_value_missing e signal
 
     | [%expr exit [%e? label]] ->
-      Exit (Label(check_ident_string label))
+      Exit (Label(Error.check_expr_ident label))
 
     | [%expr atom [%e? e]] ->
       Atom e
@@ -141,45 +139,47 @@ let ast_of_expr e =
       Par (visit e1, visit e2)
 
     | [%expr present [%e? signal] [%e? e1] [%e? e2]] ->
-      Present (check_ident_string signal, visit e1, visit e2)
+      Present (Error.check_expr_ident signal, visit e1, visit e2)
 
+    | [%expr let [%p? signal] = [%e? e_value] in [%e? e]] ->
+      Signal (Ast.mk_vid (Error.check_pat_ident signal) e_value, visit e)
 
     | [%expr signal [%e? signal] [%e? e_value] [%e? e]] ->
-      Signal (Ast.mk_vid (check_ident_string signal) e_value, visit e)
+      Signal (Ast.mk_vid (Error.check_expr_ident signal) e_value, visit e)
 
     | [%expr signal [%e? signal] [%e? _]] ->
       Error.signal_value_missing e signal
 
     | [%expr suspend [%e? e] [%e? signal]] ->
-      Suspend (visit e, check_ident_string signal)
+      Suspend (visit e, Error.check_expr_ident signal)
 
     | [%expr trap [%e? label] [%e? e]] ->
-      Trap (Label (check_ident_string label), visit e)
+      Trap (Label (Error.check_expr_ident label), visit e)
 
     | [%expr halt ] ->
       Halt
 
     | [%expr sustain [%e? signal] [%e? e_value]] ->
-      Sustain (Ast.mk_vid (check_ident_string signal) e_value)
+      Sustain (Ast.mk_vid (Error.check_expr_ident signal) e_value)
 
     | [%expr sustain [%e? signal]] ->
       Error.signal_value_missing e signal
 
     | [%expr present [%e? signal] [%e? e]] ->
       Present_then
-        (check_ident_string signal, visit e)
+        (Error.check_expr_ident signal, visit e)
 
     | [%expr await [%e? signal]] ->
-      Await (check_ident_string signal)
+      Await (Error.check_expr_ident signal)
 
     | [%expr abort [%e? e] [%e? signal]] ->
-      Abort (visit e, check_ident_string signal)
+      Abort (visit e, Error.check_expr_ident signal)
 
     | [%expr loopeach [%e? e] [%e? signal]] ->
-      Loop_each (visit e, check_ident_string signal)
+      Loop_each (visit e, Error.check_expr_ident signal)
 
     | [%expr every [%e? e] [%e? signal]] ->
-      Every (check_ident_string signal, visit e)
+      Every (Error.check_expr_ident signal, visit e)
 
     | [%expr nothing [%e? e_err]]
     (* | [%expr pause [%e? e_err]] *)
