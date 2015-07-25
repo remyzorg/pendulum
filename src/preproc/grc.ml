@@ -10,63 +10,61 @@ end
 
 module Selection_tree = struct
 
-      open Tagged
+  open Tagged
 
-      type t = {label : int; t : repr; mutable tested : bool}
-      and repr =
-        | Bottom
-        | Pause
-        | Par of t list
-        | Excl of t list
-        | Ref of t
+  type t = {label : int; t : repr; mutable tested : bool}
+  and repr =
+    | Bottom
+    | Pause
+    | Par of t list
+    | Excl of t list
+    | Ref of t
 
-      let none = {label = 0; t = Excl []; tested = false}
+  let none = {label = 0; t = Excl []; tested = false}
 
-      let (!+) a = incr a; !a
+  let mk_tree stt id = {
+    t = stt;
+    label = id;
+    tested = false;
+  }
 
-      let mk_tree stt id = {
-        t = stt;
-        label = id;
-        tested = false;
-      }
+  let of_ast ast =
+    let rec visit : 'a Tagged.t -> t = fun tagged ->
+      match tagged.st.content with
+      | Emit _ | Nothing | Exit _ | Atom _ -> mk_tree Bottom tagged.id
+      | Pause -> mk_tree Pause tagged.id
 
-      let of_ast ast =
-        let rec visit : 'a Tagged.t -> t = fun tagged ->
-          match tagged.st.content with
-          | Emit _ | Nothing | Exit _ | Atom _ -> mk_tree Bottom tagged.id
-          | Pause -> mk_tree Pause tagged.id
+      | Par (t1, t2) -> mk_tree (Par [visit t1; visit t2]) tagged.id
+      | Seq (t1, t2) -> mk_tree (Excl [visit t1; visit t2]) tagged.id
+      | Present (_, st1, st2) -> mk_tree (Excl [visit st1; visit st2]) tagged.id
 
-          | Par (t1, t2) -> mk_tree (Par [visit t1; visit t2]) tagged.id
-          | Seq (t1, t2) -> mk_tree (Excl [visit t1; visit t2]) tagged.id
-          | Present (_, st1, st2) -> mk_tree (Excl [visit st1; visit st2]) tagged.id
+      | Loop st -> mk_tree (Ref (visit st)) tagged.id
+      | Suspend (st, _) -> mk_tree (Ref (visit st)) tagged.id
+      | Signal (_, st) -> mk_tree (Ref (visit st)) tagged.id
+      | Trap (_, st) -> mk_tree (Ref (visit st)) tagged.id
+      | Await s -> mk_tree Pause tagged.id
+    in
+    visit ast
 
-          | Loop st -> mk_tree (Ref (visit st)) tagged.id
-          | Suspend (st, _) -> mk_tree (Ref (visit st)) tagged.id
-          | Signal (_, st) -> mk_tree (Ref (visit st)) tagged.id
-          | Trap (_, st) -> mk_tree (Ref (visit st)) tagged.id
-          | Await s -> mk_tree Pause tagged.id
-        in
-        visit ast
-
-      let print_to_dot fmt selection =
-        let open Format in
-        let rec visit x = match x.t with
-          | Bottom -> fprintf fmt "N%d [shape = none, label=\"Bottom %d\"]; @\n" x.label x.label
-          | Pause -> fprintf fmt "N%d [shape = none, label=\"Pause %d\"]; @\n" x.label x.label
-          | Par sels ->
-            fprintf fmt "N%d [shape = none, label=\"Par %d\"]; @\n" x.label x.label;
-            List.iter (fun sel -> fprintf fmt "N%d -> N%d ;@\n" x.label sel.label; visit sel) sels
-          | Excl sels ->
-            fprintf fmt "N%d [shape = none, label=\"Excl %d\"]; @\n" x.label x.label;
-            List.iter (fun sel -> fprintf fmt "N%d -> N%d ;@\n" x.label sel.label; visit sel) sels
-          | Ref sel ->
-            fprintf fmt "N%d [shape = none, label=\"Ref %d\"]; @\n" x.label x.label;
-            fprintf fmt "N%d -> N%d ;@\n" x.label sel.label;
-            visit sel
-        in
-        fprintf fmt "@[<hov 2>digraph selection {@\nmargin = 0;@\n";
-        visit selection;
-        fprintf fmt "}@]\n@."
+  let print_to_dot fmt selection =
+    let open Format in
+    let rec visit x = match x.t with
+      | Bottom -> fprintf fmt "N%d [shape = none, label=\"Bottom %d\"]; @\n" x.label x.label
+      | Pause -> fprintf fmt "N%d [shape = none, label=\"Pause %d\"]; @\n" x.label x.label
+      | Par sels ->
+        fprintf fmt "N%d [shape = none, label=\"Par %d\"]; @\n" x.label x.label;
+        List.iter (fun sel -> fprintf fmt "N%d -> N%d ;@\n" x.label sel.label; visit sel) sels
+      | Excl sels ->
+        fprintf fmt "N%d [shape = none, label=\"Excl %d\"]; @\n" x.label x.label;
+        List.iter (fun sel -> fprintf fmt "N%d -> N%d ;@\n" x.label sel.label; visit sel) sels
+      | Ref sel ->
+        fprintf fmt "N%d [shape = none, label=\"Ref %d\"]; @\n" x.label x.label;
+        fprintf fmt "N%d -> N%d ;@\n" x.label sel.label;
+        visit sel
+    in
+    fprintf fmt "@[<hov 2>digraph selection {@\nmargin = 0;@\n";
+    visit selection;
+    fprintf fmt "}@]\n@."
 
 end
 
