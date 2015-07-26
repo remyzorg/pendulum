@@ -8,6 +8,7 @@ open Longident
 open Preproc
 
 
+module Ast = Sync2ml.Ast
 
 let string_const ident =
   let open Ast in
@@ -101,7 +102,7 @@ let print_to_dot loc pat =
     in
     print_to_dot_one name "_tagged" Ast.Tagged.print_to_dot e;
     let sel, fg = Sync2ml.Of_ast.construct e in
-    print_to_dot_one name "_sel" Grc.Selection_tree.print_to_dot sel;
+    print_to_dot_one name "_sel" Sync2ml.Selection_tree.print_to_dot sel;
     print_to_dot_one name "_fg" Sync2ml.Flowgraph.print_to_dot fg;
     let fg = Sync2ml.Schedule.interleave fg in
     print_to_dot_one name "_interfg"

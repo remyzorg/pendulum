@@ -1,34 +1,39 @@
 
-module type Exp = sig
-  type t
-  val print : Format.formatter -> t -> unit
-end
-
 module Selection_tree : sig
 
-  type t = {label : int; t : repr; mutable tested : bool}
-  and repr =
-    | Bottom
-    | Pause
-    | Par of t list
-    | Excl of t list
-    | Ref of t
+  module type S = sig
 
-  val print_to_dot : Format.formatter -> t -> unit
+    module Ast : Ast.S
+
+    type t = {label : int; t : repr; mutable tested : bool}
+    and repr =
+      | Bottom
+      | Pause
+      | Par of t list
+      | Excl of t list
+      | Ref of t
+
+    val print_to_dot : Format.formatter -> t -> unit
+    val of_ast : Ast.Tagged.t -> t
+
+  end
+
+  module Make (Ast : Ast.S) : S with module Ast = Ast
 
 end
 
 module Flowgraph : sig
 
   module type S = sig
-    type exp
+
+    module Ast : Ast.S
 
     type action =
-      | Emit of exp Ast.valued_signal
-      | Atom of exp Ast.atom
+      | Emit of Ast.valued_signal
+      | Atom of Ast.atom
       | Enter of int
       | Exit of int
-      | Local_signal of exp Ast.valued_signal
+      | Local_signal of Ast.valued_signal
 
     type test_value =
       | Signal of Ast.signal
@@ -56,8 +61,8 @@ module Flowgraph : sig
     val test_node : test_value -> t * t -> t
 
     val (>>) : action -> t -> t
-    val exit_node : exp Ast.Tagged.t -> t -> t
-    val enter_node : exp Ast.Tagged.t -> t -> t
+    val exit_node : Ast.Tagged.t -> t -> t
+    val enter_node : Ast.Tagged.t -> t -> t
 
 
     type error =
@@ -65,13 +70,13 @@ module Flowgraph : sig
       | Cyclic_causality of t
       | Par_leads_to_finish of t
 
-    val error : loc:Location.t -> error -> 'a
+    val error : loc:Ast.loc -> error -> 'a
 
-    exception Error of Location.t * error
+    exception Error of Ast.loc * error
     val print_error : Format.formatter -> error -> unit
   end
 
-  module Make (E : Exp) : S with type exp = E.t
+  module Make (Ast : Ast.S) : S with module Ast = Ast
 
 end
 
@@ -79,35 +84,47 @@ end
 module Of_ast : sig
 
   module type S = sig
-    type fg
-    type exp
-    val flowgraph : exp Ast.Tagged.t -> fg
-    val construct : exp Ast.Tagged.t -> Selection_tree.t * fg
+
+    module Ast : Ast.S
+    module Fg : Flowgraph.S
+    module St : Selection_tree.S
+
+    val flowgraph : Ast.Tagged.t -> Fg.t
+    val construct : Ast.Tagged.t -> St.t * Fg.t
   end
 
-  module Make (Fg : Flowgraph.S) : S with type fg = Fg.t and type exp = Fg.exp
+  module Make (Fg : Flowgraph.S) (St : Selection_tree.S with module Ast = Fg.Ast) : S
+    with module Ast = Fg.Ast
+     and module Fg = Fg
+     and module St = St
+
 end
 
 module Schedule : sig
 
   module type S = sig
 
-    type fg
+    module Ast : Ast.S
+    module Fg : Flowgraph.S
+    module St : Selection_tree.S
 
-    val check_causality_cycles : 'a * fg -> fg list Ast.SignalMap.t
-    val tag_tested_stmts : Selection_tree.t -> fg -> unit
-    val find : fg -> fg -> fg option
+    val check_causality_cycles : 'a * Fg.t -> Fg.t list Ast.SignalMap.t
+    val tag_tested_stmts : St.t -> Fg.t -> unit
+    val find : Fg.t -> Fg.t -> Fg.t option
     val find_and_replace :
-      (fg -> fg) ->
-      fg -> fg -> bool * fg
+      (Fg.t -> Fg.t) ->
+      Fg.t -> Fg.t -> bool * Fg.t
 
-    val find_join : fg -> fg -> fg option
-    val replace_join : fg -> fg -> (fg -> fg)
-      -> fg * fg
-    val children: fg -> fg -> fg -> fg
-    val interleave: fg -> fg
+    val find_join : Fg.t -> Fg.t -> Fg.t option
+    val replace_join : Fg.t -> Fg.t -> (Fg.t -> Fg.t)
+      -> Fg.t * Fg.t
+    val children: Fg.t -> Fg.t -> Fg.t -> Fg.t
+    val interleave: Fg.t -> Fg.t
   end
 
-  module Make (Fg : Flowgraph.S) : S with type fg = Fg.t
+  module Make (Fg : Flowgraph.S) (St : Selection_tree.S with module Ast = Fg.Ast) : S
+    with module Ast = Fg.Ast
+     and module Fg = Fg
+     and module St = St
 
 end

@@ -4,12 +4,14 @@
 module Expression = struct
   type t = Parsetree.expression
   let print = Pprintast.expression
+  module Location = Location
 end
 
-module Flowgraph = Grc.Flowgraph.Make (Expression)
-module Selection_tree = Grc.Selection_tree
-module Schedule = Grc.Schedule.Make (Flowgraph)
-module Of_ast = Grc.Of_ast.Make (Flowgraph)
+module Ast = Ast.Make (Expression)
+module Flowgraph = Grc.Flowgraph.Make (Ast)
+module Selection_tree = Grc.Selection_tree.Make (Ast)
+module Schedule = Grc.Schedule.Make (Flowgraph) (Selection_tree)
+module Of_ast = Grc.Of_ast.Make (Flowgraph) (Selection_tree)
 
 open Utils
 open Ast
@@ -42,12 +44,12 @@ type ml_sequence =
   | Seqlist of ml_ast list
   | Seq of ml_sequence * ml_sequence
 and ml_ast =
-  | MLemit of Parsetree.expression Ast.valued_signal
+  | MLemit of Ast.valued_signal
   | MLif of ml_test_expr * ml_sequence * ml_sequence
-  | MLassign of Parsetree.expression Ast.valued_signal
+  | MLassign of Ast.valued_signal
   | MLenter of int
   | MLexit of int
-  | MLexpr of Parsetree.expression Ast.atom
+  | MLexpr of Ast.atom
   | MLpause
   | MLfinish
 
@@ -78,7 +80,7 @@ and pp_type_ml_ast lvl fmt =
     | MLassign vs -> fprintf fmt "%sMLassign %s" indent vs.signal.ident.content
     | MLenter i -> fprintf fmt "%sEnter %d" indent i
     | MLexit i -> fprintf fmt "%sExit %d" indent i
-    | MLexpr e -> fprintf fmt "%s%s" indent (asprintf "%a" Pprintast.expression e.exp)
+    | MLexpr e -> fprintf fmt "%s%s" indent (asprintf "%a" Ast.printexp e.exp)
     | MLpause -> fprintf fmt "%sPause" indent
     | MLfinish -> fprintf fmt "%sFinish" indent
     )
@@ -99,7 +101,7 @@ and pp_ml_ast lvl fmt =
   Format.(function
     | MLemit vs -> fprintf fmt "%semit %s" indent vs.signal.ident.content
     | MLassign vs ->
-      fprintf fmt "%s := %a" vs.signal.ident.content Pprintast.expression vs.value.exp
+      fprintf fmt "%s := %a" vs.signal.ident.content Ast.printexp vs.value.exp
     | MLif (mltest_expr, mlseq1, mlseq2) ->
       fprintf fmt "%sif %a then (\n%a\n%s)" indent pp_ml_test_expr mltest_expr
         (pp_ml_sequence (lvl + 2)) mlseq1 indent;
@@ -116,7 +118,7 @@ and pp_ml_ast lvl fmt =
 
     | MLenter i -> fprintf fmt "%senter %d" indent i
     | MLexit i -> fprintf fmt "%sexit %d" indent i
-    | MLexpr e -> fprintf fmt "%s%s" indent (asprintf "%a" Pprintast.expression e.exp)
+    | MLexpr e -> fprintf fmt "%s%s" indent (asprintf "%a" Ast.printexp e.exp)
     | MLpause -> fprintf fmt "%sPause" indent
     | MLfinish -> fprintf fmt "%sFinish" indent
     )

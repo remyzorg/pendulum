@@ -9,6 +9,7 @@ open Preproc
 
 open Utils
 
+module Ast = Sync2ml.Ast
 
 module Error = struct
 
@@ -51,7 +52,7 @@ module Error = struct
     let open Ast in
     match e.pexp_desc with
     | Pexp_ident {txt = Lident s; loc} ->
-      {loc; content = s}
+      {loc = loc; content = s}
     | _ -> syntax_error ~loc:e.pexp_loc Variable_name
 
   let check_pat_ident e =

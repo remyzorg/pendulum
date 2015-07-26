@@ -2,11 +2,22 @@
 module Expression : sig
   type t = Parsetree.expression
   val print : Format.formatter -> t -> unit
+  module Location : Ast.Location
 end
 
-module Flowgraph : Grc.Flowgraph.S with type exp = Expression.t
-module Schedule : Grc.Schedule.S with type fg = Flowgraph.t
-module Of_ast : Grc.Of_ast.S with type fg = Flowgraph.t and type exp = Flowgraph.exp
+module Ast : Ast.S
+  with type exp = Parsetree.expression
+   and type loc = Location.t
+
+module Flowgraph : Grc.Flowgraph.S with module Ast = Ast
+module Selection_tree : Grc.Selection_tree.S with module Ast = Ast
+
+module Schedule : Grc.Schedule.S with module Fg = Flowgraph
+
+module Of_ast : Grc.Of_ast.S
+  with module Fg = Flowgraph
+   and module Ast = Ast
+   and module St = Selection_tree
 
 type error = Noerr
 
@@ -23,12 +34,12 @@ type ml_sequence =
   | Seqlist of ml_ast list
   | Seq of ml_sequence * ml_sequence
 and ml_ast =
-  | MLemit of Parsetree.expression Ast.valued_signal
+  | MLemit of Ast.valued_signal
   | MLif of ml_test_expr * ml_sequence * ml_sequence
-  | MLassign of Parsetree.expression Ast.valued_signal
+  | MLassign of Ast.valued_signal
   | MLenter of int
   | MLexit of int
-  | MLexpr of Parsetree.expression Ast.atom
+  | MLexpr of Ast.atom
   | MLpause
   | MLfinish
 
@@ -39,5 +50,5 @@ val grc2ml : int list array -> Flowgraph.t -> ml_sequence
 val generate:
   ?sigs:(
     Ast.signal list *
-    Parsetree.expression Ast.valued_signal list) ->
-  Parsetree.expression Ast.Tagged.t -> Parsetree.expression
+    Ast.valued_signal list) ->
+  Ast.Tagged.t -> Parsetree.expression

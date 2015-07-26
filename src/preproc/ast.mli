@@ -1,102 +1,125 @@
 
-type 'a location = {
-  loc : Location.t;
-  content : 'a;
-}
-
-type ident = string location
-
-type signal_origin = Local | Input | Output
-
-type signal = { ident : ident; origin : signal_origin }
-type label = Label of ident
-type 'a atom = { locals : signal list; exp : 'a}
-
-type 'a valued_signal = {signal : signal ; value : 'a atom}
-type 'a valued_ident = {sname : ident ; value : 'a}
-val mk_signal : ?origin:signal_origin -> ident -> signal
-
-val mk_vsig : signal -> signal list -> 'a -> 'a valued_signal
-val mk_vid : ident -> 'a -> 'a valued_ident
-
-val mk_atom : ?locals:signal list -> 'a -> 'a atom
-
-module IdentMap : Map.S with type key = ident
-module IdentSet : Set.S with type elt = ident
-module SignalMap : Map.S with type key = signal
-module SignalSet : Set.S with type elt = signal
-
-val dummy_loc : Location.t
-val mk_loc : ?loc:Location.t -> 'a -> 'a location
-
-module Derived : sig
-  type 'a statement = ('a statement_tree) location
-  and 'a statement_tree =
-  | Loop of 'a statement
-  | Seq of 'a statement * 'a statement
-  | Par of 'a statement * 'a statement
-  | Emit of 'a valued_ident
-  | Nothing
-  | Pause
-  | Suspend of 'a statement * ident
-  | Trap of label * 'a statement
-  | Exit of label
-  | Present of ident * 'a statement * 'a statement
-  | Atom of 'a
-  | Signal of 'a valued_ident * 'a statement
-
-  | Halt
-  | Sustain of 'a valued_ident
-  | Present_then of ident * 'a statement
-  | Await of ident
-  | Await_imm of ident
-  | Suspend_imm of 'a statement * ident
-  | Abort of 'a statement * ident
-  | Weak_abort of 'a statement * ident
-  | Loop_each of 'a statement * ident
-  | Every of ident * 'a statement
+module type Location = sig
+  type t
+  val none : t
 end
 
-type error =
-  | Unbound_identifier of string
-exception Error of Location.t * error
-val error : loc:Location.t -> error -> 'a
-val print_error : Format.formatter -> error -> unit
+module type Exp = sig
+  type t
+  val print : Format.formatter -> t -> unit
+  module Location : Location
+end
 
-module Tagged : sig
+module type S = sig
 
+  type loc
+  type exp
 
-  type 'a t = {id : int; st : 'a tagged}
-  and 'a tagged_ast =
-    | Loop of 'a t
-    | Seq of 'a t * 'a t
-    | Par of 'a t * 'a t
-    | Emit of 'a valued_signal
-    | Nothing
-    | Pause
-    | Suspend of 'a t * signal
-    | Trap of label * 'a t
-    | Exit of label
-    | Present of signal * 'a t * 'a t
-    | Atom of 'a atom
-    | Signal of 'a valued_signal * 'a t
-    | Await of signal
-  and 'a tagged = ('a tagged_ast) location
+  val printexp : Format.formatter -> exp -> unit
 
-
-  type 'a env = {
-    labels : int IdentMap.t;
-    global_namespace : int IdentMap.t ref;
-    signals : (int * signal_origin) SignalMap.t;
-    all_local_signals : ('a valued_signal) list ref;
-    local_signals : 'a valued_signal list;
+  type 'a location = {
+    loc : loc;
+    content : 'a;
   }
 
-  val of_ast : ?sigs:(signal list) -> 'a Derived.statement -> 'a t * 'a env
+  type ident = string location
 
-  val print_to_dot : Format.formatter -> 'a t -> unit
+  type signal_origin = Local | Input | Output
+
+  type signal = { ident : ident; origin : signal_origin }
+  type label = Label of ident
+  type atom = { locals : signal list; exp : exp}
+
+  type valued_signal = {signal : signal ; value : atom}
+  type valued_ident = {sname : ident ; value : exp}
+  val mk_signal : ?origin:signal_origin -> ident -> signal
+
+  val mk_vsig : signal -> signal list -> exp -> valued_signal
+  val mk_vid : ident -> exp -> valued_ident
+
+  val mk_atom : ?locals:signal list -> exp -> atom
+
+  module IdentMap : Map.S with type key = ident
+  module IdentSet : Set.S with type elt = ident
+  module SignalMap : Map.S with type key = signal
+  module SignalSet : Set.S with type elt = signal
+
+  val dummy_loc : loc
+  val mk_loc : ?loc:loc -> 'a -> 'a location
+
+  module Derived : sig
+    type statement = (statement_tree) location
+    and statement_tree =
+      | Loop of statement
+      | Seq of statement * statement
+      | Par of statement * statement
+      | Emit of valued_ident
+      | Nothing
+      | Pause
+      | Suspend of statement * ident
+      | Trap of label * statement
+      | Exit of label
+      | Present of ident * statement * statement
+      | Atom of exp
+      | Signal of valued_ident * statement
+
+      | Halt
+      | Sustain of valued_ident
+      | Present_then of ident * statement
+      | Await of ident
+      | Await_imm of ident
+      | Suspend_imm of statement * ident
+      | Abort of statement * ident
+      | Weak_abort of statement * ident
+      | Loop_each of statement * ident
+      | Every of ident * statement
+  end
+
+  type error =
+    | Unbound_identifier of string
+  exception Error of loc * error
+  val error : loc:loc -> error -> 'a
+  val print_error : Format.formatter -> error -> unit
+
+  module Tagged : sig
+
+    type t = {id : int; st : tagged}
+    and tagged_ast =
+      | Loop of t
+      | Seq of t * t
+      | Par of t * t
+      | Emit of valued_signal
+      | Nothing
+      | Pause
+      | Suspend of t * signal
+      | Trap of label * t
+      | Exit of label
+      | Present of signal * t * t
+      | Atom of atom
+      | Signal of valued_signal * t
+      | Await of signal
+    and tagged = (tagged_ast) location
+
+
+    type env = {
+      labels : int IdentMap.t;
+      global_namespace : int IdentMap.t ref;
+      signals : (int * signal_origin) SignalMap.t;
+      all_local_signals : (valued_signal) list ref;
+      local_signals : valued_signal list;
+    }
+
+    val of_ast : ?sigs:(signal list) -> Derived.statement -> t * env
+
+    val print_to_dot : Format.formatter -> t -> unit
+  end
+
+  module Analysis : sig
+    val blocking : Tagged.t -> bool
+  end
+
 end
 
-module Analysis : sig
-  val blocking : 'a Tagged.t -> bool
-end
+module Make (E : Exp) : S
+  with type loc = E.Location.t
+   and type exp = E.t

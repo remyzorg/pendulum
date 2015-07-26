@@ -2,83 +2,102 @@ open Ast
 open Utils
 
 
-module type Exp = sig
-  type t
-  val print : Format.formatter -> t -> unit
-end
-
-
 module Selection_tree = struct
 
-  open Tagged
+  module type S = sig
 
-  type t = {label : int; t : repr; mutable tested : bool}
-  and repr =
-    | Bottom
-    | Pause
-    | Par of t list
-    | Excl of t list
-    | Ref of t
+    module Ast : Ast.S
 
-  let none = {label = 0; t = Excl []; tested = false}
+    type t = {label : int; t : repr; mutable tested : bool}
+    and repr =
+      | Bottom
+      | Pause
+      | Par of t list
+      | Excl of t list
+      | Ref of t
 
-  let mk_tree stt id = {
-    t = stt;
-    label = id;
-    tested = false;
-  }
+    val print_to_dot : Format.formatter -> t -> unit
 
-  let of_ast ast =
-    let rec visit : 'a Tagged.t -> t = fun tagged ->
-      match tagged.st.content with
-      | Emit _ | Nothing | Exit _ | Atom _ -> mk_tree Bottom tagged.id
-      | Pause -> mk_tree Pause tagged.id
+    val of_ast : Ast.Tagged.t -> t
 
-      | Par (t1, t2) -> mk_tree (Par [visit t1; visit t2]) tagged.id
-      | Seq (t1, t2) -> mk_tree (Excl [visit t1; visit t2]) tagged.id
-      | Present (_, st1, st2) -> mk_tree (Excl [visit st1; visit st2]) tagged.id
+  end
 
-      | Loop st -> mk_tree (Ref (visit st)) tagged.id
-      | Suspend (st, _) -> mk_tree (Ref (visit st)) tagged.id
-      | Signal (_, st) -> mk_tree (Ref (visit st)) tagged.id
-      | Trap (_, st) -> mk_tree (Ref (visit st)) tagged.id
-      | Await s -> mk_tree Pause tagged.id
-    in
-    visit ast
+  module Make (Ast : Ast.S) = struct
 
-  let print_to_dot fmt selection =
-    let open Format in
-    let rec visit x = match x.t with
-      | Bottom -> fprintf fmt "N%d [shape = none, label=\"Bottom %d\"]; @\n" x.label x.label
-      | Pause -> fprintf fmt "N%d [shape = none, label=\"Pause %d\"]; @\n" x.label x.label
-      | Par sels ->
-        fprintf fmt "N%d [shape = none, label=\"Par %d\"]; @\n" x.label x.label;
-        List.iter (fun sel -> fprintf fmt "N%d -> N%d ;@\n" x.label sel.label; visit sel) sels
-      | Excl sels ->
-        fprintf fmt "N%d [shape = none, label=\"Excl %d\"]; @\n" x.label x.label;
-        List.iter (fun sel -> fprintf fmt "N%d -> N%d ;@\n" x.label sel.label; visit sel) sels
-      | Ref sel ->
-        fprintf fmt "N%d [shape = none, label=\"Ref %d\"]; @\n" x.label x.label;
-        fprintf fmt "N%d -> N%d ;@\n" x.label sel.label;
-        visit sel
-    in
-    fprintf fmt "@[<hov 2>digraph selection {@\nmargin = 0;@\n";
-    visit selection;
-    fprintf fmt "}@]\n@."
+    module Ast = Ast
+
+    open Ast
+    open Tagged
+
+    type t = {label : int; t : repr; mutable tested : bool}
+    and repr =
+      | Bottom
+      | Pause
+      | Par of t list
+      | Excl of t list
+      | Ref of t
+
+    let none = {label = 0; t = Excl []; tested = false}
+
+    let mk_tree stt id = {
+      t = stt;
+      label = id;
+      tested = false;
+    }
+
+    let of_ast ast =
+      let rec visit : Ast.Tagged.t -> t = fun tagged ->
+        match tagged.st.content with
+        | Emit _ | Nothing | Exit _ | Atom _ -> mk_tree Bottom tagged.id
+        | Pause -> mk_tree Pause tagged.id
+
+        | Par (t1, t2) -> mk_tree (Par [visit t1; visit t2]) tagged.id
+        | Seq (t1, t2) -> mk_tree (Excl [visit t1; visit t2]) tagged.id
+        | Present (_, st1, st2) -> mk_tree (Excl [visit st1; visit st2]) tagged.id
+
+        | Loop st -> mk_tree (Ref (visit st)) tagged.id
+        | Suspend (st, _) -> mk_tree (Ref (visit st)) tagged.id
+        | Signal (_, st) -> mk_tree (Ref (visit st)) tagged.id
+        | Trap (_, st) -> mk_tree (Ref (visit st)) tagged.id
+        | Await s -> mk_tree Pause tagged.id
+      in
+      visit ast
+
+    let print_to_dot fmt selection =
+      let open Format in
+      let rec visit x = match x.t with
+        | Bottom -> fprintf fmt "N%d [shape = none, label=\"Bottom %d\"]; @\n" x.label x.label
+        | Pause -> fprintf fmt "N%d [shape = none, label=\"Pause %d\"]; @\n" x.label x.label
+        | Par sels ->
+          fprintf fmt "N%d [shape = none, label=\"Par %d\"]; @\n" x.label x.label;
+          List.iter (fun sel -> fprintf fmt "N%d -> N%d ;@\n" x.label sel.label; visit sel) sels
+        | Excl sels ->
+          fprintf fmt "N%d [shape = none, label=\"Excl %d\"]; @\n" x.label x.label;
+          List.iter (fun sel -> fprintf fmt "N%d -> N%d ;@\n" x.label sel.label; visit sel) sels
+        | Ref sel ->
+          fprintf fmt "N%d [shape = none, label=\"Ref %d\"]; @\n" x.label x.label;
+          fprintf fmt "N%d -> N%d ;@\n" x.label sel.label;
+          visit sel
+      in
+      fprintf fmt "@[<hov 2>digraph selection {@\nmargin = 0;@\n";
+      visit selection;
+      fprintf fmt "}@]\n@."
+  end
 
 end
 
 module Flowgraph = struct
 
   module type S = sig
-    type exp
+
+    module Ast : Ast.S
 
     type action =
-      | Emit of exp Ast.valued_signal
-      | Atom of exp Ast.atom
+      | Emit of Ast.valued_signal
+      | Atom of Ast.atom
       | Enter of int
       | Exit of int
-      | Local_signal of exp Ast.valued_signal
+      | Local_signal of Ast.valued_signal
 
     type test_value =
       | Signal of Ast.signal
@@ -106,8 +125,8 @@ module Flowgraph = struct
     val test_node : test_value -> t * t -> t
 
     val (>>) : action -> t -> t
-    val exit_node : exp Ast.Tagged.t -> t -> t
-    val enter_node : exp Ast.Tagged.t -> t -> t
+    val exit_node : Ast.Tagged.t -> t -> t
+    val enter_node : Ast.Tagged.t -> t -> t
 
 
     type error =
@@ -115,39 +134,40 @@ module Flowgraph = struct
       | Cyclic_causality of t
       | Par_leads_to_finish of t
 
-    val error : loc:Location.t -> error -> 'a
+    val error : loc:Ast.loc -> error -> 'a
 
-    exception Error of Location.t * error
+    exception Error of Ast.loc * error
     val print_error : Format.formatter -> error -> unit
   end
 
-  module Make = functor (E : Exp) -> struct
+  module Make (Ast : Ast.S) = struct
 
-    type exp = E.t
+    module Ast = Ast
+    open Ast
 
     type action =
-      | Emit of exp Ast.valued_signal
-      | Atom of exp Ast.atom
+      | Emit of Ast.valued_signal
+      | Atom of Ast.atom
       | Enter of int
       | Exit of int
-      | Local_signal of exp Ast.valued_signal
+      | Local_signal of Ast.valued_signal
 
     let pp_action_dot fmt a =
       Format.(fprintf fmt "%s" begin
           match a with
           | Emit vs -> "emit <B>" ^ vs.signal.ident.content ^ "</B>"
-          | Atom e -> asprintf "%a" E.print e.Ast.exp
+          | Atom e -> asprintf "%a" printexp e.exp
           | Enter i -> sprintf "enter %d" i
           | Exit i -> sprintf "exit %d" i
           | Local_signal vs ->
-            asprintf "signal %s (%a)" vs.signal.ident.content E.print vs.value.exp
+            asprintf "signal %s (%a)" vs.signal.ident.content printexp vs.value.exp
         end)
 
     let pp_action fmt a =
       Format.(fprintf fmt "%s" begin
           match a with
           | Emit vs -> "Emit " ^ vs.signal.ident.content
-          | Atom e -> asprintf "Atom (%a)" E.print e.Ast.exp
+          | Atom e -> asprintf "Atom (%a)" printexp e.exp
           | Enter i -> sprintf "Enter %d" i
           | Exit i -> sprintf "Exit %d" i
           | Local_signal vs -> asprintf "Local_signal %s" vs.signal.ident.content
@@ -318,7 +338,7 @@ module Flowgraph = struct
       | Cyclic_causality of t
       | Par_leads_to_finish of t
 
-    exception Error of Location.t * error
+    exception Error of Ast.loc * error
 
     let print_error fmt e =
       let open Format in
@@ -338,16 +358,21 @@ end
 module Of_ast = struct
 
   module type S = sig
-    type exp
-    type fg
-    val flowgraph : exp Ast.Tagged.t -> fg
-    val construct : exp Ast.Tagged.t -> Selection_tree.t * fg
+
+    module Ast : Ast.S
+    module Fg : Flowgraph.S
+    module St : Selection_tree.S
+
+    val flowgraph : Ast.Tagged.t -> Fg.t
+    val construct : Ast.Tagged.t -> St.t * Fg.t
   end
 
-  module Make = functor (Fg : Flowgraph.S) -> struct
+  module Make (Fg : Flowgraph.S) (St : Selection_tree.S with module Ast = Fg.Ast) = struct
 
-    type fg = Fg.t
-    type exp = Fg.exp
+    module Fg = Fg
+    module St = St
+    module Ast = Fg.Ast
+    open Ast
 
     type env = {
       exits : Fg.t StringMap.t;
@@ -355,7 +380,7 @@ module Of_ast = struct
       synctbl : (int * int, Fg.t) Hashtbl.t;
     }
 
-    type flow_builder = env -> exp Tagged.t -> Fg.t -> Fg.t -> Fg.t
+    type flow_builder = env -> Fg.Ast.Tagged.t -> Fg.t -> Fg.t -> Fg.t
 
     let memo_rec =
       fun h f ->
@@ -531,7 +556,7 @@ module Of_ast = struct
 
 
     let construct p =
-      Selection_tree.of_ast p, flowgraph p
+      St.of_ast p, flowgraph p
 
   end
 end
@@ -540,30 +565,38 @@ end
 module Schedule = struct
   module type S = sig
 
-    type fg
+    module Ast : Ast.S
+    module Fg : Flowgraph.S
+    module St : Selection_tree.S
 
-    val check_causality_cycles : 'a * fg -> fg list Ast.SignalMap.t
-    val tag_tested_stmts : Selection_tree.t -> fg -> unit
-    val find : fg -> fg -> fg option
+    val check_causality_cycles : 'a * Fg.t -> Fg.t list Ast.SignalMap.t
+    val tag_tested_stmts : St.t -> Fg.t -> unit
+    val find : Fg.t -> Fg.t -> Fg.t option
     val find_and_replace :
-      (fg -> fg) ->
-      fg -> fg -> bool * fg
+      (Fg.t -> Fg.t) ->
+      Fg.t -> Fg.t -> bool * Fg.t
 
-    val find_join : fg -> fg -> fg option
-    val replace_join : fg -> fg -> (fg -> fg)
-      -> fg * fg
-    val children: fg -> fg -> fg -> fg
-    val interleave: fg -> fg
+    val find_join : Fg.t -> Fg.t -> Fg.t option
+    val replace_join : Fg.t -> Fg.t -> (Fg.t -> Fg.t)
+      -> Fg.t * Fg.t
+    val children: Fg.t -> Fg.t -> Fg.t -> Fg.t
+    val interleave: Fg.t -> Fg.t
   end
 
-  module Make = functor (Fg : Flowgraph.S) -> struct
+  module Make
+      (Fg : Flowgraph.S)
+      (St : Selection_tree.S with module Ast = Fg.Ast)
+  = struct
 
-    type fg = Fg.t
+    module Fg = Fg
+    module St = St
+    module Ast = Fg.Ast
 
     open Fg
+    open Ast
 
     let check_causality_cycles grc =
-      let open SignalMap in
+      let open Ast.SignalMap in
       let st, fg = grc in
       let rec visit m fg =
         match fg with
@@ -612,8 +645,8 @@ module Schedule = struct
         in g
 
     let tag_tested_stmts sel fg =
-      let open Flowgraph in
-      let open Selection_tree in
+      let open Fg in
+      let open St in
       let lr = ref [] in
       let rec aux fg =
         match fg with
@@ -785,7 +818,7 @@ module Schedule = struct
 
               | (Finish | Pause), fg
               | fg, (Finish | Pause) ->
-                error ~loc:Ast.dummy_loc (Par_leads_to_finish fg2)
+                Fg.error ~loc:Ast.dummy_loc (Par_leads_to_finish fg2)
 
               | Test (Signal s, t1, t2), fg2 ->
                 if emits fg2 stop s then
