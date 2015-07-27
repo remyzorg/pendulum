@@ -2,6 +2,7 @@
 open OUnit
 open Pendulum.Runtime_ast
 
+open Test2_ppx
 
 
 let test_loop_pause ctx =
