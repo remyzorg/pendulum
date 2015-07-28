@@ -221,6 +221,7 @@ let parse_ast ext vb =
       in
       let ast = ast_of_expr e in
       let tast, env = Ast.Tagged.of_ast ~sigs ast in
+      let tast = Ast.Analysis.filter_dead_trees tast in
       Pendulum_misc.print_to_dot loc pat tast;
       let _ocaml_expr =
         Sync2ml.generate ~sigs:(sigs, !(env.Ast.Tagged.all_local_signals)) tast in
@@ -230,6 +231,7 @@ let parse_ast ext vb =
     | "sync" ->
       let ast = ast_of_expr e in
       let tast, env = Ast.Tagged.of_ast ~sigs ast in
+      let tast = Ast.Analysis.filter_dead_trees tast in
       let ocaml_expr =
         Sync2ml.generate ~sigs:(sigs, !(env.Ast.Tagged.all_local_signals)) tast in
 
@@ -266,7 +268,7 @@ let try_compile_error f str =
 let extend_mapper argv =
   let open Sync2ml in
   {default_mapper with
-  structure_item = (fun mapper ->
+   structure_item = (fun mapper ->
        try_compile_error (function
            | { pstr_desc = Pstr_extension (({ txt = ext }, PStr [
                { pstr_desc = Pstr_value (Nonrecursive, vbs) }]), attrs); pstr_loc }
@@ -281,26 +283,26 @@ let extend_mapper argv =
          )
      );
 
-  expr = fun mapper ->
-    try_compile_error (function
-        | { pexp_desc = Pexp_extension ({ txt = ext; loc }, e)}
-          when StringSet.mem ext expected_ext ->
-          begin match e with
-            | PStr [{ pstr_desc = Pstr_eval (e, _)}] ->
-              begin match e.pexp_desc with
-                | Pexp_let (Nonrecursive, vbl, e) ->
-                  Exp.let_ Nonrecursive (gen_bindings ext vbl)
-                  @@ mapper.expr mapper e
-                | Pexp_let (Recursive, vbl, e) ->
-                  Error.(error ~loc Non_recursive_let)
-                | _ ->
-                  Error.(error ~loc Only_on_let)
-              end
-            | _ -> Error.(error ~loc Only_on_let)
-          end
-        | x -> default_mapper.expr mapper x;
-      )
-}
+   expr = fun mapper ->
+     try_compile_error (function
+         | { pexp_desc = Pexp_extension ({ txt = ext; loc }, e)}
+           when StringSet.mem ext expected_ext ->
+           begin match e with
+             | PStr [{ pstr_desc = Pstr_eval (e, _)}] ->
+               begin match e.pexp_desc with
+                 | Pexp_let (Nonrecursive, vbl, e) ->
+                   Exp.let_ Nonrecursive (gen_bindings ext vbl)
+                   @@ mapper.expr mapper e
+                 | Pexp_let (Recursive, vbl, e) ->
+                   Error.(error ~loc Non_recursive_let)
+                 | _ ->
+                   Error.(error ~loc Only_on_let)
+               end
+             | _ -> Error.(error ~loc Only_on_let)
+           end
+         | x -> default_mapper.expr mapper x;
+       )
+  }
 
 let () =
   register "pendulum" extend_mapper

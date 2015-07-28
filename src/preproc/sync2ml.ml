@@ -237,7 +237,6 @@ module Ocaml_gen = struct
   let select_env_name = "pendulum~state"
   let select_env_var = Location.(mkloc select_env_name !Ast_helper.default_loc)
   let select_env_ident = mk_ident (Ast.mk_loc select_env_name)
-  (* let arg_name s = {s with content = s.content ^ "~arg"} *)
 
 
   let init nstmts (global_sigs,local_sigs) sel =
@@ -355,7 +354,6 @@ module Ocaml_gen = struct
     | MLassign vs ->
       rebind_locals_let vs.value.locals
         [%expr [%e mk_ident vs.signal.ident] := make_signal [%e vs.value.exp]]
-
 
     | MLenter i ->
       [%expr Bitset.add

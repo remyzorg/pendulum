@@ -116,6 +116,7 @@ module type S = sig
 
   module Analysis : sig
     val blocking : Tagged.t -> bool
+    val filter_dead_trees : Tagged.t -> Tagged.t
   end
 
 end
@@ -462,5 +463,52 @@ module Make (E : Exp) = struct
       | Atom _ -> false
       | Signal (_,t) -> blocking t
       | Await s -> true
+
+    let change t st =
+      let open Tagged in
+      {t with st = {t.st with content = st}}
+
+    let filter_dead_trees : Tagged.t -> Tagged.t = fun t ->
+      let open Tagged in
+      let rec aux t =
+        match t.st.content with
+        | Loop t' ->
+          let stuck, t' = aux t' in
+          if stuck then true, t' else
+            true, change t @@ Loop t'
+
+        | Seq (t1,t2) ->
+          let stuck, t1 = aux t1 in
+          if stuck then true, t1 else
+            let stuck, t2 = aux t2 in
+            stuck, change t @@ Seq (t1, t2)
+
+        | Par (t1,t2) ->
+          let stuck1, t1 = aux t1 in
+          let stuck2, t2 = aux t2 in
+          stuck1 || stuck2, change t @@ Par (t1, t2)
+
+        | Nothing | Await _ | Atom _ | Exit _ | Pause  | Emit _ -> false, t
+
+        | Suspend (t', s) ->
+          let stuck, t' = aux t' in
+          stuck, change t @@ Suspend (t', s)
+
+        | Trap (l,t') ->
+          let _, t' = aux t' in
+          false, change t @@ Trap (l, t')
+        | Present (s,t1,t2) ->
+          let stuck1, t1 = aux t1 in
+          let stuck2, t2 = aux t2 in
+          stuck1 && stuck2, change t @@ Present (s, t1, t2)
+
+        | Signal (s,t') ->
+          let stuck, t' = aux t' in
+          stuck, change t @@ Signal (s, t')
+
+      in
+      snd @@ aux t
   end
+
+
 end
