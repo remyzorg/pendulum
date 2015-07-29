@@ -752,7 +752,16 @@ module Schedule = struct
         match fg1 with
         | Call(a, t) -> find_join fg2 t
         | Sync(_ , t1, t2) | Test (_, t1, t2) | Fork (t1, t2, _) ->
-          Option.mapn (find_join fg2 t1) (fun () -> find_join fg2 t2)
+
+          begin match (find_join fg2 t1), (find_join fg2 t2) with
+          | None, _  | _, None -> None
+          | Some v1, Some v2 -> if v1 == v2 then Some v1 else None
+          end
+
+          (* Option.map2and *)
+          (*   (find_join fg2 t1) (find_join fg2 t2) *)
+          (*   (fun x y -> if x == y then Some x else None) *)
+          (* Option.mapn (find_join fg2 t1) (fun () -> find_join fg2 t2) *)
         | Pause | Finish -> None
       end
 
