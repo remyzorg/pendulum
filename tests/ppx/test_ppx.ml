@@ -147,7 +147,7 @@ let%sync_ast locals_no_inputs = loop pause
 (* let b = locals_no_inputs () *)
 
 
-let%sync locals =
+let%sync_ast locals =
   input s;
   input s1;
 

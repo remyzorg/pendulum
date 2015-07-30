@@ -29,13 +29,11 @@ let move_circle ctx c x y =
   erase_circle ctx c;
   draw_circle ctx {c with x; y}
 
-
 let%sync mouse_machine =
   input ctx;
   input move;
   input quit1;
   input quit2;
-
   (* let circle  = ({x = fst (!!move); y = 50.; radius = 20.; color = "green"}) in *)
   signal circle {x = fst (!!move); y = 50.; radius = 20.; color = "green"} (
   trap ex1 (
