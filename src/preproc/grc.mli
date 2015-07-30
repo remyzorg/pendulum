@@ -58,6 +58,8 @@ module Flowgraph : sig
 
     val print_to_dot : Format.formatter -> t -> unit
     val pp : Format.formatter -> t -> unit
+    val pp_test_value : Format.formatter -> test_value -> unit
+    val pp_action: Format.formatter -> action -> unit
     val test_node : test_value -> t * t -> t
 
     val (>>) : action -> t -> t
@@ -110,12 +112,12 @@ module Schedule : sig
 
     val check_causality_cycles : 'a * Fg.t -> Fg.t list Ast.SignalMap.t
     val tag_tested_stmts : St.t -> Fg.t -> unit
-    val find : Fg.t -> Fg.t -> Fg.t option
+    val find : bool -> Fg.t -> Fg.t -> Fg.t option
     val find_and_replace :
       (Fg.t -> Fg.t) ->
       Fg.t -> Fg.t -> bool * Fg.t
 
-    val find_join : Fg.t -> Fg.t -> Fg.t option
+    val find_join : bool -> Fg.t -> Fg.t -> Fg.t option
     val replace_join : Fg.t -> Fg.t -> (Fg.t -> Fg.t)
       -> Fg.t * Fg.t
     val children: Fg.t -> Fg.t -> Fg.t -> Fg.t

@@ -122,6 +122,8 @@ module Flowgraph = struct
 
     val print_to_dot : Format.formatter -> t -> unit
     val pp : Format.formatter -> t -> unit
+    val pp_test_value : Format.formatter -> test_value -> unit
+    val pp_action: Format.formatter -> action -> unit
     val test_node : test_value -> t * t -> t
 
     val (>>) : action -> t -> t
@@ -571,12 +573,12 @@ module Schedule = struct
 
     val check_causality_cycles : 'a * Fg.t -> Fg.t list Ast.SignalMap.t
     val tag_tested_stmts : St.t -> Fg.t -> unit
-    val find : Fg.t -> Fg.t -> Fg.t option
+    val find : bool -> Fg.t -> Fg.t -> Fg.t option
     val find_and_replace :
       (Fg.t -> Fg.t) ->
       Fg.t -> Fg.t -> bool * Fg.t
 
-    val find_join : Fg.t -> Fg.t -> Fg.t option
+    val find_join : bool -> Fg.t -> Fg.t -> Fg.t option
     val replace_join : Fg.t -> Fg.t -> (Fg.t -> Fg.t)
       -> Fg.t * Fg.t
     val children: Fg.t -> Fg.t -> Fg.t -> Fg.t
@@ -719,9 +721,11 @@ module Schedule = struct
       in memo_rec (module Fgtbl3) children (fg, t1, t2)
 
 
-    let find fg t =
+    let find nofinish fg t =
       let aux aux (fg, elt) =
-        if fg == elt then Some fg
+        if fg == elt then
+          if nofinish && (fg == Pause || fg == Finish) then None 
+          else Some fg
         else match fg with
           | Call (a, t) -> aux (t, elt)
           | Sync(_ , t1, t2) | Test (_, t1, t2) | Fork (t1, t2, _) ->
@@ -747,21 +751,16 @@ module Schedule = struct
       in memo_rec (module Fgtbl2) aux (fg, elt)
 
 
-    let rec find_join fg1 fg2 =
-      Option.mapn (find fg2 fg1) begin fun () ->
+    let rec find_join nopause fg1 fg2 =
+      Option.mapn (find nopause fg2 fg1) begin fun () ->
         match fg1 with
-        | Call(a, t) -> find_join fg2 t
+        | Call(a, t) -> find_join nopause fg2 t
         | Sync(_ , t1, t2) | Test (_, t1, t2) | Fork (t1, t2, _) ->
 
-          begin match (find_join fg2 t1), (find_join fg2 t2) with
-          | None, _  | _, None -> None
-          | Some v1, Some v2 -> if v1 == v2 then Some v1 else None
+          begin match (find_join nopause fg2 t1), (find_join nopause fg2 t2) with
+          | Some v1, Some v2 when v1 == v2 && v1 <> Pause && v1 <> Finish -> Some v1
+          | _ -> None
           end
-
-          (* Option.map2and *)
-          (*   (find_join fg2 t1) (find_join fg2 t2) *)
-          (*   (fun x y -> if x == y then Some x else None) *)
-          (* Option.mapn (find_join fg2 t1) (fun () -> find_join fg2 t2) *)
         | Pause | Finish -> None
       end
 

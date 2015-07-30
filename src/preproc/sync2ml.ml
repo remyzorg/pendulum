@@ -176,8 +176,19 @@ let grc2ml dep_array fg =
       begin match fg with
         | Call (a, t) -> construct_ml_action dep_array sigs a ++ construct stop t
         | Test (tv, t1, t2) ->
+
+          let join = Schedule.find_join true t1 t2 in
+
+          Format.printf "TEST: %a #############\n%a\n=======\n%a\n-----------\n%a\n"
+            Flowgraph.pp_test_value tv
+            Flowgraph.pp t1
+            Flowgraph.pp t2
+            (fun fmt -> function None -> Format.fprintf fmt "NO_JOIN" | Some v -> Flowgraph.pp fmt v)
+            join;
+
+
           begin
-            match Schedule.find_join t1 t2 with
+            match Schedule.find_join true t1 t2 with
             | Some j when j <> Finish && j <> Pause ->
               (mls @@ MLif
                  (construct_test_expr sigs tv,
@@ -188,8 +199,12 @@ let grc2ml dep_array fg =
                   | Some fg' when fg' == j -> nop
                   | _ -> construct stop j)
             | _ ->
+              (* Format.printf "Juste apres le NOPAUSE ?-----------\n"; *)
+              let ct1 = construct None t1 in
+              let ct2 = construct None t2 in
+              (* Format.printf "%a\n-------------\n%a\n" (pp_ml_sequence 0) ct1 (pp_ml_sequence 0) ct2; *)
               mls @@ MLif
-                (construct_test_expr sigs tv, construct stop t1, construct stop t2)
+                (construct_test_expr sigs tv, ct1, ct2)
           end
         | Fork (t1, t2, sync) -> assert false
         | Sync ((i1, i2), t1, t2) ->
