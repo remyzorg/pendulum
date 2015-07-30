@@ -40,6 +40,8 @@ configure:
 
 # OASIS_STOP
 
+clean-test: test
+	@rm -rf _build/tests
 
 pdfout: build
 	./main.native	
