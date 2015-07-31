@@ -62,6 +62,7 @@ module type S = sig
       | Present of ident * statement * statement
       | Atom of exp
       | Signal of valued_ident * statement
+      | Run of ident * ident list
 
       | Halt
       | Sustain of valued_ident
@@ -98,6 +99,7 @@ module type S = sig
       | Atom of atom
       | Signal of valued_signal * t
       | Await of signal
+      | Run of ident * signal list
     and tagged = (tagged_ast) location
 
 
@@ -171,6 +173,7 @@ module Make (E : Exp) = struct
       | Present of ident * statement * statement
       | Atom of exp
       | Signal of valued_ident * statement
+      | Run of ident * ident list
 
       | Halt
       | Sustain of valued_ident
@@ -238,6 +241,7 @@ module Make (E : Exp) = struct
       | Atom of atom
       | Signal of valued_signal * t
       | Await of signal
+      | Run of ident * signal list
     and tagged = (tagged_ast) location
 
     let mk_tagged ?(loc = dummy_loc) content id =
@@ -280,10 +284,10 @@ module Make (E : Exp) = struct
           | 0 -> s
           | i -> {s with content = Format.sprintf "%s~%d" s.content i})
 
-    let rename env s p =
+    let rename ~loc env s =
       SignalMap.(match find (mk_signal s) env with
           | exception Not_found ->
-            error ~loc:p.loc @@ Unbound_identifier s.content
+            error ~loc @@ Unbound_identifier s.content
           | (0, origin) -> {ident = s; origin}
           | (i, origin) -> {ident = mk_loc ~loc:s.loc (Format.sprintf "%s~%d" s.content i); origin})
 
@@ -305,8 +309,9 @@ module Make (E : Exp) = struct
       let id = ref 0 in
       let start_env = create_env sigs in
       let rec visit : env -> Derived.statement -> t = fun env ast ->
-        let mk_tagged tagged = mk_tagged ~loc:ast.loc tagged in
-        let mkl stmt = mk_loc ~loc:ast.loc stmt in
+        let loc = ast.loc in
+        let mk_tagged tagged = mk_tagged ~loc tagged in
+        let mkl stmt = mk_loc ~loc stmt in
         match ast.content with
 
         | Derived.Loop t -> mk_tagged (Loop (visit env t)) !+id
@@ -323,16 +328,16 @@ module Make (E : Exp) = struct
 
         | Derived.Emit s ->
           let locals = (List.map (fun x -> x.signal) env.local_signals) in
-          let s' = rename env.signals s.sname ast in
+          let s' = rename ~loc env.signals s.sname in
           mk_tagged (Emit {signal = s'; svalue = mk_atom ~locals s.ivalue}) !+id
 
         | Derived.Nothing -> mk_tagged Nothing !+id
         | Derived.Pause -> mk_tagged Pause !+id
 
-        | Derived.Await s -> mk_tagged (Await (rename env.signals s ast)) !+id
+        | Derived.Await s -> mk_tagged (Await (rename ~loc env.signals s)) !+id
 
         | Derived.Suspend (t, s) ->
-          let s = rename env.signals s ast in
+          let s = rename ~loc:ast.loc env.signals s in
           mk_tagged (Suspend (visit env t, s)) !+id
 
         | Derived.Trap (Label s, t) ->
@@ -343,7 +348,7 @@ module Make (E : Exp) = struct
           mk_tagged (Exit (Label (rename_label env.labels s ast))) !+id
 
         | Derived.Present (s, t1, t2) ->
-          let s = rename env.signals s ast in
+          let s = rename ~loc env.signals s in
           mk_tagged (Present(s, visit env t1, visit env t2)) !+id
         | Derived.Atom f -> mk_tagged (Atom (
             mk_atom ~locals:(List.map (fun x -> x.signal) env.local_signals) f
@@ -353,6 +358,10 @@ module Make (E : Exp) = struct
           let locals = List.map (fun x -> x.signal) env.local_signals in
           let env, s' = add_signal env locals vid in
           mk_tagged (Signal (s', visit env t)) !+id
+
+        | Derived.Run (id, ids) -> assert false
+          (* let sigs = List.map (rename ~loc env.signals) ids in *)
+          (* mk_tagged (Run (id *)
 
 
         | Derived.Halt -> mk_tagged (Loop (mk_tagged Pause !+id)) !+id
@@ -438,6 +447,10 @@ module Make (E : Exp) = struct
           fprintf fmt "N%d [label=\"%d signal(%s)\"]; @\n" x.id x.id vs.signal.ident.content;
           fprintf fmt "N%d -> N%d ;@\n" x.id st.id;
           visit st
+        | Run (id, sigs) ->
+          fprintf fmt "N%d [label=\"%d run %s %s\"]; @\n" x.id x.id id.content
+            (String.concat " " @@ List.map (fun x -> x.ident.content) sigs) 
+
       in
       fprintf fmt "@[<hov 2>digraph tagged {@\n";
       visit tagged;
@@ -463,6 +476,7 @@ module Make (E : Exp) = struct
       | Atom _ -> false
       | Signal (_,t) -> blocking t
       | Await s -> true
+      | Run _ -> assert false
 
     let change t st =
       let open Tagged in
@@ -505,6 +519,8 @@ module Make (E : Exp) = struct
         | Signal (s,t') ->
           let stuck, t' = aux t' in
           stuck, change t @@ Signal (s, t')
+
+        | Run _ -> assert false
 
       in
       snd @@ aux t

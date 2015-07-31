@@ -108,6 +108,10 @@ let ast_of_expr e =
     let open Ast in
     let open Ast.Derived in
     mk_loc ~loc:e.pexp_loc @@ match e with
+    | [%expr output [%e? _ ] ; [%e? _]]
+    | [%expr input [%e? _ ] ; [%e? _]] ->
+      Error.(syntax_error ~loc:e.pexp_loc Signal_decl_at_start)
+
     | [%expr nothing] ->
       Nothing
 
@@ -128,10 +132,6 @@ let ast_of_expr e =
 
     | [%expr loop [%e? e]] ->
       Loop (visit e)
-
-    | [%expr output [%e? _ ] ; [%e? _]]
-    | [%expr input [%e? _ ] ; [%e? _]] ->
-      Error.(syntax_error ~loc:e.pexp_loc Signal_decl_at_start)
 
     | [%expr [%e? e1]; [%e? e2]] ->
       Seq (visit e1, visit e2)
@@ -156,6 +156,8 @@ let ast_of_expr e =
 
     | [%expr trap [%e? label] [%e? e]] ->
       Trap (Label (Error.check_expr_ident label), visit e)
+
+    | [%expr run [%e? ident] [%e? tupl]] -> assert false
 
     | [%expr halt ] ->
       Halt

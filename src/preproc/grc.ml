@@ -60,6 +60,7 @@ module Selection_tree = struct
         | Signal (_, st) -> mk_tree (Ref (visit st)) tagged.id
         | Trap (_, st) -> mk_tree (Ref (visit st)) tagged.id
         | Await s -> mk_tree Pause tagged.id
+        | Run _ -> assert false
       in
       visit ast
 
@@ -463,6 +464,7 @@ module Of_ast = struct
           enter_node p
           @@ surface {env with exits =
                                  (StringMap.add s.content end_trap env.exits)} q pause end_trap
+        | Run _ -> assert false
       in
       memo_rec h surface
 
@@ -533,6 +535,7 @@ module Of_ast = struct
         | Trap (Label s, q) ->
           let end_trap = exit_node p endp in
           depth {env with exits = StringMap.add s.content end_trap env.exits} q pause end_trap
+        | Run _ -> assert false
       in memo_rec h depth
 
 
