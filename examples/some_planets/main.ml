@@ -35,8 +35,9 @@ let%sync mouse_machine =
   input quit1;
   input quit2;
 
-  let dec = 100. in
-  let circle  = ({x = fst (!!move); y = !!dec; radius = !!dec; color = "green"}) in (
+  let dist = 400. in
+  let radius = 20. in
+  let circle  = ({x = fst (!!move); y = !!dist; radius = !!radius; color = "green"}) in (
    trap ex1 (
      loop (
        present quit1 (exit ex1);
@@ -44,13 +45,13 @@ let%sync mouse_machine =
          atom (
            move_circle !!ctx !!circle (fst !!move) !!circle.y
          );
-         emit circle {!!circle with x = fst !!move; y = !!circle.y}
+         emit circle {!!circle with x = fst !!move;}
        ); pause)
    );
    atom (erase_circle !!ctx !!circle)
   )
   ||
-  let circle = ({x = !!dec; y = snd (!!move); radius = !!dec; color = "red"}) in
+  let circle = ({x = !!dist; y = snd !!move; radius = !!radius; color = "red"}) in
   begin
     trap ex2 (
       loop (
@@ -59,7 +60,7 @@ let%sync mouse_machine =
           atom (
             move_circle !!ctx !!circle !!circle.x (snd !!move)
           );
-          emit circle {!!circle with x = !!circle.x; y = snd !!move}
+          emit circle {!!circle with y = snd !!move}
         ); pause));
     atom (erase_circle !!ctx !!circle)
   end

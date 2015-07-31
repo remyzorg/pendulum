@@ -358,9 +358,6 @@ module Ocaml_gen = struct
       end
 
     | MLassign vs ->
-      Format.printf "%s:" vs.signal.ident.content;
-      List.iter (fun x -> Format.printf "%s" x.ident.content) vs.svalue.locals;
-      Format.printf "\n";
       rebind_locals_let vs.svalue.locals
         [%expr [%e mk_ident vs.signal.ident] := make_signal [%e vs.svalue.exp]]
 
