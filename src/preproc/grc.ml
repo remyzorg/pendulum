@@ -162,7 +162,7 @@ module Flowgraph = struct
           | Enter i -> sprintf "enter %d" i
           | Exit i -> sprintf "exit %d" i
           | Local_signal vs ->
-            asprintf "signal %s (%a)" vs.signal.ident.content printexp vs.value.exp
+            asprintf "signal %s (%a)" vs.signal.ident.content printexp vs.svalue.exp
         end)
 
     let pp_action fmt a =

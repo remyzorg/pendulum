@@ -30,8 +30,8 @@ module type S = sig
   type label = Label of ident
   type atom = { locals : signal list; exp : exp}
 
-  type valued_signal = {signal : signal ; value : atom}
-  type valued_ident = {sname : ident ; value : exp}
+  type valued_signal = {signal : signal ; svalue : atom}
+  type valued_ident = {sname : ident ; ivalue : exp}
   val mk_signal : ?origin:signal_origin -> ident -> signal
 
   val mk_vsig : signal -> signal list -> exp -> valued_signal

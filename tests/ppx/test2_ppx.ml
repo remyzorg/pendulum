@@ -4,14 +4,7 @@ open Pendulum.Runtime_ast
 
 let%sync mouse_machine =
   input s;
-  trap t (loop (
-      present s (exit t);
-      pause)
-    );
-  atom () || atom ()
-
-
-(* let%sync mouse_machine = *)
-(*   loop (pause) ; *)
-(*   atom () || atom () *)
+  let s' = !!s + 1 in
+  let s'' = !!s' + 1 in
+  (loop (pause))
 

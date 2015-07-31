@@ -101,7 +101,7 @@ and pp_ml_ast lvl fmt =
   Format.(function
     | MLemit vs -> fprintf fmt "%semit %s" indent vs.signal.ident.content
     | MLassign vs ->
-      fprintf fmt "%s := %a" vs.signal.ident.content Ast.printexp vs.value.exp
+      fprintf fmt "%s := %a" vs.signal.ident.content Ast.printexp vs.svalue.exp
     | MLif (mltest_expr, mlseq1, mlseq2) ->
       fprintf fmt "%sif %a then (\n%a\n%s)" indent pp_ml_test_expr mltest_expr
         (pp_ml_sequence (lvl + 2)) mlseq1 indent;
@@ -238,6 +238,18 @@ module Ocaml_gen = struct
   let select_env_var = Location.(mkloc select_env_name !Ast_helper.default_loc)
   let select_env_ident = mk_ident (Ast.mk_loc select_env_name)
 
+  let remove_signal_renaming s =
+    try
+      Ast.({s with
+            content = String.sub s.content 0 ((String.rindex s.content '~'))})
+    with Not_found -> s
+
+  let rebind_locals_let locals e =
+    (List.fold_left (fun acc x ->
+         [%expr let [%p mk_pat_var @@ remove_signal_renaming x.ident] =
+                  ![%e mk_ident x.ident]
+                in [%e acc]]
+       ) e locals)
 
   let init nstmts (global_sigs,local_sigs) sel =
     let open Selection_tree in
@@ -248,16 +260,19 @@ module Ocaml_gen = struct
         | [s] -> mk_pat_var s.ident
         | l -> Pat.tuple @@ List.rev_map (fun s -> mk_pat_var s.ident) l
       in
+
       let let_sigs_local e = List.fold_left (fun acc vs ->
-          [%expr let [%p mk_pat_var vs.signal.ident] = ref (make_signal [%e vs.value.exp])
-                 in [%e acc]]
+          let rebinds = rebind_locals_let vs.svalue.locals
+              [%expr ref (make_signal [%e vs.svalue.exp])]
+          in
+          [%expr let [%p mk_pat_var vs.signal.ident] = [%e rebinds] in [%e acc]]
         ) e (local_sigs)
       in
       let let_sigs_global e = List.fold_left (fun acc s ->
           [%expr let [%p mk_pat_var s.ident] = make_signal [%e mk_ident s.ident] in [%e acc]]
         ) (let_sigs_local e) (global_sigs)
       in
-      let set_sigs_absent e =
+      let let_set_sigs_absent e =
         let set_absent_locals =
           (List.fold_left (fun acc vs ->
                [%expr set_absent ![%e mk_ident vs.signal.ident]; [%e acc]]
@@ -295,21 +310,7 @@ module Ocaml_gen = struct
               let [%p Pat.var select_env_var] =
                 Bitset.make [%e int_const (1 + nstmts)]
               in
-              [%e let_sigs_global (set_sigs_absent returns)]]
-
-  let remove_signal_renaming s =
-    try
-      Ast.({s with
-            content = String.sub s.content 0 ((String.rindex s.content '~'))})
-    with Not_found -> s
-
-
-  let rebind_locals_let locals e =
-    (List.fold_left (fun acc x ->
-         [%expr let [%p mk_pat_var @@ remove_signal_renaming x.ident] =
-                  ![%e mk_ident x.ident]
-                in [%e acc]]
-       ) e locals)
+              [%e let_sigs_global (let_set_sigs_absent returns)]]
 
   let add_ref_local s =
     match s.origin with
@@ -340,7 +341,7 @@ module Ocaml_gen = struct
   and construct_ml_ast depl ast =
     match ast with
     | MLemit vs ->
-      let rebinded_expr = rebind_locals_let vs.value.locals vs.value.exp in
+      let rebinded_expr = rebind_locals_let vs.svalue.locals vs.svalue.exp in
       [%expr set_present_value [%e add_ref_local vs.signal] [%e rebinded_expr]]
     | MLif (test, mlseq1, mlseq2) ->
       begin match mlseq1, mlseq2 with
@@ -357,8 +358,11 @@ module Ocaml_gen = struct
       end
 
     | MLassign vs ->
-      rebind_locals_let vs.value.locals
-        [%expr [%e mk_ident vs.signal.ident] := make_signal [%e vs.value.exp]]
+      Format.printf "%s:" vs.signal.ident.content;
+      List.iter (fun x -> Format.printf "%s" x.ident.content) vs.svalue.locals;
+      Format.printf "\n";
+      rebind_locals_let vs.svalue.locals
+        [%expr [%e mk_ident vs.signal.ident] := make_signal [%e vs.svalue.exp]]
 
     | MLenter i ->
       [%expr Bitset.add

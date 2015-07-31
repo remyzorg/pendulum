@@ -34,22 +34,23 @@ let%sync mouse_machine =
   input move;
   input quit1;
   input quit2;
-  (* let circle  = ({x = fst (!!move); y = 50.; radius = 20.; color = "green"}) in *)
-  signal circle {x = fst (!!move); y = 50.; radius = 20.; color = "green"} (
-  trap ex1 (
-    loop (
-      present quit1 (exit ex1);
-      present move (
-        atom (
-          move_circle !!ctx !!circle (fst !!move) !!circle.y
-        );
-        emit circle {!!circle with x = fst !!move; y = !!circle.y}
-      ); pause)
-  );
-  atom (erase_circle !!ctx !!circle)
+
+  let dec = 100. in
+  let circle  = ({x = fst (!!move); y = !!dec; radius = !!dec; color = "green"}) in (
+   trap ex1 (
+     loop (
+       present quit1 (exit ex1);
+       present move (
+         atom (
+           move_circle !!ctx !!circle (fst !!move) !!circle.y
+         );
+         emit circle {!!circle with x = fst !!move; y = !!circle.y}
+       ); pause)
+   );
+   atom (erase_circle !!ctx !!circle)
   )
   ||
-  let circle = ({x = 50.; y = snd (!!move); radius = 20.; color = "red"}) in
+  let circle = ({x = !!dec; y = snd (!!move); radius = !!dec; color = "red"}) in
   begin
     trap ex2 (
       loop (
