@@ -11,6 +11,7 @@
  extension. It allows the programmer to describe **reactive machines** as OCaml
  values, and run them on signals arguments. The compilation of concurrency in pendulum is
  completely sequential and static.
+ ([similar work and inspiration](https://www.github.com/remyzorg/pendulum/wiki/Documentation))
 
 The core language is completely compatible with vanilla OCaml compiler.
 

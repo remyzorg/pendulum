@@ -6,6 +6,9 @@ type selection_tree = Runtime_misc.Bitset.t
 type machine_state = Pause | Finish
 type signal_state = Absent | Present
 
+exception Pause_exc
+exception Finish_exc
+
 (* type 'a t = { *)
 (*   instantiate : 'a -> ('a * (unit -> machine_state)); *)
 (* } *)

@@ -176,17 +176,6 @@ let grc2ml dep_array fg =
       begin match fg with
         | Call (a, t) -> construct_ml_action dep_array sigs a ++ construct stop t
         | Test (tv, t1, t2) ->
-
-          let join = Schedule.find_join true t1 t2 in
-
-          Format.printf "TEST: %a #############\n%a\n=======\n%a\n-----------\n%a\n"
-            Flowgraph.pp_test_value tv
-            Flowgraph.pp t1
-            Flowgraph.pp t2
-            (fun fmt -> function None -> Format.fprintf fmt "NO_JOIN" | Some v -> Flowgraph.pp fmt v)
-            join;
-
-
           begin
             match Schedule.find_join true t1 t2 with
             | Some j when j <> Finish && j <> Pause ->
@@ -199,12 +188,8 @@ let grc2ml dep_array fg =
                   | Some fg' when fg' == j -> nop
                   | _ -> construct stop j)
             | _ ->
-              (* Format.printf "Juste apres le NOPAUSE ?-----------\n"; *)
-              let ct1 = construct None t1 in
-              let ct2 = construct None t2 in
-              (* Format.printf "%a\n-------------\n%a\n" (pp_ml_sequence 0) ct1 (pp_ml_sequence 0) ct2; *)
               mls @@ MLif
-                (construct_test_expr sigs tv, ct1, ct2)
+                (construct_test_expr sigs tv, construct None t1, construct None t2)
           end
         | Fork (t1, t2, sync) -> assert false
         | Sync ((i1, i2), t1, t2) ->
@@ -295,8 +280,13 @@ module Ocaml_gen = struct
           ) global_sigs
       in
       let returns =
-        if empty_params then [%expr fun () -> [%e e]]
-        else [%expr [%e return_input_setters], fun () -> [%e e]]
+        let stepfun =
+          [%expr fun () -> try [%e e] with
+               | Pause_exc -> set_absent (); Pause
+               | Finish_exc -> set_absent (); Bitset.add [%e select_env_ident] 0; Finish]
+        in
+        if empty_params then [%expr fun () -> [%e stepfun]]
+        else [%expr [%e return_input_setters], [%e stepfun]]
       in
       [%expr
         let open Pendulum.Runtime_misc in
@@ -383,8 +373,8 @@ module Ocaml_gen = struct
     | MLexpr pexpr ->
       rebind_locals_let pexpr.locals [%expr let () = [%e pexpr.exp] in ()]
 
-    | MLpause -> [%expr set_absent (); Pause]
-    | MLfinish -> [%expr set_absent (); Bitset.add [%e select_env_ident] 0; Finish]
+    | MLpause -> [%expr raise Pause_exc]
+    | MLfinish -> [%expr raise Finish_exc]
 
   let instantiate dep_array sigs sel ml =
     init (Array.length dep_array) sigs sel (construct_sequence dep_array ml)
