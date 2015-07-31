@@ -251,57 +251,58 @@ let expected_ext = Utils.StringSet.(
       add "sync_ast" (
         singleton "sync" )))
 
-let try_compile_error f str =
+let try_compile_error f mapper str =
   let open Sync2ml in
-  try f str with
+  try f mapper str with
   | Ast.Error (loc, e) ->
     Error.(error ~loc (Other_err (e, Ast.print_error)))
   | Sync2ml.Error (loc, e) ->
     Error.(error ~loc (Other_err (e, Sync2ml.print_error)))
   | Flowgraph.Error (loc, e) ->
     Error.(error ~loc (Other_err (e, Flowgraph.print_error)))
-  | e->
+  | Location.Error _ as e -> raise e
+  | e ->
     Error.(error ~loc:Ast.dummy_loc
              (Other_err (e, fun fmt e ->
                   Format.fprintf fmt "%s" (Printexc.to_string e))))
 
+
 let extend_mapper argv =
   let open Sync2ml in
   {default_mapper with
-   structure_item = (fun mapper ->
-       try_compile_error (function
-           | { pstr_desc = Pstr_extension (({ txt = ext }, PStr [
-               { pstr_desc = Pstr_value (Nonrecursive, vbs) }]), attrs); pstr_loc }
-             when StringSet.mem ext expected_ext ->
-             (Str.value Nonrecursive (gen_bindings ext vbs))
+   structure_item = try_compile_error (fun mapper stri ->
+       match stri with
+       | { pstr_desc = Pstr_extension (({ txt = ext }, PStr [
+           { pstr_desc = Pstr_value (Nonrecursive, vbs) }]), attrs); pstr_loc }
+         when StringSet.mem ext expected_ext ->
+         (Str.value Nonrecursive (gen_bindings ext vbs))
 
-           | { pstr_desc = Pstr_extension (({ txt = ext }, PStr [
-               { pstr_desc = Pstr_value (Recursive, _) }]), _); pstr_loc }
-             when StringSet.mem ext expected_ext ->
-             Error.(error ~loc:pstr_loc Non_recursive_let)
-           | x -> default_mapper.structure_item mapper x
-         )
-     );
+       | { pstr_desc = Pstr_extension (({ txt = ext }, PStr [
+           { pstr_desc = Pstr_value (Recursive, _) }]), _); pstr_loc }
+         when StringSet.mem ext expected_ext ->
+         Error.(error ~loc:pstr_loc Non_recursive_let)
+       | x -> default_mapper.structure_item mapper x
+     ) ;
 
-   expr = fun mapper ->
-     try_compile_error (function
-         | { pexp_desc = Pexp_extension ({ txt = ext; loc }, e)}
-           when StringSet.mem ext expected_ext ->
-           begin match e with
-             | PStr [{ pstr_desc = Pstr_eval (e, _)}] ->
-               begin match e.pexp_desc with
-                 | Pexp_let (Nonrecursive, vbl, e) ->
-                   Exp.let_ Nonrecursive (gen_bindings ext vbl)
-                   @@ mapper.expr mapper e
-                 | Pexp_let (Recursive, vbl, e) ->
-                   Error.(error ~loc Non_recursive_let)
-                 | _ ->
-                   Error.(error ~loc Only_on_let)
-               end
-             | _ -> Error.(error ~loc Only_on_let)
-           end
-         | x -> default_mapper.expr mapper x;
-       )
+   expr = try_compile_error (fun mapper exp ->
+       match exp with
+       | { pexp_desc = Pexp_extension ({ txt = ext; loc }, e)}
+         when StringSet.mem ext expected_ext ->
+         begin match e with
+           | PStr [{ pstr_desc = Pstr_eval (e, _)}] ->
+             begin match e.pexp_desc with
+               | Pexp_let (Nonrecursive, vbl, e) ->
+                 Exp.let_ Nonrecursive (gen_bindings ext vbl)
+                 @@ mapper.expr mapper e
+               | Pexp_let (Recursive, vbl, e) ->
+                 Error.(error ~loc Non_recursive_let)
+               | _ ->
+                 Error.(error ~loc Only_on_let)
+             end
+           | _ -> Error.(error ~loc Only_on_let)
+         end
+       | x -> default_mapper.expr mapper x;
+     )
   }
 
 let () =
