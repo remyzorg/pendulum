@@ -138,6 +138,7 @@ let construct_ml_action deps mr a =
   | Enter i -> mls @@ MLenter i
   | Exit i -> ml @@ MLexit i :: List.map (fun x -> MLexit x) deps.(i)
   | Local_signal vs -> mls @@ MLassign vs
+  | Instantiate_run (id, sigs) -> assert false
 
 let (<::) sel l =
   let open Selection_tree in
@@ -164,6 +165,7 @@ let construct_test_expr mr tv =
   | Signal vs -> mr := SignalSet.add vs !mr; MLsig vs
   | Selection i -> MLselect i
   | Finished -> MLfinished
+  | Is_paused (id, _) -> assert false
 
 let grc2ml dep_array fg =
   let open Flowgraph in

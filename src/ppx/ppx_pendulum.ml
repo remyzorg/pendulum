@@ -13,7 +13,7 @@ module Ast = Sync2ml.Ast
 
 module Error = struct
 
-  type syntax = Forgot_sem | Keyword | Variable_name | Signal_decl_at_start
+  type syntax = Forgot_sem | Keyword | Signal_name | Signal_tuple | Signal_decl_at_start
 
   type 'a t =
     | Value_missing of string
@@ -28,7 +28,8 @@ module Error = struct
     match rsn with
     | Forgot_sem -> fprintf fmt "maybe you forgot a `;`"
     | Keyword -> fprintf fmt "keyword expected"
-    | Variable_name -> fprintf fmt "variable name expected"
+    | Signal_name -> fprintf fmt "signal name expected"
+    | Signal_tuple -> fprintf fmt "signal tuple expected"
     | Signal_decl_at_start -> fprintf fmt "signal declarations must be on the top"
 
 
@@ -51,21 +52,27 @@ module Error = struct
   let check_expr_ident e =
     let open Ast in
     match e.pexp_desc with
-    | Pexp_ident {txt = Lident s; loc} ->
-      {loc = loc; content = s}
-    | _ -> syntax_error ~loc:e.pexp_loc Variable_name
+    | Pexp_ident {txt = Lident content; loc} -> {loc; content}
+    | _ -> syntax_error ~loc:e.pexp_loc Signal_name
 
   let check_pat_ident e =
     let open Ast in
     match e.ppat_desc with
-    | Ppat_var {txt = s; loc} ->
-      {loc; content = s}
-    | _ -> syntax_error ~loc:e.ppat_loc Variable_name
+    | Ppat_var {txt = content; loc} ->
+      {loc; content}
+    | _ -> syntax_error ~loc:e.ppat_loc Signal_name
 
   let signal_value_missing e s =
     error ~loc:e.pexp_loc (Value_missing (check_expr_ident s).Ast.content)
 
 end
+
+let signal_tuple_to_list e =
+  let open Ast in
+  match e.pexp_desc with
+  | Pexp_ident {txt = Lident content; loc } -> [{loc; content}]
+  | Pexp_tuple exprs -> List.map Error.check_expr_ident exprs
+  | _ -> Error.syntax_error ~loc:e.pexp_loc Error.Signal_tuple
 
 let pop_signals_decl e =
   let cont origin e =
@@ -157,7 +164,8 @@ let ast_of_expr e =
     | [%expr trap [%e? label] [%e? e]] ->
       Trap (Label (Error.check_expr_ident label), visit e)
 
-    | [%expr run [%e? ident] [%e? tupl]] -> assert false
+    | [%expr run [%e? ident] [%e? tupl]] ->
+      Run (Error.check_expr_ident ident, signal_tuple_to_list tupl)
 
     | [%expr halt ] ->
       Halt

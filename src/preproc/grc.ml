@@ -99,10 +99,12 @@ module Flowgraph = struct
       | Enter of int
       | Exit of int
       | Local_signal of Ast.valued_signal
+      | Instantiate_run of Ast.ident * Ast.signal list
 
     type test_value =
       | Signal of Ast.signal
       | Selection of int
+      | Is_paused of Ast.ident * Ast.signal list
       | Finished
 
     type t =
@@ -154,6 +156,7 @@ module Flowgraph = struct
       | Enter of int
       | Exit of int
       | Local_signal of Ast.valued_signal
+      | Instantiate_run of Ast.ident * Ast.signal list
 
     let pp_action_dot fmt a =
       Format.(fprintf fmt "%s" begin
@@ -162,6 +165,7 @@ module Flowgraph = struct
           | Atom e -> asprintf "%a" printexp e.exp
           | Enter i -> sprintf "enter %d" i
           | Exit i -> sprintf "exit %d" i
+          | Instantiate_run (id, _) -> sprintf "instantiate %s" id.content
           | Local_signal vs ->
             asprintf "signal %s (%a)" vs.signal.ident.content printexp vs.svalue.exp
         end)
@@ -173,20 +177,23 @@ module Flowgraph = struct
           | Atom e -> asprintf "Atom (%a)" printexp e.exp
           | Enter i -> sprintf "Enter %d" i
           | Exit i -> sprintf "Exit %d" i
+          | Instantiate_run (id, _) -> sprintf "Instantiate_run %s" id.content
           | Local_signal vs -> asprintf "Local_signal %s" vs.signal.ident.content
         end)
 
     type test_value =
       | Signal of Ast.signal
       | Selection of int
+      | Is_paused of Ast.ident * Ast.signal list
       | Finished
 
     let pp_test_value_dot fmt tv =
       Format.(begin
           match tv with
-          | Signal s -> fprintf fmt "%s" s.ident.content
-          | Selection i -> fprintf fmt "%d" i
-          | Finished -> fprintf fmt "finished"
+          | Signal s -> fprintf fmt "%s ?" s.ident.content
+          | Selection i -> fprintf fmt "%d ?" i
+          | Finished -> fprintf fmt "finished ?"
+          | Is_paused (id, _) -> fprintf fmt "paused %s ?" id.content
         end)
 
     let pp_test_value fmt tv =
@@ -195,6 +202,7 @@ module Flowgraph = struct
           | Signal s -> fprintf fmt "Signal %s" s.ident.content
           | Selection i -> fprintf fmt "Selection %d" i
           | Finished -> fprintf fmt "Finished"
+          | Is_paused (id, _) -> fprintf fmt "Is_paused %s" id.content
         end)
 
     type t =
@@ -291,6 +299,7 @@ module Flowgraph = struct
           | Atom _ -> ", "
           | Enter i -> ", fontcolor=darkgreen, "
           | Exit i -> ", fontcolor=red, "
+          | Instantiate_run _ -> ", fontcolor=darkgreen, "
         end
       | Test _ -> "shape=box, "
       | Sync _ -> "shape=invtrapezium"
@@ -439,6 +448,13 @@ module Of_ast = struct
             surface env r pause end_pres
           )
 
+        | Run (id, sigs) ->
+          let endrun = exit_node p endp in
+          enter_node p (
+            Instantiate_run (id, sigs)
+            >> test_node (Is_paused (id, sigs)) (pause, endrun))
+
+
         | Loop q -> enter_node p @@ surface env q pause pause
 
         | Par (q, r) ->
@@ -464,7 +480,6 @@ module Of_ast = struct
           enter_node p
           @@ surface {env with exits =
                                  (StringMap.add s.content end_trap env.exits)} q pause end_trap
-        | Run _ -> assert false
       in
       memo_rec h surface
 
@@ -524,6 +539,10 @@ module Of_ast = struct
             depth env r pause end_pres
           )
 
+        | Run (id, sigs) ->
+          let endrun = exit_node p endp in
+          test_node (Is_paused (id, sigs)) (pause, endrun)
+
         | Signal (s,q) ->
           depth env q pause @@ exit_node p endp
         | Suspend (q, s) ->
@@ -535,7 +554,6 @@ module Of_ast = struct
         | Trap (Label s, q) ->
           let end_trap = exit_node p endp in
           depth {env with exits = StringMap.add s.content end_trap env.exits} q pause end_trap
-        | Run _ -> assert false
       in memo_rec h depth
 
 

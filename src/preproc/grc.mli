@@ -34,10 +34,12 @@ module Flowgraph : sig
       | Enter of int
       | Exit of int
       | Local_signal of Ast.valued_signal
+      | Instantiate_run of Ast.ident * Ast.signal list
 
     type test_value =
       | Signal of Ast.signal
       | Selection of int
+      | Is_paused of Ast.ident * Ast.signal list
       | Finished
 
     type t =
