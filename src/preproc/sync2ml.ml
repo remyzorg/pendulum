@@ -46,12 +46,14 @@ type ml_sequence =
 and ml_ast =
   | MLemit of Ast.valued_signal
   | MLif of ml_test_expr * ml_sequence * ml_sequence
-  | MLassign of Ast.valued_signal
+  | MLassign of ident * ml_ast
   | MLenter of int
   | MLexit of int
   | MLexpr of Ast.atom
+  | MLunitexpr of Ast.atom
   | MLpause
   | MLfinish
+  | MLcall of Ast.ident * Ast.signal list
 
 
 let rec pp_type_ml_sequence lvl fmt =
@@ -77,12 +79,14 @@ and pp_type_ml_ast lvl fmt =
         indent pp_ml_test_expr mltest_expr
         (pp_type_ml_sequence (lvl + 2)) mlseq1
         (pp_type_ml_sequence (lvl + 2)) mlseq2
-    | MLassign vs -> fprintf fmt "%sMLassign %s" indent vs.signal.ident.content
+    | MLassign (s, ml) -> fprintf fmt "%sMLassign (%s, %a)" indent s.content (pp_type_ml_ast 0) ml
     | MLenter i -> fprintf fmt "%sEnter %d" indent i
     | MLexit i -> fprintf fmt "%sExit %d" indent i
     | MLexpr e -> fprintf fmt "%s%s" indent (asprintf "%a" Ast.printexp e.exp)
+    | MLunitexpr e -> fprintf fmt "%s%s" indent (asprintf "%a" Ast.printexp e.exp)
     | MLpause -> fprintf fmt "%sPause" indent
     | MLfinish -> fprintf fmt "%sFinish" indent
+    | MLcall (id, sigs) -> assert false
     )
 
 let rec pp_ml_sequence lvl fmt =
@@ -100,8 +104,10 @@ and pp_ml_ast lvl fmt =
   let indent = String.init lvl (fun _ -> ' ') in
   Format.(function
     | MLemit vs -> fprintf fmt "%semit %s" indent vs.signal.ident.content
-    | MLassign vs ->
-      fprintf fmt "%s := %a" vs.signal.ident.content Ast.printexp vs.svalue.exp
+    | MLassign (id, ml) ->
+
+      fprintf fmt "%s := %a" id.content (pp_ml_ast 0) ml
+
     | MLif (mltest_expr, mlseq1, mlseq2) ->
       fprintf fmt "%sif %a then (\n%a\n%s)" indent pp_ml_test_expr mltest_expr
         (pp_ml_sequence (lvl + 2)) mlseq1 indent;
@@ -119,8 +125,10 @@ and pp_ml_ast lvl fmt =
     | MLenter i -> fprintf fmt "%senter %d" indent i
     | MLexit i -> fprintf fmt "%sexit %d" indent i
     | MLexpr e -> fprintf fmt "%s%s" indent (asprintf "%a" Ast.printexp e.exp)
+    | MLunitexpr e -> fprintf fmt "%s%s" indent (asprintf "%a" Ast.printexp e.exp)
     | MLpause -> fprintf fmt "%sPause" indent
     | MLfinish -> fprintf fmt "%sFinish" indent
+    | MLcall _ -> assert false
     )
 
 let nop = Seqlist []
@@ -134,10 +142,10 @@ let construct_ml_action deps mr a =
   let open Flowgraph in
   match a with
   | Emit vs -> mr := SignalSet.add vs.signal !mr; mls @@ MLemit vs
-  | Atom e -> mls @@ MLexpr e
+  | Atom e -> mls @@ MLunitexpr e
   | Enter i -> mls @@ MLenter i
   | Exit i -> ml @@ MLexit i :: List.map (fun x -> MLexit x) deps.(i)
-  | Local_signal vs -> mls @@ MLassign vs
+  | Local_signal vs -> mls @@ MLassign (vs.signal.ident, MLexpr vs.svalue)
   | Instantiate_run (id, sigs) -> assert false
 
 let (<::) sel l =
@@ -359,9 +367,9 @@ module Ocaml_gen = struct
                  else [%e construct_sequence depl mlseq2]]
       end
 
-    | MLassign vs ->
-      rebind_locals_let vs.svalue.locals
-        [%expr [%e mk_ident vs.signal.ident] := make_signal [%e vs.svalue.exp]]
+    | MLassign (ident, mlast) ->
+      let ocamlexpr = construct_ml_ast depl mlast in
+      [%expr [%e mk_ident ident] := make_signal [%e ocamlexpr]]
 
     | MLenter i ->
       [%expr Bitset.add
@@ -373,11 +381,13 @@ module Ocaml_gen = struct
                  [%e select_env_ident]
                  [%e int_const i]]
 
-    | MLexpr pexpr ->
+    | MLunitexpr pexpr ->
       rebind_locals_let pexpr.locals [%expr let () = [%e pexpr.exp] in ()]
+    | MLexpr pexpr -> rebind_locals_let pexpr.locals pexpr.exp
 
     | MLpause -> [%expr raise Pause_exc]
     | MLfinish -> [%expr raise Finish_exc]
+    | MLcall (id, sigs) -> assert false
 
   let instantiate dep_array sigs sel ml =
     init (Array.length dep_array) sigs sel (construct_sequence dep_array ml)

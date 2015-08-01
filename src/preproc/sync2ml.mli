@@ -36,12 +36,14 @@ type ml_sequence =
 and ml_ast =
   | MLemit of Ast.valued_signal
   | MLif of ml_test_expr * ml_sequence * ml_sequence
-  | MLassign of Ast.valued_signal
+  | MLassign of Ast.ident * ml_ast
   | MLenter of int
   | MLexit of int
   | MLexpr of Ast.atom
+  | MLunitexpr of Ast.atom
   | MLpause
   | MLfinish
+  | MLcall of Ast.ident * Ast.signal list
 
 val pp_ml_sequence : int -> Format.formatter -> ml_sequence -> unit
 

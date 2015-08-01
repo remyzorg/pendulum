@@ -48,7 +48,7 @@ module Selection_tree = struct
     let of_ast ast =
       let rec visit : Ast.Tagged.t -> t = fun tagged ->
         match tagged.st.content with
-        | Emit _ | Nothing | Exit _ | Atom _ -> mk_tree Bottom tagged.id
+        | Emit _ | Nothing | Exit _ | Atom _ | Run _ -> mk_tree Bottom tagged.id
         | Pause -> mk_tree Pause tagged.id
 
         | Par (t1, t2) -> mk_tree (Par [visit t1; visit t2]) tagged.id
@@ -60,7 +60,6 @@ module Selection_tree = struct
         | Signal (_, st) -> mk_tree (Ref (visit st)) tagged.id
         | Trap (_, st) -> mk_tree (Ref (visit st)) tagged.id
         | Await s -> mk_tree Pause tagged.id
-        | Run _ -> assert false
       in
       visit ast
 
