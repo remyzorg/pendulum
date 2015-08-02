@@ -387,7 +387,11 @@ module Ocaml_gen = struct
 
     | MLpause -> [%expr raise Pause_exc]
     | MLfinish -> [%expr raise Finish_exc]
-    | MLcall (id, sigs) -> assert false
+    | MLcall (ident, sigs) ->
+      (* Keep the lock from the tupple and put it back back here *)
+      let tuple = Ast_helper.Exp.tuple ~loc:Location.none @@
+        List.map (fun s -> mk_ident s.ident) sigs
+      in [%expr [%e mk_ident ident] [%e tuple]]
 
   let instantiate dep_array sigs sel ml =
     init (Array.length dep_array) sigs sel (construct_sequence dep_array ml)
