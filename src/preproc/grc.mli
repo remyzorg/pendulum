@@ -34,7 +34,7 @@ module Flowgraph : sig
       | Enter of int
       | Exit of int
       | Local_signal of Ast.valued_signal
-      | Instantiate_run of Ast.ident * Ast.signal list
+      | Instantiate_run of Ast.ident * Ast.signal list * Ast.loc
 
     type test_value =
       | Signal of Ast.signal

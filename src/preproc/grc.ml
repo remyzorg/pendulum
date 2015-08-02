@@ -98,7 +98,7 @@ module Flowgraph = struct
       | Enter of int
       | Exit of int
       | Local_signal of Ast.valued_signal
-      | Instantiate_run of Ast.ident * Ast.signal list
+      | Instantiate_run of Ast.ident * Ast.signal list * Ast.loc
 
     type test_value =
       | Signal of Ast.signal
@@ -155,7 +155,7 @@ module Flowgraph = struct
       | Enter of int
       | Exit of int
       | Local_signal of Ast.valued_signal
-      | Instantiate_run of Ast.ident * Ast.signal list
+      | Instantiate_run of Ast.ident * Ast.signal list * Ast.loc
 
     let pp_action_dot fmt a =
       Format.(fprintf fmt "%s" begin
@@ -164,7 +164,7 @@ module Flowgraph = struct
           | Atom e -> asprintf "%a" printexp e.exp
           | Enter i -> sprintf "enter %d" i
           | Exit i -> sprintf "exit %d" i
-          | Instantiate_run (id, _) -> sprintf "instantiate %s" id.content
+          | Instantiate_run (id, _, _) -> sprintf "instantiate %s" id.content
           | Local_signal vs ->
             asprintf "signal %s (%a)" vs.signal.ident.content printexp vs.svalue.exp
         end)
@@ -176,7 +176,7 @@ module Flowgraph = struct
           | Atom e -> asprintf "Atom (%a)" printexp e.exp
           | Enter i -> sprintf "Enter %d" i
           | Exit i -> sprintf "Exit %d" i
-          | Instantiate_run (id, _) -> sprintf "Instantiate_run %s" id.content
+          | Instantiate_run (id, _, _) -> sprintf "Instantiate_run %s" id.content
           | Local_signal vs -> asprintf "Local_signal %s" vs.signal.ident.content
         end)
 
@@ -450,7 +450,7 @@ module Of_ast = struct
         | Run (id, sigs, loc) ->
           let endrun = exit_node p endp in
           enter_node p (
-            Instantiate_run (id, sigs)
+            Instantiate_run (id, sigs, loc)
             >> test_node (Is_paused (id, sigs, loc)) (pause, endrun))
 
 

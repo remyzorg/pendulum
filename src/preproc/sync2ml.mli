@@ -29,8 +29,9 @@ type ml_test_expr =
   | MLselect of int
   | MLor of ml_test_expr * ml_test_expr
   | MLfinished
+  | MLtexpr of ml_ast
 
-type ml_sequence =
+and ml_sequence =
   | Seqlist of ml_ast list
   | Seq of ml_sequence * ml_sequence
 and ml_ast =

@@ -27,20 +27,20 @@ let print_error fmt e =
       | _ -> assert false
     end
 
+let remove_ident_renaming s =
+  try
+    Ast.({s with
+          content = String.sub s.content 0 ((String.rindex s.content '~'))})
+  with Not_found -> s
+
 type ml_test_expr =
   | MLsig of Ast.signal
   | MLselect of int
   | MLor of ml_test_expr * ml_test_expr
   | MLfinished
+  | MLtexpr of ml_ast
 
-let rec pp_ml_test_expr fmt = Format.(function
-  | MLsig s -> fprintf fmt "present %s" s.ident.content
-  | MLselect i -> fprintf fmt "select %d" i
-  | MLfinished -> fprintf fmt "finished"
-  | MLor (mlt1, mlt2) -> fprintf fmt "%a || %a" pp_ml_test_expr mlt1 pp_ml_test_expr mlt2
-  )
-
-type ml_sequence =
+and ml_sequence =
   | Seqlist of ml_ast list
   | Seq of ml_sequence * ml_sequence
 and ml_ast =
@@ -55,8 +55,15 @@ and ml_ast =
   | MLfinish
   | MLcall of Ast.ident * Ast.signal list * Ast.loc
 
+let rec pp_ml_test_expr fmt = Format.(function
+  | MLsig s -> fprintf fmt "present %s" s.ident.content
+  | MLselect i -> fprintf fmt "select %d" i
+  | MLfinished -> fprintf fmt "finished"
+  | MLor (mlt1, mlt2) -> fprintf fmt "%a || %a" pp_ml_test_expr mlt1 pp_ml_test_expr mlt2
+  | MLtexpr mle -> pp_ml_ast 0 fmt mle
+  )
 
-let rec pp_type_ml_sequence lvl fmt =
+and pp_type_ml_sequence lvl fmt =
   let indent = String.init lvl (fun _ -> ' ') in
   Format.(function
       (* | Seq (Seqlist [], s) | Seq (s, Seqlist[]) -> pp_type_ml_sequence lvl fmt s *)
@@ -89,7 +96,7 @@ and pp_type_ml_ast lvl fmt =
     | MLcall (id, sigs, _) -> assert false
     )
 
-let rec pp_ml_sequence lvl fmt =
+and pp_ml_sequence lvl fmt =
   Format.(function
       | Seqlist [] | Seq (Seqlist [], Seqlist []) -> assert false
       | Seq (Seqlist [], s) | Seq (s, Seqlist[]) -> pp_ml_sequence lvl fmt s
@@ -146,7 +153,10 @@ let construct_ml_action deps mr a =
   | Enter i -> mls @@ MLenter i
   | Exit i -> ml @@ MLexit i :: List.map (fun x -> MLexit x) deps.(i)
   | Local_signal vs -> mls @@ MLassign (vs.signal.ident, MLexpr vs.svalue)
-  | Instantiate_run (id, sigs) -> assert false
+  | Instantiate_run (id, sigs, loc) ->
+    (* What is supposed to be here ? *)
+    assert false;
+    mls @@ MLassign (id, MLcall (remove_ident_renaming id, sigs, loc))
 
 let (<::) sel l =
   let open Selection_tree in
@@ -173,7 +183,7 @@ let construct_test_expr mr tv =
   | Signal vs -> mr := SignalSet.add vs !mr; MLsig vs
   | Selection i -> MLselect i
   | Finished -> MLfinished
-  | Is_paused (id, _, _) -> assert false
+  | Is_paused (id, sigs, loc) -> MLtexpr (MLcall (id, sigs, loc))
 
 let grc2ml dep_array fg =
   let open Flowgraph in
@@ -327,14 +337,16 @@ module Ocaml_gen = struct
     | Local -> [%expr ![%e mk_ident s.ident]]
     | _ -> [%expr [%e mk_ident s.ident]]
 
-  let rec construct_test test =
+  let rec construct_test depl test =
     match test with
     | MLsig s -> [%expr !?[%e add_ref_local s]]
     | MLselect i -> [%expr Bitset.mem [%e select_env_ident] [%e int_const i]]
-    | MLor (mlte1, mlte2) -> [%expr [%e construct_test mlte1 ] || [%e construct_test mlte2]]
+    | MLor (mlte1, mlte2) ->
+      [%expr [%e construct_test depl mlte1 ] || [%e construct_test depl mlte2]]
     | MLfinished -> [%expr Bitset.mem [%e select_env_ident] 0]
+    | MLtexpr mle -> construct_ml_ast depl mle
 
-  let rec construct_sequence depl mlseq =
+  and construct_sequence depl mlseq =
     match mlseq with
     | Seq (Seqlist [], Seqlist []) | Seqlist [] -> assert false
     | Seq (mlseq, Seqlist []) | Seq (Seqlist [], mlseq) ->
@@ -356,13 +368,13 @@ module Ocaml_gen = struct
     | MLif (test, mlseq1, mlseq2) ->
       begin match mlseq1, mlseq2 with
         | mlseq1, (Seqlist [] | Seq (Seqlist [], Seqlist [])) ->
-          [%expr if [%e construct_test test]
+          [%expr if [%e construct_test depl test]
                  then [%e construct_sequence depl mlseq1]]
         | (Seqlist [] | Seq (Seqlist [], Seqlist [])), mseq2 ->
-          [%expr if not [%e construct_test test]
+          [%expr if not [%e construct_test depl test]
                  then [%e construct_sequence depl mlseq2]]
         | _ ->
-          [%expr if [%e construct_test test] then
+          [%expr if [%e construct_test depl test] then
                    [%e construct_sequence depl mlseq1]
                  else [%e construct_sequence depl mlseq2]]
       end
