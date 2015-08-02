@@ -62,7 +62,7 @@ module type S = sig
       | Present of ident * statement * statement
       | Atom of exp
       | Signal of valued_ident * statement
-      | Run of ident * ident list
+      | Run of ident * ident list * loc
 
       | Halt
       | Sustain of valued_ident
@@ -99,7 +99,7 @@ module type S = sig
       | Atom of atom
       | Signal of valued_signal * t
       | Await of signal
-      | Run of ident * signal list
+      | Run of ident * signal list * loc
     and tagged = (tagged_ast) location
 
 

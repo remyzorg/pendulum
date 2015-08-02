@@ -103,7 +103,7 @@ module Flowgraph = struct
     type test_value =
       | Signal of Ast.signal
       | Selection of int
-      | Is_paused of Ast.ident * Ast.signal list
+      | Is_paused of Ast.ident * Ast.signal list * Ast.loc
       | Finished
 
     type t =
@@ -183,7 +183,7 @@ module Flowgraph = struct
     type test_value =
       | Signal of Ast.signal
       | Selection of int
-      | Is_paused of Ast.ident * Ast.signal list
+      | Is_paused of Ast.ident * Ast.signal list * Ast.loc
       | Finished
 
     let pp_test_value_dot fmt tv =
@@ -192,7 +192,7 @@ module Flowgraph = struct
           | Signal s -> fprintf fmt "%s ?" s.ident.content
           | Selection i -> fprintf fmt "%d ?" i
           | Finished -> fprintf fmt "finished ?"
-          | Is_paused (id, _) -> fprintf fmt "paused %s ?" id.content
+          | Is_paused (id, _, _) -> fprintf fmt "paused %s ?" id.content
         end)
 
     let pp_test_value fmt tv =
@@ -201,7 +201,7 @@ module Flowgraph = struct
           | Signal s -> fprintf fmt "Signal %s" s.ident.content
           | Selection i -> fprintf fmt "Selection %d" i
           | Finished -> fprintf fmt "Finished"
-          | Is_paused (id, _) -> fprintf fmt "Is_paused %s" id.content
+          | Is_paused (id, _, _) -> fprintf fmt "Is_paused %s" id.content
         end)
 
     type t =
@@ -447,11 +447,11 @@ module Of_ast = struct
             surface env r pause end_pres
           )
 
-        | Run (id, sigs) ->
+        | Run (id, sigs, loc) ->
           let endrun = exit_node p endp in
           enter_node p (
             Instantiate_run (id, sigs)
-            >> test_node (Is_paused (id, sigs)) (pause, endrun))
+            >> test_node (Is_paused (id, sigs, loc)) (pause, endrun))
 
 
         | Loop q -> enter_node p @@ surface env q pause pause
@@ -538,9 +538,9 @@ module Of_ast = struct
             depth env r pause end_pres
           )
 
-        | Run (id, sigs) ->
+        | Run (id, sigs, loc) ->
           let endrun = exit_node p endp in
-          test_node (Is_paused (id, sigs)) (pause, endrun)
+          test_node (Is_paused (id, sigs, loc)) (pause, endrun)
 
         | Signal (s,q) ->
           depth env q pause @@ exit_node p endp

@@ -53,7 +53,7 @@ and ml_ast =
   | MLunitexpr of Ast.atom
   | MLpause
   | MLfinish
-  | MLcall of Ast.ident * Ast.signal list
+  | MLcall of Ast.ident * Ast.signal list * Ast.loc
 
 
 let rec pp_type_ml_sequence lvl fmt =
@@ -86,7 +86,7 @@ and pp_type_ml_ast lvl fmt =
     | MLunitexpr e -> fprintf fmt "%s%s" indent (asprintf "%a" Ast.printexp e.exp)
     | MLpause -> fprintf fmt "%sPause" indent
     | MLfinish -> fprintf fmt "%sFinish" indent
-    | MLcall (id, sigs) -> assert false
+    | MLcall (id, sigs, _) -> assert false
     )
 
 let rec pp_ml_sequence lvl fmt =
@@ -173,7 +173,7 @@ let construct_test_expr mr tv =
   | Signal vs -> mr := SignalSet.add vs !mr; MLsig vs
   | Selection i -> MLselect i
   | Finished -> MLfinished
-  | Is_paused (id, _) -> assert false
+  | Is_paused (id, _, _) -> assert false
 
 let grc2ml dep_array fg =
   let open Flowgraph in
@@ -387,9 +387,9 @@ module Ocaml_gen = struct
 
     | MLpause -> [%expr raise Pause_exc]
     | MLfinish -> [%expr raise Finish_exc]
-    | MLcall (ident, sigs) ->
+    | MLcall (ident, sigs, loc) ->
       (* Keep the lock from the tupple and put it back back here *)
-      let tuple = Ast_helper.Exp.tuple ~loc:Location.none @@
+      let tuple = Ast_helper.Exp.tuple ~loc @@
         List.map (fun s -> mk_ident s.ident) sigs
       in [%expr [%e mk_ident ident] [%e tuple]]
 

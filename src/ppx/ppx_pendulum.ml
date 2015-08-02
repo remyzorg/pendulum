@@ -165,7 +165,7 @@ let ast_of_expr e =
       Trap (Label (Error.check_expr_ident label), visit e)
 
     | [%expr run [%e? ident] [%e? tupl]] ->
-      Run (Error.check_expr_ident ident, signal_tuple_to_list tupl)
+      Run (Error.check_expr_ident ident, signal_tuple_to_list tupl, e.pexp_loc)
 
     | [%expr halt ] ->
       Halt

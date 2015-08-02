@@ -39,7 +39,7 @@ module Flowgraph : sig
     type test_value =
       | Signal of Ast.signal
       | Selection of int
-      | Is_paused of Ast.ident * Ast.signal list
+      | Is_paused of Ast.ident * Ast.signal list * Ast.loc
       | Finished
 
     type t =

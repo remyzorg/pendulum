@@ -62,7 +62,7 @@ module type S = sig
       | Present of ident * statement * statement
       | Atom of exp
       | Signal of valued_ident * statement
-      | Run of ident * ident list
+      | Run of ident * ident list * loc
 
       | Halt
       | Sustain of valued_ident
@@ -99,7 +99,7 @@ module type S = sig
       | Atom of atom
       | Signal of valued_signal * t
       | Await of signal
-      | Run of ident * signal list
+      | Run of ident * signal list * loc
     and tagged = (tagged_ast) location
 
 
@@ -174,7 +174,7 @@ module Make (E : Exp) = struct
       | Present of ident * statement * statement
       | Atom of exp
       | Signal of valued_ident * statement
-      | Run of ident * ident list
+      | Run of ident * ident list * loc
 
       | Halt
       | Sustain of valued_ident
@@ -242,7 +242,7 @@ module Make (E : Exp) = struct
       | Atom of atom
       | Signal of valued_signal * t
       | Await of signal
-      | Run of ident * signal list
+      | Run of ident * signal list * loc
     and tagged = (tagged_ast) location
 
     let mk_tagged ?(loc = dummy_loc) content id =
@@ -369,10 +369,10 @@ module Make (E : Exp) = struct
           let env, s' = add_signal env locals vid in
           mk_tagged (Signal (s', visit env t)) !+id
 
-        | Derived.Run (mident, ids) ->
+        | Derived.Run (mident, ids, loc) ->
           let sigs = List.map (rename ~loc env.signals) ids in
           let machine_id = add_rename_machine env.machine_runs mident in
-          mk_tagged (Run (machine_id, sigs)) !+id
+          mk_tagged (Run (machine_id, sigs, loc)) !+id
 
 
         | Derived.Halt -> mk_tagged (Loop (mk_tagged Pause !+id)) !+id
@@ -458,7 +458,7 @@ module Make (E : Exp) = struct
           fprintf fmt "N%d [label=\"%d signal(%s)\"]; @\n" x.id x.id vs.signal.ident.content;
           fprintf fmt "N%d -> N%d ;@\n" x.id st.id;
           visit st
-        | Run (id, sigs) ->
+        | Run (id, sigs, _) ->
           fprintf fmt "N%d [label=\"%d run %s %s\"]; @\n" x.id x.id id.content
             (String.concat " " @@ List.map (fun x -> x.ident.content) sigs) 
 

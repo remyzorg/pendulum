@@ -43,7 +43,7 @@ and ml_ast =
   | MLunitexpr of Ast.atom
   | MLpause
   | MLfinish
-  | MLcall of Ast.ident * Ast.signal list
+  | MLcall of Ast.ident * Ast.signal list * Ast.loc
 
 val pp_ml_sequence : int -> Format.formatter -> ml_sequence -> unit
 
