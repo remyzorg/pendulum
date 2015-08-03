@@ -29,7 +29,7 @@ type ml_test_expr =
   | MLselect of int
   | MLor of ml_test_expr * ml_test_expr
   | MLfinished
-  | MLtexpr of ml_ast
+  | MLis_pause of ml_ast
 
 and ml_sequence =
   | Seqlist of ml_ast list

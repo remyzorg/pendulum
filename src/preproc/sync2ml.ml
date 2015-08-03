@@ -38,7 +38,7 @@ type ml_test_expr =
   | MLselect of int
   | MLor of ml_test_expr * ml_test_expr
   | MLfinished
-  | MLtexpr of ml_ast
+  | MLis_pause of ml_ast
 
 and ml_sequence =
   | Seqlist of ml_ast list
@@ -60,7 +60,7 @@ let rec pp_ml_test_expr fmt = Format.(function
   | MLselect i -> fprintf fmt "select %d" i
   | MLfinished -> fprintf fmt "finished"
   | MLor (mlt1, mlt2) -> fprintf fmt "%a || %a" pp_ml_test_expr mlt1 pp_ml_test_expr mlt2
-  | MLtexpr mle -> pp_ml_ast 0 fmt mle
+  | MLis_pause mle -> fprintf fmt "%a == Pause" (pp_ml_ast 0) mle
   )
 
 and pp_type_ml_sequence lvl fmt =
@@ -93,7 +93,9 @@ and pp_type_ml_ast lvl fmt =
     | MLunitexpr e -> fprintf fmt "%s%s" indent (asprintf "%a" Ast.printexp e.exp)
     | MLpause -> fprintf fmt "%sPause" indent
     | MLfinish -> fprintf fmt "%sFinish" indent
-    | MLcall (id, sigs, _) -> assert false
+    | MLcall (id, sigs, _) ->
+      fprintf fmt "%sMLcall (%s, [%a])" indent id.content
+        (MList.pp_iter ~sep:"; " (fun fmt x -> fprintf fmt "%s" x.ident.content)) sigs
     )
 
 and pp_ml_sequence lvl fmt =
@@ -135,7 +137,8 @@ and pp_ml_ast lvl fmt =
     | MLunitexpr e -> fprintf fmt "%s%s" indent (asprintf "%a" Ast.printexp e.exp)
     | MLpause -> fprintf fmt "%sPause" indent
     | MLfinish -> fprintf fmt "%sFinish" indent
-    | MLcall _ -> assert false
+    | MLcall (id, sigs, _) -> fprintf fmt "%s%s (%a)" indent id.content
+        (MList.pp_iter ~sep:", " (fun fmt x -> fprintf fmt "%s" x.ident.content)) sigs
     )
 
 let nop = Seqlist []
@@ -183,7 +186,7 @@ let construct_test_expr mr tv =
   | Signal vs -> mr := SignalSet.add vs !mr; MLsig vs
   | Selection i -> MLselect i
   | Finished -> MLfinished
-  | Is_paused (id, sigs, loc) -> MLtexpr (MLcall (id, sigs, loc))
+  | Is_paused (id, sigs, loc) -> MLis_pause (MLcall (id, sigs, loc))
 
 let grc2ml dep_array fg =
   let open Flowgraph in
@@ -344,7 +347,7 @@ module Ocaml_gen = struct
     | MLor (mlte1, mlte2) ->
       [%expr [%e construct_test depl mlte1 ] || [%e construct_test depl mlte2]]
     | MLfinished -> [%expr Bitset.mem [%e select_env_ident] 0]
-    | MLtexpr mle -> construct_ml_ast depl mle
+    | MLis_pause mle -> [%expr [%e construct_ml_ast depl mle] == Pause]
 
   and construct_sequence depl mlseq =
     match mlseq with
