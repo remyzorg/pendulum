@@ -156,10 +156,15 @@ let construct_ml_action deps mr a =
   | Enter i -> mls @@ MLenter i
   | Exit i -> ml @@ MLexit i :: List.map (fun x -> MLexit x) deps.(i)
   | Local_signal vs -> mls @@ MLassign (vs.signal.ident, MLexpr vs.svalue)
-  | Instantiate_run (id, sigs, loc) ->
+  | Instantiate_run (id, sigs, loc) -> assert false
     (* What is supposed to be here ? *)
-    assert false;
-    mls @@ MLassign (id, MLcall (remove_ident_renaming id, sigs, loc))
+
+    (*
+       id(~) := id(-~) (!!i_1, !!i_2)
+       * Need signals localisation (!!i if it's a global, (!i) if it's a local
+     *)
+
+    (* mls @@ MLassign (id, MLcall (remove_ident_renaming id, sigs, loc)) *)
 
 let (<::) sel l =
   let open Selection_tree in

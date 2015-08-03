@@ -617,6 +617,7 @@ module Schedule = struct
     open Fg
     open Ast
 
+
     let check_causality_cycles grc =
       let open Ast.SignalMap in
       let st, fg = grc in
@@ -652,6 +653,8 @@ module Schedule = struct
             | [] -> m
             | exception Not_found -> m
           end
+        | Call (Instantiate_run _, _) -> assert false (* TODO *)
+        | Test (Is_paused _, t1, t2) -> assert false (* TODO *)
         | _ -> m
       in
       visit empty fg
@@ -698,6 +701,12 @@ module Schedule = struct
         match fg with
         | Call (Emit vs, t) when s.ident.content = vs.signal.ident.content -> true
         | fg when fg == stop -> false
+
+
+        | Call (Instantiate_run _ , t) -> assert false (* TODO *)
+        | Test (Is_paused _, t1, t2) -> assert false (* TODO *)
+
+
         | Call (_, t) -> aux (t, stop, s)
         | Test (_, t1, t2) | Fork (t1, t2, _) | Sync (_ , t1, t2) ->
           aux (t1, stop, s) || aux (t2, stop, s)
@@ -714,8 +723,13 @@ module Schedule = struct
         | Call (Emit s, t) ->
           let emits, tests = aux (t, stop) in
           add s.signal emits, tests
-        | Call (_, t) -> aux (t, stop)
 
+
+        | Call (Instantiate_run _, t) -> assert false (* TODO *)
+        | Test (Is_paused _, t1, t2) -> assert false (* TODO *)
+
+
+        | Call (_, t) -> aux (t, stop)
         | Test (Signal s, t1, t2) ->
           let emits1, tests1 = aux (t1, stop) in
           let emits2, tests2 = aux (t2, stop) in
