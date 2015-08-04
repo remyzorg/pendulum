@@ -16,6 +16,6 @@ let%sync incr =
 let%sync m_loop_incr =
   let s = 5 in
   loop (
-    run incr (s, s, s, s);
+    run incr s;
     pause
   )

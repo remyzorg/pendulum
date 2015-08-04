@@ -156,7 +156,7 @@ let construct_ml_action deps mr a =
   | Enter i -> mls @@ MLenter i
   | Exit i -> ml @@ MLexit i :: List.map (fun x -> MLexit x) deps.(i)
   | Local_signal vs -> mls @@ MLassign (vs.signal.ident, MLexpr vs.svalue)
-  | Instantiate_run (id, sigs, loc) -> assert false
+  | Instantiate_run (id, sigs, loc) ->
     (* What is supposed to be here ? *)
 
     (*
@@ -164,7 +164,7 @@ let construct_ml_action deps mr a =
        * Need signals localisation (!!i if it's a global, (!i) if it's a local
      *)
 
-    (* mls @@ MLassign (id, MLcall (remove_ident_renaming id, sigs, loc)) *)
+    mls @@ MLassign (id, MLcall (remove_ident_renaming id, sigs, loc))
 
 let (<::) sel l =
   let open Selection_tree in
@@ -272,6 +272,12 @@ module Ocaml_gen = struct
             content = String.sub s.content 0 ((String.rindex s.content '~'))})
     with Not_found -> s
 
+  let add_ref_local s =
+    let open Ast in
+    match s.origin with
+    | Local -> [%expr ![%e mk_ident s.ident]]
+    | _ -> mk_ident s.ident
+
   let rebind_locals_let locals e =
     (List.fold_left (fun acc x ->
          [%expr let [%p mk_pat_var @@ remove_signal_renaming x.ident] =
@@ -340,11 +346,6 @@ module Ocaml_gen = struct
               in
               [%e let_sigs_global (let_set_sigs_absent returns)]]
 
-  let add_ref_local s =
-    match s.origin with
-    | Local -> [%expr ![%e mk_ident s.ident]]
-    | _ -> [%expr [%e mk_ident s.ident]]
-
   let rec construct_test depl test =
     match test with
     | MLsig s -> [%expr !?[%e add_ref_local s]]
@@ -352,7 +353,10 @@ module Ocaml_gen = struct
     | MLor (mlte1, mlte2) ->
       [%expr [%e construct_test depl mlte1 ] || [%e construct_test depl mlte2]]
     | MLfinished -> [%expr Bitset.mem [%e select_env_ident] 0]
-    | MLis_pause mle -> [%expr [%e construct_ml_ast depl mle] == Pause]
+    | MLis_pause mle ->
+      let _ = [%expr [%e construct_ml_ast depl mle] == Pause] in
+      (* missing setters *)
+      assert false
 
   and construct_sequence depl mlseq =
     match mlseq with
@@ -409,8 +413,8 @@ module Ocaml_gen = struct
     | MLfinish -> [%expr raise Finish_exc]
     | MLcall (ident, sigs, loc) ->
       (* Keep the lock from the tupple and put it back back here *)
-      let tuple = Ast_helper.Exp.tuple ~loc @@
-        List.map (fun s -> mk_ident s.ident) sigs
+      let tuple = match sigs with [] -> assert false | [s] -> add_ref_local s
+        | l -> Ast_helper.Exp.tuple ~loc @@ List.map (fun s -> add_ref_local s) l
       in [%expr [%e mk_ident ident] [%e tuple]]
 
   let instantiate dep_array sigs sel ml =
