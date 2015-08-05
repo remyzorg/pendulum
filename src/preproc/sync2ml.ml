@@ -260,11 +260,14 @@ module Ocaml_gen = struct
         env := (sel.label, l) :: !env; sel.label :: l
     in ignore (visit sel); !env
 
-  let setter_arg = Ast.mk_loc "set~arg"
+  let setter_arg = Ast.mk_loc "set~arg" (* argument name for the returned setter *)
 
   let select_env_name = "pendulum~state"
   let select_env_var = Location.(mkloc select_env_name !Ast_helper.default_loc)
   let select_env_ident = mk_ident (Ast.mk_loc select_env_name)
+
+  let concat_setter ident n = Ast.mk_loc ~loc:ident.loc (* creation of a setter given by a run *)
+      (Format.sprintf "set~%s~arg~%d" ident.content n)
 
   let remove_signal_renaming s =
     try
@@ -353,10 +356,10 @@ module Ocaml_gen = struct
     | MLor (mlte1, mlte2) ->
       [%expr [%e construct_test depl mlte1 ] || [%e construct_test depl mlte2]]
     | MLfinished -> [%expr Bitset.mem [%e select_env_ident] 0]
-    | MLis_pause mle ->
-      let _ = [%expr [%e construct_ml_ast depl mle] == Pause] in
+    | MLis_pause mle -> assert false
+      (* [%expr [%e construct_ml_ast depl mle] == Pause] *)
       (* missing setters *)
-      assert false
+      (* assert false *)
 
   and construct_sequence depl mlseq =
     match mlseq with
@@ -412,9 +415,8 @@ module Ocaml_gen = struct
     | MLpause -> [%expr raise Pause_exc]
     | MLfinish -> [%expr raise Finish_exc]
     | MLcall (ident, sigs, loc) ->
-      (* Keep the lock from the tupple and put it back back here *)
-      let tuple = match sigs with [] -> assert false | [s] -> add_ref_local s
-        | l -> Ast_helper.Exp.tuple ~loc @@ List.map (fun s -> add_ref_local s) l
+      let tuple = match sigs with [] -> assert false | [s] -> [%expr !! [%e add_ref_local s]]
+        | l -> Ast_helper.Exp.tuple ~loc @@ List.map (fun s -> [%expr !! [%e add_ref_local s]]) l
       in [%expr [%e mk_ident ident] [%e tuple]]
 
   let instantiate dep_array sigs sel ml =
