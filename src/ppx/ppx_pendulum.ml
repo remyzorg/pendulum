@@ -234,7 +234,7 @@ let parse_ast ext vb =
       let tast = Ast.Analysis.filter_dead_trees tast in
       Pendulum_misc.print_to_dot loc pat tast;
       let _ocaml_expr =
-        Sync2ml.generate ~sigs:(sigs, !(env.Ast.Tagged.all_local_signals)) tast in
+        Sync2ml.generate sigs env tast in
       Format.printf "%a@." Pprintast.expression _ocaml_expr;
       [%expr [%e Pendulum_misc.expr_of_ast ast]]
 
@@ -243,7 +243,7 @@ let parse_ast ext vb =
       let tast, env = Ast.Tagged.of_ast ~sigs ast in
       let tast = Ast.Analysis.filter_dead_trees tast in
       let ocaml_expr =
-        Sync2ml.generate ~sigs:(sigs, !(env.Ast.Tagged.all_local_signals)) tast in
+        Sync2ml.generate sigs env tast in
 
       [%expr [%e ocaml_expr]]
 

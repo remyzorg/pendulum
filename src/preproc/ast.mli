@@ -107,8 +107,8 @@ module type S = sig
       labels : int IdentMap.t;
       global_namespace : int IdentMap.t ref;
       signals : (int * signal_origin) SignalMap.t;
-      all_local_signals : (valued_signal) list ref;
-      local_signals : valued_signal list;
+      local_signals : (valued_signal) list ref;
+      local_scope : valued_signal list;
       machine_runs : int IdentMap.t ref;
     }
 

@@ -147,6 +147,8 @@ let mls e = Seqlist [e]
 let (++) c1 c2 = Seq (c1, c2)
 let (++) c1 c2 = Seq (c1, c2)
 
+let concat_setter ident n = Ast.mk_loc ~loc:ident.loc (* creation of a setter given by a run *)
+    (Format.sprintf "set~%s~arg~%d" ident.content n)
 
 let construct_ml_action deps mr a =
   let open Flowgraph in
@@ -158,10 +160,12 @@ let construct_ml_action deps mr a =
   | Local_signal vs -> mls @@ MLassign (vs.signal.ident, MLexpr vs.svalue)
   | Instantiate_run (id, sigs, loc) ->
     (* What is supposed to be here ? *)
-
     (*
-       id(~) := id(-~) (!!i_1, !!i_2)
-       * Need signals localisation (!!i if it's a global, (!i) if it's a local
+       I need :
+        * registers name for the machine instantiation (register means reference)
+          * the setter functions : concat_setter applied numbered for each sigs
+          * the step function : The step function is just id ?
+        * the machine description name : id without the ~ name extension
      *)
 
     mls @@ MLassign (id, MLcall (remove_ident_renaming id, sigs, loc))
@@ -266,8 +270,6 @@ module Ocaml_gen = struct
   let select_env_var = Location.(mkloc select_env_name !Ast_helper.default_loc)
   let select_env_ident = mk_ident (Ast.mk_loc select_env_name)
 
-  let concat_setter ident n = Ast.mk_loc ~loc:ident.loc (* creation of a setter given by a run *)
-      (Format.sprintf "set~%s~arg~%d" ident.content n)
 
   let remove_signal_renaming s =
     try
@@ -288,7 +290,8 @@ module Ocaml_gen = struct
                 in [%e acc]]
        ) e locals)
 
-  let init nstmts (global_sigs,local_sigs) sel =
+  let init nstmts global_sigs env sel =
+    let open Ast.Tagged in
     let open Selection_tree in
     fun e ->
       let sigs_step_arg =
@@ -303,7 +306,7 @@ module Ocaml_gen = struct
               [%expr ref (make_signal [%e vs.svalue.exp])]
           in
           [%expr let [%p mk_pat_var vs.signal.ident] = [%e rebinds] in [%e acc]]
-        ) e (local_sigs)
+        ) e !(env.local_signals)
       in
       let let_sigs_global e = List.fold_left (fun acc s ->
           [%expr let [%p mk_pat_var s.ident] = make_signal [%e mk_ident s.ident] in [%e acc]]
@@ -313,7 +316,7 @@ module Ocaml_gen = struct
         let set_absent_locals =
           (List.fold_left (fun acc vs ->
                [%expr set_absent ![%e mk_ident vs.signal.ident]; [%e acc]]
-             ) [%expr ()] local_sigs)
+             ) [%expr ()] !(env.local_signals))
         in
         let set_absent_globals = (List.fold_left (fun acc s ->
              [%expr set_absent [%e mk_ident s.ident]; [%e acc]]
@@ -331,6 +334,20 @@ module Ocaml_gen = struct
                    set_present_value [%e mk_ident s.ident] [%e mk_ident setter_arg]]
           ) global_sigs
       in
+
+      let machine_registers =
+        assert false
+          (*
+             for each machine :
+               for each different instantiations :
+                 generation of the step function
+                 for each arguments
+                   generation of the setter
+
+             *)
+      in
+
+
       let returns =
         let stepfun =
           [%expr fun () -> try [%e e] with
@@ -356,7 +373,15 @@ module Ocaml_gen = struct
     | MLor (mlte1, mlte2) ->
       [%expr [%e construct_test depl mlte1 ] || [%e construct_test depl mlte2]]
     | MLfinished -> [%expr Bitset.mem [%e select_env_ident] 0]
-    | MLis_pause mle -> assert false
+    | MLis_pause (MLcall (id, sigs, loc)) -> assert false
+      (* I need to add the setters call for each input. I need here :
+         * the step function : id
+         * the setters : test each signal in sigs :
+           * if the nth signal is present, then call to set_present to sig_n
+           * else just set the value
+         return and compare the value of step to Pause
+      *)
+    | MLis_pause _ -> assert false
       (* [%expr [%e construct_ml_ast depl mle] == Pause] *)
       (* missing setters *)
       (* assert false *)
@@ -419,15 +444,15 @@ module Ocaml_gen = struct
         | l -> Ast_helper.Exp.tuple ~loc @@ List.map (fun s -> [%expr !! [%e add_ref_local s]]) l
       in [%expr [%e mk_ident ident] [%e tuple]]
 
-  let instantiate dep_array sigs sel ml =
-    init (Array.length dep_array) sigs sel (construct_sequence dep_array ml)
+  let instantiate dep_array sigs env sel ml =
+    init (Array.length dep_array) sigs env sel (construct_sequence dep_array ml)
 
 
 
 end
 
 
-let generate ?(sigs=[],[]) tast =
+let generate sigs env tast =
   let selection_tree, controlflow_graph as grc = Of_ast.construct tast in
   Schedule.tag_tested_stmts selection_tree controlflow_graph;
   let _deps = Schedule.check_causality_cycles grc in
@@ -439,5 +464,5 @@ let generate ?(sigs=[],[]) tast =
 
   let ml_ast = grc2ml dep_array interleaved_cfg in
 
-  let ocaml_ast = Ocaml_gen.instantiate dep_array sigs selection_tree ml_ast in
+  let ocaml_ast = Ocaml_gen.instantiate dep_array sigs env selection_tree ml_ast in
   ocaml_ast
