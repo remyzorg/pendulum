@@ -270,6 +270,8 @@ module Ocaml_gen = struct
   let select_env_var = Location.(mkloc select_env_name !Ast_helper.default_loc)
   let select_env_ident = mk_ident (Ast.mk_loc select_env_name)
 
+  let mk_mach_inst mch k =
+    {mch with content = Format.sprintf "%s~%d" mch.content k}
 
   let remove_signal_renaming s =
     try
@@ -335,8 +337,14 @@ module Ocaml_gen = struct
           ) global_sigs
       in
 
-      let machine_registers =
-        assert false
+      let machine_registers e =
+        let env_mach = !(env.machine_runs) in
+        IdentMap.fold (fun k v acc ->
+            Utils.fold_n (fun acc n ->
+                [%expr let [%e mk_ident (mk_mach_inst k n)] =
+                         [%e mk_ident k] () in [%e acc]]
+              ) acc v
+          ) env_mach e
           (*
              for each machine :
                for each different instantiations :
@@ -371,7 +379,7 @@ module Ocaml_gen = struct
     | MLsig s -> [%expr !?[%e add_ref_local s]]
     | MLselect i -> [%expr Bitset.mem [%e select_env_ident] [%e int_const i]]
     | MLor (mlte1, mlte2) ->
-      [%expr [%e construct_test depl mlte1 ] || [%e construct_test depl mlte2]]
+      [%expr [%e construct_test env depl mlte1 ] || [%e construct_test env depl mlte2]]
     | MLfinished -> [%expr Bitset.mem [%e select_env_ident] 0]
     | MLis_pause (MLcall (id, sigs, loc)) -> assert false
       
@@ -391,15 +399,15 @@ module Ocaml_gen = struct
     match mlseq with
     | Seq (Seqlist [], Seqlist []) | Seqlist [] -> assert false
     | Seq (mlseq, Seqlist []) | Seq (Seqlist [], mlseq) ->
-      construct_sequence depl mlseq
+      construct_sequence env depl mlseq
     | Seqlist ml_asts ->
       List.fold_left (fun acc x ->
-          if acc = dumb then construct_ml_ast depl x
-          else Exp.sequence acc (construct_ml_ast depl x)
+          if acc = dumb then construct_ml_ast env depl x
+          else Exp.sequence acc (construct_ml_ast env depl x)
         ) dumb ml_asts
     | Seq (mlseq1, mlseq2) ->
-      Exp.sequence (construct_sequence depl mlseq1)
-        (construct_sequence depl mlseq2)
+      Exp.sequence (construct_sequence env depl mlseq1)
+        (construct_sequence env depl mlseq2)
 
   and construct_ml_ast env depl ast =
     match ast with
@@ -409,19 +417,19 @@ module Ocaml_gen = struct
     | MLif (test, mlseq1, mlseq2) ->
       begin match mlseq1, mlseq2 with
         | mlseq1, (Seqlist [] | Seq (Seqlist [], Seqlist [])) ->
-          [%expr if [%e construct_test depl test]
-                 then [%e construct_sequence depl mlseq1]]
+          [%expr if [%e construct_test env depl test]
+                 then [%e construct_sequence env depl mlseq1]]
         | (Seqlist [] | Seq (Seqlist [], Seqlist [])), mseq2 ->
-          [%expr if not [%e construct_test depl test]
-                 then [%e construct_sequence depl mlseq2]]
+          [%expr if not [%e construct_test env depl test]
+                 then [%e construct_sequence env depl mlseq2]]
         | _ ->
-          [%expr if [%e construct_test depl test] then
-                   [%e construct_sequence depl mlseq1]
-                 else [%e construct_sequence depl mlseq2]]
+          [%expr if [%e construct_test env depl test] then
+                   [%e construct_sequence env depl mlseq1]
+                 else [%e construct_sequence env depl mlseq2]]
       end
 
     | MLassign (ident, mlast) ->
-      let ocamlexpr = construct_ml_ast depl mlast in
+      let ocamlexpr = construct_ml_ast env depl mlast in
       [%expr [%e mk_ident ident] := make_signal [%e ocamlexpr]]
 
     | MLenter i ->

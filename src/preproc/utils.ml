@@ -1,6 +1,12 @@
 
 
 
+let fold_n f acc n =
+  let rec aux acc n =
+    if n < 0 then acc
+    else
+      aux (f acc n) (n - 1)
+  in aux acc n
 
 module MList = struct
 
