@@ -366,7 +366,7 @@ module Ocaml_gen = struct
               in
               [%e let_sigs_global (let_set_sigs_absent returns)]]
 
-  let rec construct_test depl test =
+  let rec construct_test env depl test =
     match test with
     | MLsig s -> [%expr !?[%e add_ref_local s]]
     | MLselect i -> [%expr Bitset.mem [%e select_env_ident] [%e int_const i]]
@@ -374,6 +374,7 @@ module Ocaml_gen = struct
       [%expr [%e construct_test depl mlte1 ] || [%e construct_test depl mlte2]]
     | MLfinished -> [%expr Bitset.mem [%e select_env_ident] 0]
     | MLis_pause (MLcall (id, sigs, loc)) -> assert false
+      
       (* I need to add the setters call for each input. I need here :
          * the step function : id
          * the setters : test each signal in sigs :
@@ -386,7 +387,7 @@ module Ocaml_gen = struct
       (* missing setters *)
       (* assert false *)
 
-  and construct_sequence depl mlseq =
+  and construct_sequence env depl mlseq =
     match mlseq with
     | Seq (Seqlist [], Seqlist []) | Seqlist [] -> assert false
     | Seq (mlseq, Seqlist []) | Seq (Seqlist [], mlseq) ->
@@ -400,7 +401,7 @@ module Ocaml_gen = struct
       Exp.sequence (construct_sequence depl mlseq1)
         (construct_sequence depl mlseq2)
 
-  and construct_ml_ast depl ast =
+  and construct_ml_ast env depl ast =
     match ast with
     | MLemit vs ->
       let rebinded_expr = rebind_locals_let vs.svalue.locals vs.svalue.exp in
@@ -445,7 +446,7 @@ module Ocaml_gen = struct
       in [%expr [%e mk_ident ident] [%e tuple]]
 
   let instantiate dep_array sigs env sel ml =
-    init (Array.length dep_array) sigs env sel (construct_sequence dep_array ml)
+    init (Array.length dep_array) sigs env sel (construct_sequence env dep_array ml)
 
 
 
