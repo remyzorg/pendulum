@@ -339,11 +339,14 @@ module Ocaml_gen = struct
 
       let machine_registers e =
         let env_mach = !(env.machine_runs) in
-        IdentMap.fold (fun k v acc ->
+        IdentMap.fold (fun k (iid, argc) acc ->
+
+            (* Setters here *)
+
             Utils.fold_n (fun acc n ->
                 [%expr let [%e mk_ident (mk_mach_inst k n)] =
                          [%e mk_ident k] () in [%e acc]]
-              ) acc v
+              ) acc (iid + 1)
           ) env_mach e
           (*
              for each machine :
@@ -382,7 +385,6 @@ module Ocaml_gen = struct
       [%expr [%e construct_test env depl mlte1 ] || [%e construct_test env depl mlte2]]
     | MLfinished -> [%expr Bitset.mem [%e select_env_ident] 0]
     | MLis_pause (MLcall (id, sigs, loc)) -> assert false
-      
       (* I need to add the setters call for each input. I need here :
          * the step function : id
          * the setters : test each signal in sigs :

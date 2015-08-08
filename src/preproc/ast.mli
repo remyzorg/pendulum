@@ -109,7 +109,7 @@ module type S = sig
       signals : (int * signal_origin) SignalMap.t;
       local_signals : (valued_signal) list ref;
       local_scope : valued_signal list;
-      machine_runs : int IdentMap.t ref;
+      machine_runs : (int * int) IdentMap.t ref;
     }
 
     val of_ast : ?sigs:(signal list) -> Derived.statement -> t * env
