@@ -109,7 +109,7 @@ module type S = sig
       signals : (int * signal_origin) SignalMap.t;
       local_signals : (valued_signal) list ref;
       local_scope : valued_signal list;
-      machine_runs : (int * int) IdentMap.t ref;
+      machine_runs : (int * signal list) IdentMap.t ref;
     }
 
     val of_ast : ?sigs:(signal list) -> Derived.statement -> t * env
@@ -254,7 +254,7 @@ module Make (E : Exp) = struct
       signals : (int * signal_origin) SignalMap.t;
       local_signals : (valued_signal) list ref;
       local_scope : valued_signal list;
-      machine_runs : (int * int) IdentMap.t ref;
+      machine_runs : (int * signal list) IdentMap.t ref;
     }
 
     let add_signal env locals vi =
@@ -286,11 +286,11 @@ module Make (E : Exp) = struct
           | 0 -> s
           | i -> {s with content = Format.sprintf "%s~%d" s.content i})
 
-    let add_rename_machine env s argc =
+    let add_rename_machine env s args =
       IdentMap.(match find s !env with
-          | exception Not_found -> env := add s (0, argc) !env; s
+          | exception Not_found -> env := add s (0, args) !env; s
           | i, _ ->
-            env := add s (succ i, argc) !env ;
+            env := add s (succ i, args) !env ;
             {s with content = Format.sprintf "%s~%d" s.content (succ i)})
 
     let rename ~loc env s =
@@ -371,7 +371,7 @@ module Make (E : Exp) = struct
 
         | Derived.Run (mident, ids, loc) ->
           let sigs = List.map (rename ~loc env.signals) ids in
-          let machine_id = add_rename_machine env.machine_runs mident (List.length ids) in
+          let machine_id = add_rename_machine env.machine_runs mident sigs in
           mk_tagged (Run (machine_id, sigs, loc)) !+id
 
 
