@@ -292,92 +292,91 @@ module Ocaml_gen = struct
                 in [%e acc]]
        ) e locals)
 
-  let init nstmts global_sigs env sel =
+  let init nstmts global_sigs env sel step_function_body =
     let open Ast.Tagged in
     let open Selection_tree in
-    fun e ->
-      let sigs_step_arg =
-        match global_sigs with
-        | [] -> [%pat? ()]
-        | [s] -> mk_pat_var s.ident
-        | l -> Pat.tuple @@ List.rev_map (fun s -> mk_pat_var s.ident) l
-      in
+    let sigs_step_arg =
+      match global_sigs with
+      | [] -> [%pat? ()]
+      | [s] -> mk_pat_var s.ident
+      | l -> Pat.tuple @@ List.rev_map (fun s -> mk_pat_var s.ident) l
+    in
 
-      let let_sigs_local e = List.fold_left (fun acc vs ->
-          let rebinds = rebind_locals_let vs.svalue.locals
-              [%expr ref (make_signal [%e vs.svalue.exp])]
-          in
-          [%expr let [%p mk_pat_var vs.signal.ident] = [%e rebinds] in [%e acc]]
-        ) e !(env.local_signals)
-      in
-      let let_sigs_global e = List.fold_left (fun acc s ->
-          [%expr let [%p mk_pat_var s.ident] = make_signal [%e mk_ident s.ident] in [%e acc]]
-        ) (let_sigs_local e) (global_sigs)
-      in
-      let let_set_sigs_absent e =
-        let set_absent_locals =
-          (List.fold_left (fun acc vs ->
-               [%expr set_absent ![%e mk_ident vs.signal.ident]; [%e acc]]
-             ) [%expr ()] !(env.local_signals))
+    let let_sigs_local e = List.fold_left (fun acc vs ->
+        let rebinds = rebind_locals_let vs.svalue.locals
+            [%expr ref (make_signal [%e vs.svalue.exp])]
         in
-        let set_absent_globals = (List.fold_left (fun acc s ->
-             [%expr set_absent [%e mk_ident s.ident]; [%e acc]]
-           ) set_absent_locals global_sigs)
-        in
-        [%expr let set_absent () = [%e set_absent_globals] in [%e e]]
+        [%expr let [%p mk_pat_var vs.signal.ident] = [%e rebinds] in [%e acc]]
+      ) e !(env.local_signals)
+    in
+    let let_sigs_global e = List.fold_left (fun acc s ->
+        [%expr let [%p mk_pat_var s.ident] = make_signal [%e mk_ident s.ident] in [%e acc]]
+      ) (let_sigs_local e) (global_sigs)
+    in
+    let let_set_sigs_absent e =
+      let set_absent_locals =
+        (List.fold_left (fun acc vs ->
+             [%expr set_absent ![%e mk_ident vs.signal.ident]; [%e acc]]
+           ) [%expr ()] !(env.local_signals))
       in
-      let empty_params, return_input_setters =
-        match global_sigs with
-        | [] -> true, [%expr ()]
-        | [s] -> false, [%expr fun [%p mk_pat_var setter_arg] ->
-               set_present_value [%e mk_ident s.ident] [%e mk_ident setter_arg]]
-        | l -> false, Exp.tuple @@ List.rev_map (fun s ->
-            [%expr fun [%p mk_pat_var setter_arg ] ->
-                   set_present_value [%e mk_ident s.ident] [%e mk_ident setter_arg]]
-          ) global_sigs
+      let set_absent_globals = (List.fold_left (fun acc s ->
+          [%expr set_absent [%e mk_ident s.ident]; [%e acc]]
+        ) set_absent_locals global_sigs)
       in
+      [%expr let set_absent () = [%e set_absent_globals] in [%e e]]
+    in
+    let empty_params, return_input_setters =
+      match global_sigs with
+      | [] -> true, [%expr ()]
+      | [s] -> false, [%expr fun [%p mk_pat_var setter_arg] ->
+                      set_present_value [%e mk_ident s.ident] [%e mk_ident setter_arg]]
+      | l -> false, Exp.tuple @@ List.rev_map (fun s ->
+          [%expr fun [%p mk_pat_var setter_arg ] ->
+                 set_present_value [%e mk_ident s.ident] [%e mk_ident setter_arg]]
+        ) global_sigs
+    in
 
-      let machine_registers e =
-        let env_mach = !(env.machine_runs) in
-        IdentMap.fold (fun k (iid, args) acc ->
-            Utils.fold_n (fun acc n ->
-                let step_ident = mk_mach_inst k n in
-                let step_pat = mk_pat_var step_ident in
-                let pat = Pat.tuple @@
-                  step_pat :: (List.rev @@ snd @@ List.fold_left (fun (n, acc) arg ->
-                      let ident = Ast.mk_loc ~loc:Ast.dummy_loc
-                          (Format.sprintf "%s~arg~%d" step_ident.content n)
-                      in
-                      n + 1, mk_pat_var ident :: acc
-                    ) (0, []) args)
-                in
-                let step_exp = mk_ident @@ mk_mach_inst k n in
-                let args_exp = Exp.tuple @@ step_exp :: List.map (fun arg ->
-                    [%expr !![%e add_ref_local arg]]
-                  ) args
-                in
-                [%expr let [%p pat] = [%e args_exp] in [%e acc]]
-              ) acc (iid + 1)
-          ) env_mach e
-      in
+    let machine_registers e =
+      let env_mach = !(env.machine_runs) in
+      IdentMap.fold (fun k (iid, args) acc ->
+          Utils.fold_n (fun acc n ->
+              let step_ident = mk_mach_inst k n in
+              let step_pat = mk_pat_var step_ident in
+              let pat = Pat.tuple @@
+                step_pat :: (List.rev @@ snd @@ List.fold_left (fun (n, acc) arg ->
+                    let ident = Ast.mk_loc ~loc:Ast.dummy_loc
+                        (Format.sprintf "%s~arg~%d" step_ident.content n)
+                    in
+                    n + 1, mk_pat_var ident :: acc
+                  ) (0, []) args)
+              in
+              let step_exp = mk_ident @@ mk_mach_inst k n in
+              let args_exp = Exp.tuple @@ step_exp :: List.map (fun arg ->
+                  [%expr !![%e add_ref_local arg]]
+                ) args
+              in
+              [%expr let [%p pat] = [%e args_exp] in [%e acc]]
+            ) acc (iid + 1)
+        ) env_mach e
+    in
 
-      let returns =
-        let stepfun =
-          [%expr fun () -> try [%e e] with
+    let returns =
+      let stepfun =
+        [%expr fun () -> try [%e step_function_body] with
                | Pause_exc -> set_absent (); Pause
                | Finish_exc -> set_absent (); Bitset.add [%e select_env_ident] 0; Finish]
-        in
-        if empty_params then [%expr fun () -> [%e stepfun]]
-        else [%expr [%e return_input_setters], [%e stepfun]]
       in
-      [%expr
-        let open Pendulum.Runtime_misc in
-        let open Pendulum.Machine in
-        fun [%p sigs_step_arg] ->
-              let [%p Pat.var select_env_var] =
-                Bitset.make [%e int_const (1 + nstmts)]
-              in
-              [%e let_sigs_global (let_set_sigs_absent returns)]]
+      if empty_params then [%expr fun () -> [%e stepfun]]
+      else [%expr [%e return_input_setters], [%e stepfun]]
+    in
+    [%expr
+      let open Pendulum.Runtime_misc in
+      let open Pendulum.Machine in
+      fun [%p sigs_step_arg] ->
+        let [%p Pat.var select_env_var] =
+          Bitset.make [%e int_const (1 + nstmts)]
+        in
+        [%e let_sigs_global (let_set_sigs_absent @@ machine_registers returns)]]
 
   let rec construct_test env depl test =
     match test with
