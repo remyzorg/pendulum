@@ -345,33 +345,21 @@ module Ocaml_gen = struct
                 let step_pat = mk_pat_var step_ident in
                 let pat = Pat.tuple @@
                   step_pat :: (List.rev @@ snd @@ List.fold_left (fun (n, acc) arg ->
-                      let ident = Ast.mk_loc ~loc:(assert false) (* need arguments for each inst *)
+                      let ident = Ast.mk_loc ~loc:Ast.dummy_loc
                           (Format.sprintf "%s~arg~%d" step_ident.content n)
                       in
                       n + 1, mk_pat_var ident :: acc
                     ) (0, []) args)
                 in
-                let args_exp = Exp.tuple @@ List.map (fun arg ->
+                let step_exp = mk_ident @@ mk_mach_inst k n in
+                let args_exp = Exp.tuple @@ step_exp :: List.map (fun arg ->
                     [%expr !![%e add_ref_local arg]]
                   ) args
                 in
-                let step_exp = assert false in
-                let exp = [%expr ()] in
-                [%expr let [%e pat] = [%e exp] in [%e acc]]
-
-
+                [%expr let [%p pat] = [%e args_exp] in [%e acc]]
               ) acc (iid + 1)
           ) env_mach e
-          (*
-             for each machine :
-               for each different instantiations :
-                 generation of the step function
-                 for each arguments
-                   generation of the setter
-
-             *)
       in
-
 
       let returns =
         let stepfun =
