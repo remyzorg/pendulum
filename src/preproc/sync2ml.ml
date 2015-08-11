@@ -338,9 +338,9 @@ module Ocaml_gen = struct
 
     let machine_registers e =
       let env_mach = !(env.machine_runs) in
-      IdentMap.fold (fun k (iid, args) acc ->
-          Utils.fold_n (fun acc n ->
-              let step_ident = mk_mach_inst k n in
+      IdentMap.fold (fun k (n_inst, insts) acc ->
+          List.fold_left (fun acc (inst_id, args) ->
+              let step_ident = mk_mach_inst k inst_id in
               let step_pat = mk_pat_var step_ident in
               let pat = Pat.tuple @@
                 step_pat :: (List.rev @@ snd @@ List.fold_left (fun (n, acc) arg ->
@@ -350,13 +350,13 @@ module Ocaml_gen = struct
                     n + 1, mk_pat_var ident :: acc
                   ) (0, []) args)
               in
-              let step_exp = mk_ident @@ mk_mach_inst k n in
+              let step_exp = mk_ident @@ mk_mach_inst k inst_id in
               let args_exp = Exp.tuple @@ step_exp :: List.map (fun arg ->
                   [%expr !![%e add_ref_local arg]]
                 ) args
               in
               [%expr let [%p pat] = [%e args_exp] in [%e acc]]
-            ) acc (iid + 1)
+            ) acc (List.rev insts)
         ) env_mach e
     in
 
