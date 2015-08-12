@@ -50,6 +50,9 @@ let rec expr_of_ast e =
     | Signal (vid, e) ->
       [%expr Signal ([%e string_const vid.sname], [%e visit e])]
 
+    | Run (id, args, loc) ->
+      [%expr Run ([%e string_const id])]
+
     | Suspend (e, signal) ->
       [%expr Suspend ([%e visit e], [%e string_const signal])]
 

@@ -270,8 +270,16 @@ module Ocaml_gen = struct
   let select_env_var = Location.(mkloc select_env_name !Ast_helper.default_loc)
   let select_env_ident = mk_ident (Ast.mk_loc select_env_name)
 
+  let mk_mach_inst_step mch =
+    {mch with content = Format.sprintf "%s~step" mch.content}
+
   let mk_mach_inst mch k =
-    {mch with content = Format.sprintf "%s~%d" mch.content k}
+    {mch with content = Format.sprintf "%s%s" mch.content
+                  (if k != 0 then Format.sprintf "~%d" k else "")
+    }
+
+  let mk_set_mach_arg_n n mch = Ast.mk_loc ~loc:Ast.dummy_loc
+      (Format.sprintf "%s~set~arg~%d" mch n)
 
   let remove_signal_renaming s =
     try
@@ -301,7 +309,6 @@ module Ocaml_gen = struct
       | [s] -> mk_pat_var s.ident
       | l -> Pat.tuple @@ List.rev_map (fun s -> mk_pat_var s.ident) l
     in
-
     let let_sigs_local e = List.fold_left (fun acc vs ->
         let rebinds = rebind_locals_let vs.svalue.locals
             [%expr ref (make_signal [%e vs.svalue.exp])]
@@ -335,31 +342,27 @@ module Ocaml_gen = struct
                  set_present_value [%e mk_ident s.ident] [%e mk_ident setter_arg]]
         ) global_sigs
     in
-
     let machine_registers e =
       let env_mach = !(env.machine_runs) in
       IdentMap.fold (fun k (n_inst, insts) acc ->
           List.fold_left (fun acc (inst_id, args) ->
-              let step_ident = mk_mach_inst k inst_id in
-              let step_pat = mk_pat_var step_ident in
+              let inst_ident = mk_mach_inst k inst_id in
+              let step_pat = mk_pat_var @@ mk_mach_inst_step inst_ident in
               let pat = Pat.tuple @@
                 step_pat :: (List.rev @@ snd @@ List.fold_left (fun (n, acc) arg ->
-                    let ident = Ast.mk_loc ~loc:Ast.dummy_loc
-                        (Format.sprintf "%s~arg~%d" step_ident.content n)
-                    in
+                    let ident = mk_set_mach_arg_n n inst_ident.content in
                     n + 1, mk_pat_var ident :: acc
                   ) (0, []) args)
               in
               let step_exp = mk_ident @@ mk_mach_inst k inst_id in
-              let args_exp = Exp.tuple @@ step_exp :: List.map (fun arg ->
+              let args_exp = Exp.tuple @@ List.map (fun arg ->
                   [%expr !![%e add_ref_local arg]]
                 ) args
               in
-              [%expr let [%p pat] = [%e args_exp] in [%e acc]]
+              [%expr let [%p pat] = [%e step_exp] [%e args_exp] in [%e acc]]
             ) acc (List.rev insts)
         ) env_mach e
     in
-
     let returns =
       let stepfun =
         [%expr fun () -> try [%e step_function_body] with
@@ -378,6 +381,7 @@ module Ocaml_gen = struct
         in
         [%e let_sigs_global (let_set_sigs_absent @@ machine_registers returns)]]
 
+
   let rec construct_test env depl test =
     match test with
     | MLsig s -> [%expr !?[%e add_ref_local s]]
@@ -385,18 +389,20 @@ module Ocaml_gen = struct
     | MLor (mlte1, mlte2) ->
       [%expr [%e construct_test env depl mlte1 ] || [%e construct_test env depl mlte2]]
     | MLfinished -> [%expr Bitset.mem [%e select_env_ident] 0]
-    | MLis_pause (MLcall (id, sigs, loc)) -> assert false
-      (* I need to add the setters call for each input. I need here :
-         * the step function : id
-         * the setters : test each signal in sigs :
-           * if the nth signal is present, then call to set_present to sig_n
-           * else just set the value
-         return and compare the value of step to Pause
-      *)
-    | MLis_pause _ -> assert false
-      (* [%expr [%e construct_ml_ast depl mle] == Pause] *)
-      (* missing setters *)
-      (* assert false *)
+    | MLis_pause (MLcall (id, args, loc)) ->
+      let step_ident = {id with content = Format.sprintf "%s~step" id.content} in
+      let step_eq_pause = [%expr [%e mk_ident step_ident] () == Pause] in
+      let _, setters = List.fold_left (fun (nth, acc) arg ->
+          let exp_if_set = [%expr
+            if !? [%e add_ref_local arg] then
+              [%e mk_ident @@ mk_set_mach_arg_n nth id.content]
+                !![%e add_ref_local arg]
+          ] in
+          nth + 1, [%expr [%e exp_if_set] ; [%e acc]]
+        ) (0, step_eq_pause) args
+      in
+      setters
+    | MLis_pause e -> assert false
 
   and construct_sequence env depl mlseq =
     match mlseq with

@@ -17,6 +17,7 @@ type statement =
   | Present of signal * statement * statement
   | Atom (* of (unit -> unit) *)
   | Signal of signal * statement
+  | Run of string
 
   | Halt
   | Sustain of signal
