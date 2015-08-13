@@ -2,4 +2,60 @@
 <tests/ppx/*>: ppx_pendulum
 
 # OASIS_START
+# DO NOT EDIT (digest: 7263fb20d668bec70c6268602fbdbbc8)
+# Ignore VCS directories, you can use the same kind of rule outside
+# OASIS_START/STOP if you want to exclude directories that contains
+# useless stuff for the build process
+true: annot, bin_annot
+<**/.svn>: -traverse
+<**/.svn>: not_hygienic
+".bzr": -traverse
+".bzr": not_hygienic
+".hg": -traverse
+".hg": not_hygienic
+".git": -traverse
+".git": not_hygienic
+"_darcs": -traverse
+"_darcs": not_hygienic
+# Library pendulum
+"src/runtime/pendulum.cmxs": use_pendulum
+"src/runtime/interp.cmx": for-pack(Pendulum)
+"src/runtime/runtime_ast.cmx": for-pack(Pendulum)
+"src/runtime/runtime_misc.cmx": for-pack(Pendulum)
+"src/runtime/machine.cmx": for-pack(Pendulum)
+# Library preproc
+"src/preproc/preproc.cmxs": use_preproc
+"src/preproc/utils.cmx": for-pack(Preproc)
+"src/preproc/ast.cmx": for-pack(Preproc)
+"src/preproc/grc.cmx": for-pack(Preproc)
+"src/preproc/sync2ml.cmx": for-pack(Preproc)
+<src/preproc/*.ml{,i,y}>: pkg_ppx_tools.metaquot
+<src/preproc/*.ml{,i,y}>: pkg_unix
+# Executable ppx_pendulum
+<src/ppx/ppx_pendulum.{native,byte}>: pkg_compiler-libs.common
+<src/ppx/ppx_pendulum.{native,byte}>: pkg_ppx_tools.metaquot
+<src/ppx/ppx_pendulum.{native,byte}>: pkg_unix
+<src/ppx/ppx_pendulum.{native,byte}>: use_preproc
+<src/ppx/*.ml{,i,y}>: pkg_compiler-libs.common
+<src/ppx/*.ml{,i,y}>: pkg_ppx_tools.metaquot
+<src/ppx/*.ml{,i,y}>: pkg_unix
+<src/ppx/*.ml{,i,y}>: use_preproc
+# Executable test_ppx
+<tests/ppx/test_ppx.{native,byte}>: pkg_compiler-libs.common
+<tests/ppx/test_ppx.{native,byte}>: pkg_oUnit
+<tests/ppx/test_ppx.{native,byte}>: pkg_ppx_tools.metaquot
+<tests/ppx/test_ppx.{native,byte}>: pkg_unix
+<tests/ppx/test_ppx.{native,byte}>: use_pendulum
+<tests/ppx/test_ppx.{native,byte}>: use_preproc
+<tests/ppx/*.ml{,i,y}>: pkg_compiler-libs.common
+<tests/ppx/*.ml{,i,y}>: pkg_oUnit
+<tests/ppx/*.ml{,i,y}>: pkg_ppx_tools.metaquot
+<tests/ppx/*.ml{,i,y}>: pkg_unix
+<tests/ppx/*.ml{,i,y}>: use_pendulum
+<tests/ppx/*.ml{,i,y}>: use_preproc
+# Executable test_lang_bin
+<tests/test_lang.{native,byte}>: pkg_oUnit
+<tests/test_lang.{native,byte}>: use_pendulum
+<tests/*.ml{,i,y}>: pkg_oUnit
+<tests/*.ml{,i,y}>: use_pendulum
 # OASIS_STOP
