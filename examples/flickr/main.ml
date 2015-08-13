@@ -23,6 +23,12 @@ let _ =
       (* let c = "canvas" @> CoerceTo.canvas in *)
       (* let ctx = canvas##getContext (Dom_html._2d_) in *)
 
+      let username = "middleexposure" in
+
+      let%lwt user_id = Flickr.Method.People.findByUsername username in
+
+      debug "Hello %d" user_id.XmlHttpRequest.content;
+
       let photos = Flickr.Method.People.getPhotos in
 
       Js._false

@@ -5,13 +5,12 @@ let apikey = "b551afe7603cf01eac70d54262cd07df"
 
 
 module Net = struct
-  let get_string = XmlHttpRequest.get
-
+  let get = XmlHttpRequest.get
 end
 
 let mk_rq meth others =
   let req = rest ^ "?api_key=" ^ apikey ^ "&method=" ^ meth ^ "&format=json" ^ others
-  in Net.get_string req
+  in Net.get req
 
 
 module Method = struct
