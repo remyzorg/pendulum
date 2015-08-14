@@ -16,26 +16,34 @@ let (@>) s coerce =
 
 
 
-let _ =
+let e =
   let open Dom_html in
+  let open XmlHttpRequest in
   Lwt_js_events.(async (fun () -> 
-      load window (fun ev ->
-          let area = "tarea" @> CoerceTo.a in
-          (* let c = "canvas" @> CoerceTo.canvas in *)
-          (* let ctx = canvas##getContext (Dom_html._2d_) in *)
 
-          Lwt_main.run begin
-            let username = "middleexposure" in
+      let _ = onload () in
+      let area = "tarea" @> CoerceTo.a in
+      (* let c = "canvas" @> CoerceTo.canvas in *)
+      (* let ctx = canvas##getContext (Dom_html._2d_) in *)
 
-            let%lwt user_id = Flickr.Method.People.findByUsername username in
+      let username = "Nevor" in
+      let user_id = "48404998@N08" in
 
-            debug "Hello %s" user_id.XmlHttpRequest.content;
+      let%lwt user_id = Flickr.Method.People.(
+          let%lwt frame = findByUsername username in
+          debug "%s" frame.content;
+          Lwt.return @@ extract_user_id frame.content
+        ) in
 
-            let photos = Flickr.Method.People.getPhotos in
-            Lwt.return ()
-          end ;
-          Lwt.return Js._false
+      (* let%lwt photos = Flickr.Method.People.( *)
+      (*     let%lwt frame = getPhotos user_id in *)
+      (*     debug "%s" frame.content; *)
+      (*     Lwt.return @@ extract_photos frame.content *)
+      (*   ) in *)
 
-        )
+      List.iter (debug "%s") user_id;
+
+      Lwt.return Js._false
+
     ))
 
