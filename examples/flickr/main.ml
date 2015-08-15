@@ -23,25 +23,25 @@ let e =
 
       let _ = onload () in
       let area = "tarea" @> CoerceTo.a in
+      let username_input = "username_input" @> CoerceTo.input in
+      let search_btn = "search_btn" @> CoerceTo.button in
       (* let c = "canvas" @> CoerceTo.canvas in *)
       (* let ctx = canvas##getContext (Dom_html._2d_) in *)
 
-      let username = "Nevor" in
-      let user_id = "48404998@N08" in
+      (* let username = "Nevor" in *)
+      (* let user_id = "48404998@N08" in *)
 
-      let%lwt user_id = Flickr.Method.People.(
-          let%lwt frame = findByUsername username in
-          debug "%s" frame.content;
-          Lwt.return @@ extract_user_id frame.content
-        ) in
+      let _ = async (fun () ->
+          clicks search_btn (fun _ ev ->
+              Flickr.Method.People.(
+                let username = Js.to_string @@ username_input##.value in
+                if username <> "" then
+                  let%lwt frame = findByUsername username in
+                  let id = extract_user_id frame.content in
+                  Lwt.return @@ debug "%s" id
+                else Lwt.return ()
+              ))) in
 
-      (* let%lwt photos = Flickr.Method.People.( *)
-      (*     let%lwt frame = getPhotos user_id in *)
-      (*     debug "%s" frame.content; *)
-      (*     Lwt.return @@ extract_photos frame.content *)
-      (*   ) in *)
-
-      List.iter (debug "%s") user_id;
 
       Lwt.return Js._false
 

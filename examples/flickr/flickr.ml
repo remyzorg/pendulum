@@ -48,10 +48,10 @@ module Method = struct
 
     let extract_user_id json =
       let open Json in
-      [extract_json json]
-      |> filter_member "user"
-      |> flatten
-      |> filter_string
+      extract_json json
+      |> member "user"
+      |> member "id"
+      |> to_string
 
   end
 
