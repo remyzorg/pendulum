@@ -13,35 +13,37 @@ let (@>) s coerce =
     (fun () -> error "can't find element %s" s)
 
 
-
+let jsopt_string s = Dom_html.(Js.some @@ Js.string s)
 
 
 let e =
   let open Dom_html in
   let open XmlHttpRequest in
-  Lwt_js_events.(async (fun () -> 
+  Lwt_js_events.(async (fun () ->
 
       let _ = onload () in
       let area = "tarea" @> CoerceTo.a in
+      let photos_area = "photos_area" @> CoerceTo.a in
       let username_input = "username_input" @> CoerceTo.input in
-      let search_btn = "search_btn" @> CoerceTo.button in
-      (* let c = "canvas" @> CoerceTo.canvas in *)
-      (* let ctx = canvas##getContext (Dom_html._2d_) in *)
-
-      (* let username = "Nevor" in *)
-      (* let user_id = "48404998@N08" in *)
 
       let _ = async (fun () ->
-          clicks search_btn (fun _ ev ->
+          inputs username_input (fun _ ev ->
               Flickr.Method.People.(
                 let username = Js.to_string @@ username_input##.value in
                 if username <> "" then
-                  let%lwt frame = findByUsername username in
-                  let id = extract_user_id frame.content in
-                  Lwt.return @@ debug "%s" id
+                  let%lwt id_frame = findByUsername username in
+                  let id = extract_user_id id_frame.content in
+                  area##.textContent := Js.some @@ Js.string id;
+
+                  let%lwt photos_frame = getPhotos id in
+                  let photo_ids = extract_photos photos_frame.content in
+                  photos_area##.textContent := jsopt_string @@ String.concat "\n" photo_ids;
+
+
+
+                  Lwt.return ()
                 else Lwt.return ()
               ))) in
-
 
       Lwt.return Js._false
 
