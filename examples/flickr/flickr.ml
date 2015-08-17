@@ -60,7 +60,23 @@ module Method = struct
     let getSizes photo_id =
       mk_rq (string "getSizes") ("&photo_id=" ^ photo_id)
 
-    let extract_url json =
+    type size =
+      | Square | LargeSquare | Thumbnail | Small
+      | Small320 | Medium | Medium640 | Medium800 | Large | Original
+
+    let size_to_string (size : size) = match size with
+      | Square  -> "Square"
+      | LargeSquare  -> "Large Square"
+      | Thumbnail  -> "Thumbnail"
+      | Small  -> "Small"
+      | Small320  -> "Small 320"
+      | Medium  -> "Medium"
+      | Medium640  -> "Medium 640"
+      | Medium800  -> "Medium 800"
+      | Large  -> "Large"
+      | Original  -> "Original"
+
+    let extract_url size json =
       let open Json in
       [extract_json json]
       |> filter_member "sizes"
@@ -69,7 +85,7 @@ module Method = struct
       |> List.filter (fun x ->
           [x] |> filter_member "label"
           |> filter_string
-          |> List.mem "Original")
+          |> List.mem @@ size_to_string size)
       |> filter_member "source"
       |> filter_string
   end
