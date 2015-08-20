@@ -6,18 +6,13 @@ let apikey = "b551afe7603cf01eac70d54262cd07df"
 open Lwt
 
 module Net = struct
-  let get ?(frm=None) url =
-    XmlHttpRequest.(
-      (get url) >|=
-      (fun x -> match frm with
-         | None -> x.content
-         | Some frm -> frm := x; x.content)
-    )
+  let get url =
+    XmlHttpRequest.get url >|= (fun x -> x.content)
 end
 
-let mk_rq ?(frm=None) meth others =
+let mk_rq meth others =
   let req = rest ^ "?api_key=" ^ apikey ^ "&method=" ^ meth ^ "&format=json" ^ others
-  in Net.get ~frm req
+  in Net.get req
 
 
 module Json = struct
@@ -39,11 +34,11 @@ module Method = struct
 
   module People = struct
     let string  m = flickr ^ "people." ^ m
-    let findByUsername ?frm username =
-      mk_rq ~frm (string "findByUsername") ("&username=" ^ username ^ "&extra=url_o")
+    let findByUsername username =
+      mk_rq (string "findByUsername") ("&username=" ^ username ^ "&extra=url_o")
 
-    let getPhotos ?frm user_id =
-      mk_rq ~frm (string "getPhotos") ("&user_id=" ^ user_id ^ "&extra=url_o")
+    let getPhotos user_id =
+      mk_rq (string "getPhotos") ("&user_id=" ^ user_id ^ "&extra=url_o")
 
     let extract_photos json =
       let open Json in
@@ -64,8 +59,8 @@ module Method = struct
 
   module Photos = struct
     let string m = flickr ^ "photos." ^ m
-    let getSizes ?frm photo_id =
-      mk_rq ~frm (string "getSizes") ("&photo_id=" ^ photo_id)
+    let getSizes photo_id =
+      mk_rq (string "getSizes") ("&photo_id=" ^ photo_id)
 
     type size =
       | Square | LargeSquare | Thumbnail | Small

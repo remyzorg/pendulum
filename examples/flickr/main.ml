@@ -14,14 +14,6 @@ let (@>) s coerce =
   Js.Opt.get (coerce @@ Dom_html.getElementById s)
     (fun () -> error "can't find element %s" s)
 
-let frm = ref XmlHttpRequest.({
-  url= "";
-  code = 0;
-  headers = (fun _ -> None);
-  content = "";
-  content_xml = (fun _ -> None);
-})
-
 let e =
   let open Dom_html in
   let open XmlHttpRequest in
@@ -34,17 +26,17 @@ let e =
           let%lwt _ = Lwt_js.sleep 0.5 in
           let username = Js.to_string @@ username_input##.value in
           if username <> "" then
-            let%lwt id = People.(findByUsername ~frm username >|= extract_user_id) in
+            let%lwt id = People.(findByUsername username >|= extract_user_id) in
             area##.textContent := Js.some @@ Js.string id;
 
-            let%lwt photo_ids = People.(getPhotos ~frm id >|= extract_photos) in
+            let%lwt photo_ids = People.(getPhotos id >|= extract_photos) in
 
             Js.Opt.iter (photos_area##.firstChild) (Dom.removeChild photos_area);
             let gallery_div = createDiv document in
             Dom.appendChild photos_area gallery_div;
 
             let%lwt () = Lwt_list.iter_p (fun phid ->
-                let%lwt sizes = Photos.(getSizes ~frm phid >|= extract_url Square) in
+                let%lwt sizes = Photos.(getSizes phid >|= extract_url Square) in
                 let photo_img = createImg document in
                 (match sizes with [] -> () | e::_ -> photo_img##.src := Js.string e);
                 Lwt.return @@ Dom.appendChild gallery_div photo_img
@@ -57,4 +49,16 @@ let e =
                   inputs username_input set_gallery,
                   keyups username_input set_gallery)
     ))
+
+
+
+
+
+
+
+
+
+
+
+
 
