@@ -23,7 +23,7 @@ let e =
       let photos_area = "photos_area" @> CoerceTo.div in
       let username_input = "username_input" @> CoerceTo.input in
       let set_gallery = (fun _ ev ->
-          let%lwt _ = Lwt_js.sleep 0.5 in
+          let%lwt _ = Lwt_js.sleep 1. in
           let username = Js.to_string @@ username_input##.value in
           if username <> "" then
             let%lwt id = People.(findByUsername username >|= extract_user_id) in
@@ -45,9 +45,7 @@ let e =
             Lwt.return () else Lwt.return ()
         )
       in
-      Lwt.return (changes username_input set_gallery,
-                  inputs username_input set_gallery,
-                  keyups username_input set_gallery)
+      Lwt.return (keyups username_input set_gallery)
     ))
 
 

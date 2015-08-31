@@ -13,6 +13,7 @@ let (@>) s coerce =
     (fun () -> error "can't find element %s" s)
 
 type circle = {x : float; y : float; radius : float; color : string}
+let mk_circle ?(color="black") x y radius = {x; y; radius; color}
 
 
 let draw_circle ctx c =
@@ -66,30 +67,74 @@ let%sync mouse_machine =
   end
 
 
+
+
+
+
+let c10 = mk_circle 400. 400. 20. ~color:"blue"
+let pi = 4.0 *. atan 1.0
+
+let (+%.) = fun a b -> float @@ (int_of_float a mod b)
+
 let _ =
   let open Dom_html in
+
   window##.onload := handler (fun _ ->
       let c = "canvas" @> CoerceTo.canvas in
       let ctx = c##getContext (Dom_html._2d_) in
-
       let (set_ctx, set_move, set_quit1, set_quit2), step =
         mouse_machine (ctx, (0.,0.), (), ())
       in
-      let is_eq k q = Js.Optdef.get k (fun _ -> 0) = Char.code q in
+      let is_eq k q = Js.Optdef.case k
+          (fun _ -> false)
+          (fun x -> x = Char.code q)
+      in
+
+      let c = ref (mk_circle ~color:"yellow" 400. 400. 30.) in
+      let c1 = ref (mk_circle ~color:"blue" 400. 400. 20.) in
+      let c2 = ref (mk_circle ~color:"red" 400. 400. 10.) in
+
+      let rec draw center c radius inc angle _ =
+
+        erase_circle ctx !c;
+
+        c := {!c with
+          x = (!center).x +. radius *. (cos angle) *. pi;
+          y = (!center).y +. radius *. (sin angle) *. pi
+        };
+
+        let angle = if angle > 360. then inc else angle +. inc in
+
+        draw_circle ctx !c;
+        let _ = window##requestAnimationFrame
+            (Js.wrap_callback (draw center c radius inc angle)) in
+        ()
+      in
+
+
+      let reqid = window##requestAnimationFrame (Js.wrap_callback @@ draw c c1 50. 0.01 0.) in
+      let reqid = window##requestAnimationFrame (Js.wrap_callback @@ draw c1 c2 20. 0.1 0.) in
+
+
+
+      (* let rec lol = fun _ -> *)
+      (*   debug "lol"; *)
+      (*   step (); *)
+      (*   let _ = window##requestAnimationFrame (Js.wrap_callback lol) in *)
+      (*   () *)
+      (* in *)
 
       window##.onkeypress := handler (fun e ->
           if is_eq e##.charCode 'q' then begin
             set_quit1 ()
           end
           else if is_eq e##.charCode 'a' then set_quit2 ();
-          ignore @@ step ();
           Js._false
         );
 
       window##.onmousemove := handler (fun e ->
           let x, y = (float @@ e##.clientX, float @@ e##.clientY) in
           set_move (x, y);
-          ignore @@ step ();
           Js._false);
 
       Js._false)
