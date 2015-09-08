@@ -41,3 +41,9 @@ opam `1.2` with `switch 4.02.2` (minimum) is required
 3. `./configure`
 4. `make`
 5. `make install `
+
+
+### Licensing and context
+
+This project is under MIT public license. It started in the context of UCF project.
+
