@@ -349,15 +349,18 @@ module Ocaml_gen = struct
               let inst_ident = mk_mach_inst k inst_id in
               let step_pat = mk_pat_var @@ mk_mach_inst_step inst_ident in
               let pat = Pat.tuple @@
-                step_pat :: (List.rev @@ snd @@ List.fold_left (fun (n, acc) arg ->
+                (List.rev @@ step_pat :: (snd @@ List.fold_left (fun (n, acc) arg ->
                     let ident = mk_set_mach_arg_n n inst_ident.content in
                     n + 1, mk_pat_var ident :: acc
-                  ) (0, []) args)
+                  ) (0, []) args))
               in
               let step_exp = mk_ident @@ mk_mach_inst k inst_id in
-              let args_exp = Exp.tuple @@ List.map (fun arg ->
-                  [%expr !![%e add_ref_local arg]]
-                ) args
+              let args_exp = match args with
+                | [] -> [%expr ()]
+                | [arg] -> [%expr !![%e add_ref_local arg]]
+                | l -> Exp.tuple @@ List.map (fun arg ->
+                    [%expr !![%e add_ref_local arg]]
+                  ) l
               in
               [%expr let [%p pat] = [%e step_exp] [%e args_exp] in [%e acc]]
             ) acc (List.rev insts)

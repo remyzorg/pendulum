@@ -23,47 +23,49 @@ let draw_circle ctx c =
   ctx##arc c.x c.y c.radius 0. (pi*.2.) Js._true;
   ctx##fill
 
-let erase_circle ctx c =
-  draw_circle ctx {c with color ="white"; radius = c.radius +. 1.}
+
+let clear ctx h w = ctx##clearRect 0. 0. (float_of_int h) (float_of_int w)
+
+
+let dist = 400.
+let radius = 20.
 
 let move_circle ctx c x y =
-  erase_circle ctx c;
   draw_circle ctx {c with x; y}
+
+let%sync planet =
+  input circle, ctx, move, quit;
+  begin
+    trap ex (
+      loop (
+        present quit (exit ex);
+        atom (move_circle !!ctx !!circle (fst !!move) !!circle.y);
+        emit circle { !!circle with x = fst !!move; };
+        pause
+      ))
+  end
 
 let%sync mouse_machine =
   input ctx;
+  input hw;
   input move;
   input quit1;
   input quit2;
 
   let dist = 400. in
   let radius = 20. in
-  let circle  = ({x = fst (!!move); y = !!dist; radius = !!radius; color = "green"}) in (
-   trap ex1 (
-     loop (
-       present quit1 (exit ex1);
-       present move (
-         atom (
-           move_circle !!ctx !!circle (fst !!move) !!circle.y
-         );
-         emit circle {!!circle with x = fst !!move;}
-       ); pause)
-   );
-   atom (erase_circle !!ctx !!circle)
-  )
+  let circle1  = ({x = fst (!!move); y = !!dist; radius = !!radius; color = "green"}) in
+  let circle2 = ({x = !!dist; y = snd !!move; radius = !!radius; color = "red"}) in
+  begin run planet (circle1, ctx, move, quit1) end
   ||
-  let circle = ({x = !!dist; y = snd !!move; radius = !!radius; color = "red"}) in
   begin
     trap ex2 (
       loop (
         present quit2 (exit ex2);
-        present move (
-          atom (
-            move_circle !!ctx !!circle !!circle.x (snd !!move)
-          );
-          emit circle {!!circle with y = snd !!move}
-        ); pause));
-    atom (erase_circle !!ctx !!circle)
+        atom (move_circle !!ctx !!circle2 !!circle2.x (snd !!move));
+        emit circle2 {!!circle with y = snd !!move};
+        pause
+      ))
   end
 
 
@@ -80,10 +82,10 @@ let _ =
   let open Dom_html in
 
   window##.onload := handler (fun _ ->
-      let c = "canvas" @> CoerceTo.canvas in
-      let ctx = c##getContext (Dom_html._2d_) in
-      let (set_ctx, set_move, set_quit1, set_quit2), step =
-        mouse_machine (ctx, (0.,0.), (), ())
+      let canvas = "canvas" @> CoerceTo.canvas in
+      let ctx = canvas##getContext (Dom_html._2d_) in
+      let (set_ctx, set_hw, set_move, set_quit1, set_quit2), step =
+        mouse_machine (ctx, (canvas##.height, canvas##.width), (0.,0.), (), ())
       in
       let is_eq k q = Js.Optdef.case k
           (fun _ -> false)
@@ -94,9 +96,9 @@ let _ =
       let c1 = ref (mk_circle ~color:"blue" 400. 400. 20.) in
       let c2 = ref (mk_circle ~color:"red" 400. 400. 10.) in
 
-      let rec draw center c radius inc angle _ =
+      let draw center c radius inc angle =
 
-        erase_circle ctx !c;
+        (* clear ctx canvas##.height canvas##.width; *)
 
         c := {!c with
           x = (!center).x +. radius *. (cos angle) *. pi;
@@ -106,23 +108,34 @@ let _ =
         let angle = if angle > 360. then inc else angle +. inc in
 
         draw_circle ctx !c;
-        let _ = window##requestAnimationFrame
-            (Js.wrap_callback (draw center c radius inc angle)) in
+        angle
+      in
+
+      draw_circle ctx !c;
+
+      let rec redraw_clear _ =
+        clear ctx canvas##.height canvas##.width;
+        let _ = window##requestAnimationFrame (Js.wrap_callback redraw_clear) in
         ()
       in
 
+      let rec redraw_circle _ =
+        step ();
+        let _ = window##requestAnimationFrame (Js.wrap_callback redraw_circle) in
+        ()
+      in
 
-      let reqid = window##requestAnimationFrame (Js.wrap_callback @@ draw c c1 50. 0.01 0.) in
-      let reqid = window##requestAnimationFrame (Js.wrap_callback @@ draw c1 c2 20. 0.1 0.) in
+      let rec redraw_planets angle1 angle2 _ =
+        draw_circle ctx !c;
+        let angle1 = draw c c1 50. 0.005 angle1 in
+        let angle2 = draw c1 c2 20. 0.1 angle2 in
+        let _ = window##requestAnimationFrame (Js.wrap_callback @@ redraw_planets angle1 angle2) in
+        ()
+      in
 
-
-
-      (* let rec lol = fun _ -> *)
-      (*   debug "lol"; *)
-      (*   step (); *)
-      (*   let _ = window##requestAnimationFrame (Js.wrap_callback lol) in *)
-      (*   () *)
-      (* in *)
+      let reqid = window##requestAnimationFrame (Js.wrap_callback redraw_clear) in
+      let reqid = window##requestAnimationFrame (Js.wrap_callback redraw_circle) in
+      let reqid = window##requestAnimationFrame (Js.wrap_callback @@ redraw_planets 0. 0.) in
 
       window##.onkeypress := handler (fun e ->
           if is_eq e##.charCode 'q' then begin

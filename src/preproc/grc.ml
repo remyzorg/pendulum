@@ -725,8 +725,8 @@ module Schedule = struct
           add s.signal emits, tests
 
 
-        | Call (Instantiate_run _, t) -> assert false (* TODO *)
-        | Test (Is_paused _, t1, t2) -> assert false (* TODO *)
+        | Call (Instantiate_run _, t) -> empty, empty (* TODO *)
+        | Test (Is_paused _, t1, t2) -> empty, empty (* TODO *)
 
 
         | Call (_, t) -> aux (t, stop)
