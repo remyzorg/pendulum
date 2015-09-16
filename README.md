@@ -11,7 +11,7 @@
  extension. It allows the programmer to describe **reactive machines** as OCaml
  values, and run them on signals arguments. The compilation of concurrency in pendulum is
  completely sequential and static.
- ([similar work and inspiration](https://www.github.com/remyzorg/pendulum/wiki/Documentation))
+ ([similar work and inspiration](https://github.com/remyzorg/pendulum/wiki/Similar-works-and-inspiration))
 
 The core language is completely compatible with vanilla OCaml compiler.
 
@@ -41,3 +41,9 @@ opam `1.2` with `switch 4.02.2` (minimum) is required
 3. `./configure`
 4. `make`
 5. `make install `
+
+
+### Licensing and context
+
+This project is under MIT public license. It started in the context of UCF project.
+
