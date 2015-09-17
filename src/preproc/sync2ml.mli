@@ -37,7 +37,8 @@ and ml_sequence =
 and ml_ast =
   | MLemit of Ast.valued_signal
   | MLif of ml_test_expr * ml_sequence * ml_sequence
-  | MLassign of Ast.ident * ml_ast
+  | MLassign_signal of Ast.ident * ml_ast
+  | MLassign_machine of int * (Ast.ident * Ast.signal list * Ast.loc)
   | MLenter of int
   | MLexit of int
   | MLexpr of Ast.atom
