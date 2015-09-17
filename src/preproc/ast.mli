@@ -105,12 +105,14 @@ module type S = sig
 
     type env = {
       labels : int IdentMap.t;
-      global_namespace : int IdentMap.t ref;
+      global_scope : int IdentMap.t ref;
       signals : (int * signal_origin) SignalMap.t;
       local_signals : (valued_signal) list ref;
       local_scope : valued_signal list;
       machine_runs : (int * (int * signal list) list) IdentMap.t ref;
     }
+
+    val print_env : Format.formatter -> env -> unit
 
     val of_ast : ?sigs:(signal list) -> Derived.statement -> t * env
 

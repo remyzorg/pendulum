@@ -11,14 +11,22 @@ let%sync mouse_machine1 =
 
 let%sync incr =
   input s;
-  emit s (!!s + 1);
+  input s2;
+  emit s (!!s + 1 + !!s2);
   atom (Format.printf "%d" !!s)
 
 let%sync m_loop_incr =
   input zz;
-  let s = 5 in
+  let s1 = 5 in
+  let s2 = 5 in
   loop (
-    run incr s;
+    run incr (s2, s1);
     pause
   )
+  ||
+  loop (
+    run incr (s1, s2);
+    pause
+  )
+
 

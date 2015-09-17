@@ -45,28 +45,195 @@ let%sync planet =
       ))
   end
 
-let%sync mouse_machine =
-  input ctx;
-  input hw;
-  input move;
-  input quit1;
-  input quit2;
+let mouse_machine =
+  let open Pendulum.Runtime_misc in
+  let open Pendulum.Machine in
+  fun (ctx,hw,move,quit1,quit2)  ->
+    let pendulum_state = Bitset.make 9 in
+    let ctx = make_signal ctx in
+    let hw = make_signal hw in
+    let move = make_signal move in
+    let quit1 = make_signal quit1 in
+    let quit2 = make_signal quit2 in
+    let dist = ref (make_signal 400.) in
+    let radius = let dist = !dist in ref (make_signal 20.) in
+    let circle1 =
+      let dist = !dist in
+      let radius = !radius in
+      ref
+        (make_signal
+           {
+             x = (fst (!! move));
+             y = (!! dist);
+             radius = (!! radius);
+             color = "green"
+           }) in
+    let circle2 =
+      let dist = !dist in
+      let radius = !radius in
+      let circle1 = !circle1 in
+      ref
+        (make_signal
+           {
+             x = (!! dist);
+             y = (snd (!! move));
+             radius = (!! radius);
+             color = "red"
+           }) in
+    let set_absent () =
+      set_absent ctx;
+      set_absent hw;
+      set_absent move;
+      set_absent quit1;
+      set_absent quit2;
+      set_absent (!dist);
+      set_absent (!radius);
+      set_absent (!circle1);
+      set_absent (!circle2);
+      () in
+    let (planet_1_set_arg_0,planet_1_set_arg_1,planet_1_set_arg_2,planet_1_set_arg_3,planet_1_step)
+      =
+      let (planet_1_set_arg_0,planet_1_set_arg_1,planet_1_set_arg_2,planet_1_set_arg_3,planet_1_step)
+        = planet ((!! (!circle2)), (!! ctx), (!! move), (!! quit2)) in
+      ((ref planet_1_set_arg_0), (ref planet_1_set_arg_1),
+       (ref planet_1_set_arg_2), (ref planet_1_set_arg_3),
+       (ref planet_1_step)) in
+    let (planet_set_arg_0,planet_set_arg_1,planet_set_arg_2,planet_set_arg_3,planet_step)
+      =
+      let (planet_set_arg_0,planet_set_arg_1,planet_set_arg_2,planet_set_arg_3,planet_step)
+        = planet ((!! (!circle1)), (!! ctx), (!! move), (!! quit1)) in
+      ((ref planet_set_arg_0), (ref planet_set_arg_1),
+       (ref planet_set_arg_2), (ref planet_set_arg_3), (ref planet_step)) in
+    (((fun set_arg  -> set_present_value ctx set_arg),
+      (fun set_arg  -> set_present_value hw set_arg),
+      (fun set_arg  -> set_present_value move set_arg),
+      (fun set_arg  -> set_present_value quit1 set_arg),
+      (fun set_arg  -> set_present_value quit2 set_arg)),
+     (fun ()  ->
+        try
+          if Bitset.mem pendulum_state 0
+          then raise Finish_exc
+          else
+            (if Bitset.mem pendulum_state 7
+             then
+               (if Bitset.mem pendulum_state 1
+                then
+                  (if
+                    not
+                      (if !? quit1 then (!planet_set_arg_3) (!! quit1);
+                       if !? move then (!planet_set_arg_2) (!! move);
+                       if !? ctx then (!planet_set_arg_1) (!! ctx);
+                       if !? (!circle1)
+                       then (!planet_set_arg_0) (!! (!circle1));
+                       ((!planet_step) ()) == Pause)
+                   then Bitset.remove pendulum_state 1);
+                if Bitset.mem pendulum_state 2
+                then
+                  (if
+                    not
+                      (if !? quit2 then (!planet_1_set_arg_3) (!! quit2);
+                       if !? move then (!planet_1_set_arg_2) (!! move);
+                       if !? ctx then (!planet_1_set_arg_1) (!! ctx);
+                       if !? (!circle2)
+                       then (!planet_1_set_arg_0) (!! (!circle2));
+                       ((!planet_1_step) ()) == Pause)
+                   then Bitset.remove pendulum_state 2))
+             else
+               (Bitset.add pendulum_state 7;
+                dist := (make_signal 400.);
+                Bitset.add pendulum_state 6;
+                radius := (make_signal (let dist = !dist in 20.));
+                Bitset.add pendulum_state 5;
+                circle1 :=
+                  (make_signal
+                     (let dist = !dist in
+                      let radius = !radius in
+                      {
+                        x = (fst (!! move));
+                        y = (!! dist);
+                        radius = (!! radius);
+                        color = "green"
+                      }));
+                Bitset.add pendulum_state 4;
+                circle2 :=
+                  (make_signal
+                     (let dist = !dist in
+                      let radius = !radius in
+                      let circle1 = !circle1 in
+                      {
+                        x = (!! dist);
+                        y = (snd (!! move));
+                        radius = (!! radius);
+                        color = "red"
+                      }));
+                Bitset.add pendulum_state 3;
+                Bitset.add pendulum_state 1;
+                Bitset.add pendulum_state 2;
+                (let (planet_set_arg_0',planet_set_arg_1',planet_set_arg_2',planet_set_arg_3',planet_step')
+                  =
+                  planet
+                    ((!! (!circle1)), (!! ctx), (!! move), (!! quit1)) in
+                 planet_set_arg_0 := planet_set_arg_0';
+                 planet_set_arg_1 := planet_set_arg_1';
+                 planet_set_arg_2 := planet_set_arg_2';
+                 planet_set_arg_3 := planet_set_arg_3';
+                 planet_step := planet_step');
+                (let (planet_1_set_arg_0',planet_1_set_arg_1',planet_1_set_arg_2',planet_1_set_arg_3',planet_1_step')
+                  =
+                  planet
+                    ((!! (!circle2)), (!! ctx), (!! move), (!! quit2)) in
+                 planet_1_set_arg_0 := planet_1_set_arg_0';
+                 planet_1_set_arg_1 := planet_1_set_arg_1';
+                 planet_1_set_arg_2 := planet_1_set_arg_2';
+                 planet_1_set_arg_3 := planet_1_set_arg_3';
+                 planet_1_step := planet_1_step');
+                if
+                  not
+                    (if !? quit1 then (!planet_set_arg_3) (!! quit1);
+                     if !? move then (!planet_set_arg_2) (!! move);
+                     if !? ctx then (!planet_set_arg_1) (!! ctx);
+                     if !? (!circle1)
+                     then (!planet_set_arg_0) (!! (!circle1));
+                     ((!planet_step) ()) == Pause)
+                then Bitset.remove pendulum_state 1;
+                if
+                  not
+                    (if !? quit2 then (!planet_1_set_arg_3) (!! quit2);
+                     if !? move then (!planet_1_set_arg_2) (!! move);
+                     if !? ctx then (!planet_1_set_arg_1) (!! ctx);
+                     if !? (!circle2)
+                     then (!planet_1_set_arg_0) (!! (!circle2));
+                     ((!planet_1_step) ()) == Pause)
+                then Bitset.remove pendulum_state 2);
+             if
+               (Bitset.mem pendulum_state 1) ||
+               (Bitset.mem pendulum_state 2)
+             then raise Pause_exc
+             else
+               (Bitset.remove pendulum_state 3;
+                Bitset.remove pendulum_state 4;
+                Bitset.remove pendulum_state 5;
+                Bitset.remove pendulum_state 6;
+                Bitset.remove pendulum_state 7;
+                raise Finish_exc))
+        with | Pause_exc  -> (set_absent (); Pause)
+             | Finish_exc  ->
+               (set_absent (); Bitset.add pendulum_state 0; Finish)))
 
-  let dist = 400. in
-  let radius = 20. in
-  let circle1  = ({x = fst (!!move); y = !!dist; radius = !!radius; color = "green"}) in
-  let circle2 = ({x = !!dist; y = snd !!move; radius = !!radius; color = "red"}) in
-  begin run planet (circle1, ctx, move, quit1) end
-  ||
-  begin
-    trap ex2 (
-      loop (
-        present quit2 (exit ex2);
-        atom (move_circle !!ctx !!circle2 !!circle2.x (snd !!move));
-        emit circle2 {!!circle with y = snd !!move};
-        pause
-      ))
-  end
+(* let%to_dot_grc mouse_machine = *)
+(*   input ctx; *)
+(*   input hw; *)
+(*   input move; *)
+(*   input quit1; *)
+(*   input quit2; *)
+
+(*   let dist = 400. in *)
+(*   let radius = 20. in *)
+(*   let circle1  = ({x = fst (!!move); y = !!dist; radius = !!radius; color = "green"}) in *)
+(*   let circle2 = ({x = !!dist; y = snd !!move; radius = !!radius; color = "red"}) in *)
+(*   begin run planet (circle1, ctx, move, quit1) end *)
+(*   || *)
+(*   begin run planet (circle2, ctx, move, quit2) end *)
 
 
 

@@ -31,7 +31,7 @@ let remove_ident_renaming s =
   try
     let content = String.sub s.content 0 ((String.rindex s.content '~')) in
     let int = int_of_string @@
-      String.sub s.content (String.length content + 1) (String.length s.content)
+      String.sub s.content (String.length content + 1) (String.length s.content - String.length content - 1)
     in
     int, Ast.({s with content})
   with Not_found -> 0, s
@@ -354,20 +354,22 @@ module Ocaml_gen = struct
       in
       [%expr let set_absent () = [%e set_absent_globals] in [%e e]]
     in
-    let empty_params, return_input_setters =
+    let return_input_setters stepfun =
       match global_sigs with
-      | [] -> true, [%expr ()]
+      | [] -> true, [%expr stepfun]
       | [s] -> false, [%expr fun [%p mk_pat_var setter_arg] ->
                       set_present_value [%e mk_ident s.ident]
-                        [%e mk_ident setter_arg]]
-      | l -> false, Exp.tuple @@ List.rev_map (fun s ->
+                        [%e mk_ident setter_arg], [%e stepfun]]
+      | l -> false, Exp.tuple @@ List.rev @@ (stepfun :: List.map (fun s ->
           [%expr fun [%p mk_pat_var setter_arg ] ->
                  set_present_value [%e mk_ident s.ident] [%e mk_ident setter_arg]]
-        ) global_sigs
+        ) global_sigs)
     in
     let machine_registers e =
       IdentMap.fold (fun k (_, insts) acc ->
           List.fold_left (fun acc (inst_int_id, args) ->
+              (* Format.printf "Instantiating machine %s, inst n°%d\n" k.content inst_int_id; *)
+              (* Format.printf "%a" Ast.Tagged.print_env env; *)
               let idents_as_pat, machine_fun, args_init_tuple_exp, idents_as_ref, _ =
                 mk_machine_instantiation k inst_int_id args
               in
@@ -384,8 +386,9 @@ module Ocaml_gen = struct
                | Pause_exc -> set_absent (); Pause
                | Finish_exc -> set_absent (); Bitset.add [%e select_env_ident] 0; Finish]
       in
+      let empty_params, input_setters = return_input_setters stepfun in
       if empty_params then [%expr fun () -> [%e stepfun]]
-      else [%expr [%e return_input_setters], [%e stepfun]]
+      else [%expr [%e input_setters]]
     in
     [%expr
       let open Pendulum.Runtime_misc in
@@ -464,18 +467,17 @@ module Ocaml_gen = struct
         | [e] -> e
         | h::t -> [%expr [%e h]; [%e mk_seq t]]
       in
-      let assigns = rename_with'
-      |> List.combine idents
-      |> List.map (fun (x, y) -> [%expr [%e mk_ident x] := [%e mk_ident y]])
-      |> mk_seq
+      let assigns =
+        rename_with'
+        |> List.combine idents
+        |> List.map (fun (x, y) -> [%expr [%e mk_ident x] := [%e mk_ident y]])
+        |> mk_seq
       in
       let renamed_pat = Pat.tuple @@ List.map mk_pat_var rename_with' in
       [%expr let [%p renamed_pat] =
                [%e machine_fun] [%e args_init_tuple_exp]
              in [%e assigns]
       ]
-
-
 
     | MLassign_signal (ident, mlast) ->
       let ocamlexpr = construct_ml_ast env depl mlast in

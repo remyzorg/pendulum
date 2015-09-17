@@ -105,12 +105,14 @@ module type S = sig
 
     type env = {
       labels : int IdentMap.t;
-      global_namespace : int IdentMap.t ref;
+      global_scope : int IdentMap.t ref;
       signals : (int * signal_origin) SignalMap.t;
       local_signals : (valued_signal) list ref;
       local_scope : valued_signal list;
       machine_runs : (int * (int * signal list) list) IdentMap.t ref;
     }
+
+    val print_env : Format.formatter -> env -> unit
 
     val of_ast : ?sigs:(signal list) -> Derived.statement -> t * env
 
@@ -220,7 +222,7 @@ module Make (E : Exp) = struct
       let compare a b = compare a.content b.content
     end)
 
-  let trap_signal = Label  (mk_loc "Trap")
+  let trap_signal = Label (mk_loc "Trap")
   let (!+) a = incr a; !a
 
 
@@ -250,22 +252,34 @@ module Make (E : Exp) = struct
 
     type env = {
       labels : int IdentMap.t;
-      global_namespace : int IdentMap.t ref;
+      global_scope : int IdentMap.t ref;
       signals : (int * signal_origin) SignalMap.t;
       local_signals : (valued_signal) list ref;
       local_scope : valued_signal list;
       machine_runs : (int * (int * signal list) list) IdentMap.t ref;
     }
 
+  let print_env fmt e =
+    let open Format in
+    fprintf fmt "====================\nglobal_scope: ";
+    IdentMap.iter (fun k v -> fprintf fmt "%s (%d), " k.content v) (!(e.global_scope));
+    fprintf fmt "\nmachine_runs: \n";
+    IdentMap.iter (fun k (cntinst, insts) ->
+        fprintf fmt "  mach(%s) (%d) : " k.content cntinst;
+        List.iter (fun (int_id, args) -> fprintf fmt "%d, " int_id) insts;
+        fprintf fmt "\n"
+      ) (!(e.machine_runs));
+    fprintf fmt "\n====================\n"
+
     let add_signal env locals vi =
-      let signals, s' = match IdentMap.find vi.sname !(env.global_namespace) with
+      let signals, s' = match IdentMap.find vi.sname !(env.global_scope) with
         | exception Not_found ->
           let s = mk_signal vi.sname in
-          env.global_namespace := IdentMap.add vi.sname 0 !(env.global_namespace);
+          env.global_scope := IdentMap.add vi.sname 0 !(env.global_scope);
           SignalMap.add (mk_signal vi.sname) (0, Local) env.signals, s
         | i ->
           let s = mk_signal vi.sname in
-          env.global_namespace := IdentMap.add vi.sname (succ i) !(env.global_namespace);
+          env.global_scope := IdentMap.add vi.sname (succ i) !(env.global_scope);
           SignalMap.add (mk_signal vi.sname) (succ i, Local) env.signals,
           {s with ident = {s.ident with content = Format.sprintf "%s~%d" s.ident.content (succ i)}}
       in
@@ -288,10 +302,10 @@ module Make (E : Exp) = struct
 
     let add_rename_machine env s args =
       IdentMap.(match find s !env with
-          | exception Not_found -> env := add s (0, [0, args]) !env; s
+          | exception Not_found -> env := add s (1, [0, args]) !env; s
           | i, insts ->
             env := add s (succ i, (i, args) :: insts) !env ;
-            {s with content = Format.sprintf "%s~%d" s.content (succ i)})
+            {s with content = Format.sprintf "%s~%d" s.content i})
 
     let rename ~loc env s =
       SignalMap.(match find (mk_signal s) env with
@@ -302,7 +316,7 @@ module Make (E : Exp) = struct
 
     let create_env sigs = {
       labels = IdentMap.empty;
-      global_namespace = ref IdentMap.(List.fold_left (fun accmap s ->
+      global_scope = ref IdentMap.(List.fold_left (fun accmap s ->
           add s.ident 0 accmap )
           empty sigs);
 
