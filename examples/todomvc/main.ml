@@ -60,7 +60,8 @@ module Controller = struct
     let items = [] in
     loop begin
       present add_item begin
-        emit items (create_item !!add_item :: !!items);
+        atom (debug "%s" !!add_item);
+        emit items (View.create_item !!add_item :: !!items);
       end;
       pause
     end
