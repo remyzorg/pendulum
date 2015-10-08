@@ -48,7 +48,6 @@ end
 
 
 module Controller = struct
-
   let%sync machine =
     input items_ul;
     input add_item;
