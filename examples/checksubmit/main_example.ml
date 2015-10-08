@@ -1,4 +1,3 @@
-
 open Firebug
 
 let error f = Printf.ksprintf
@@ -12,7 +11,7 @@ let (@>) s coerce =
   Js.Opt.get (coerce @@ Dom_html.getElementById s)
     (fun () -> error "can't find element %s" s)
 
-let onclick elt f = elt##.onclick := handler (fun ev -> f (); Js._true)
+let onclick elt f = elt##.onclick := Dom_html.handler (fun ev -> f (); Js._true)
 let checked elt = Js.to_bool elt##.checked
 let value elt = Js.to_string elt##.value
 
@@ -22,12 +21,12 @@ let%sync machine =
   loop begin
     trap t begin
       begin
-        await checked;
+        await (checked & !!checked);
         await request;
         atom (print_endline !!request);
         exit t;
       end
-      || loop (present unchecked (exit t); pause)
+      || loop (present (checked & !(!!checked)) (exit t); pause)
     end;
     emit reset () ; pause
   end
@@ -37,23 +36,17 @@ let main _ =
   let text_content = "content" @> CoerceTo.input in
   let checkbox_accept = "accept" @> CoerceTo.input in
   let request_button = "request" @> CoerceTo.button in
-  (* let c = "canvas" @> CoerceTo.canvas in *)
-  (* let ctx = canvas##getContext (Dom_html._2d_) in *)
-
-  let set_checked, set_unchecked, set_request, get_reset, react =
-    machine ((), (), "", ())
+  let reset () =
+    text_content##.value := Js.to_string "";
+    checkbox_accept##.checked := Js.false
   in
-  checkbox_accept##.onclick := handler (fun ev ->
-      if Js.to_bool checkbox_accept##.checked then
-        set_checked ()
-      else
-        set_unchecked ();
-      ignore @@ react (); Js._true);
+  let set_checked, set_unchecked, set_request, get_reset, react =
+    machine ((), (), "", reset)
+  in
+  Pendulum.Js.bind react (checkbox_accept##.onclick)
+    (fun ev -> set_checked (checked checkbox_accept));
 
-  request_button##.onclick := handler (fun ev ->
-      set_request (Js.to_string @@ text_content##.value);
-      ignore @@ react (); Js._true);
-  Js._false
-
+  Pendulum.Js.bind react (request_button##.onclick)
+    (fun ev -> set_request (value text_content));
 
 let () = Dom_html.(window##.onload := handler main)

@@ -12,24 +12,28 @@ let (@>) s coerce =
   Js.Opt.get (coerce @@ Dom_html.getElementById s)
     (fun () -> error "can't find element %s" s)
 
-let onclick elt f = elt##.onclick := handler (fun ev -> f (); Js._true)
-let checked elt = Js.to_bool elt##.checked
-let value elt = Js.to_string elt##.value
 
 let%sync machine =
-  input checked, unchecked, request;
-  output reset;
+  input checked;
+  input unchecked;
+  input textcontent;
+  input request;
+
   loop begin
     trap t begin
       begin
         await checked;
         await request;
-        atom (print_endline !!request);
-        exit t;
+        atom (
+          debug "%s" (Js.to_string @@ (!!textcontent)##.value);
+          (!!checked)##.checked := Js._false;
+          (!!textcontent)##.value := Js.string "";
+        ); exit t
       end
-      || loop (present unchecked (exit t); pause)
+      ||
+      loop (present unchecked (exit t); pause)
     end;
-    emit reset () ; pause
+    pause
   end
 
 let main _ =
@@ -40,18 +44,19 @@ let main _ =
   (* let c = "canvas" @> CoerceTo.canvas in *)
   (* let ctx = canvas##getContext (Dom_html._2d_) in *)
 
-  let set_checked, set_unchecked, set_request, get_reset, react =
-    machine ((), (), "", ())
+  let set_checked, set_unchecked, set_textcontent, set_request, react =
+    machine (checkbox_accept, checkbox_accept, text_content, ())
   in
+  set_textcontent (text_content);
   checkbox_accept##.onclick := handler (fun ev ->
       if Js.to_bool checkbox_accept##.checked then
-        set_checked ()
+        set_checked (checkbox_accept)
       else
-        set_unchecked ();
+        set_unchecked (checkbox_accept);
       ignore @@ react (); Js._true);
 
   request_button##.onclick := handler (fun ev ->
-      set_request (Js.to_string @@ text_content##.value);
+      set_request ();
       ignore @@ react (); Js._true);
   Js._false
 
