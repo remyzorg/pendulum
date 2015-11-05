@@ -12,7 +12,7 @@ let (@>) s coerce =
   Js.Opt.get (coerce @@ Dom_html.getElementById s)
     (fun () -> error "can't find element %s" s)
 
-let onclick elt f = elt##.onclick := handler (fun ev -> f (); Js._true)
+let onclick elt f = elt##.onclick := Dom_html.handler (fun ev -> f (); Js._true)
 let checked elt = Js.to_bool elt##.checked
 let value elt = Js.to_string elt##.value
 
