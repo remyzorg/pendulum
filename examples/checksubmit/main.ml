@@ -20,14 +20,12 @@ let%sync machine =
   input checked, unchecked, request;
   output reset;
   loop begin
-    trap t begin
-      begin
+    trap t begin (
         await checked;
         await request;
         atom (print_endline !!request);
         exit t;
-      end
-      || loop (present unchecked (exit t); pause)
+      ) || loop (present unchecked (exit t); pause)
     end;
     emit reset () ; pause
   end
