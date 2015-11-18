@@ -44,7 +44,7 @@ module Flowgraph : sig
 
     type t =
       | Call of action * t
-      | Test of test_value * t * t (* then * else *)
+      | Test of test_value * t * t * t option (* then * else *)
       | Fork of t * t * t (* left * right * sync *)
       | Sync of (int * int) * t * t
       | Pause
@@ -62,7 +62,8 @@ module Flowgraph : sig
     val pp : Format.formatter -> t -> unit
     val pp_test_value : Format.formatter -> test_value -> unit
     val pp_action: Format.formatter -> action -> unit
-    val test_node : test_value -> t * t -> t
+
+    val test_node : test_value -> t * t * t option -> t
 
     val (>>) : action -> t -> t
     val exit_node : Ast.Tagged.t -> t -> t

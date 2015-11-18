@@ -227,14 +227,16 @@ let parse_ast ext vb =
       let pat =
         match vb.pvb_pat.ppat_desc with
         | Ppat_var id -> id.txt
-        | _ -> "unnamed"
+        | _ -> "unknown"
       in
       let ast = ast_of_expr e in
       let tast, env = Ast.Tagged.of_ast ~sigs ast in
       let tast = Ast.Analysis.filter_dead_trees tast in
+
       Pendulum_misc.print_to_dot loc pat tast;
       let _ocaml_expr =
-        Sync2ml.generate sigs env tast in
+        Sync2ml.generate sigs env tast
+      in
       Format.printf "%a@." Pprintast.expression _ocaml_expr;
       [%expr [%e Pendulum_misc.expr_of_ast ast]]
 

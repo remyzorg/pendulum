@@ -206,9 +206,19 @@ let grc2ml dep_array fg =
     | _ ->
       begin match fg with
         | Call (a, t) -> construct_ml_action dep_array sigs a ++ construct stop t
-        | Test (tv, t1, t2) ->
+
+        | Test (tv, t1, t2, endt) ->
+
+          (* let t = Unix.gettimeofday () in *)
+          (* let res = Schedule.find_join true t1 t2 in *)
+          (* let t' = Unix.gettimeofday () in *)
+
+          (* if t' -. t > 0.1 then begin *)
+          (*   Format.printf "find_join : %f\n" (t' -. t); *)
+          (* end; *)
+
           begin
-            match Schedule.find_join true t1 t2 with
+            match endt with
             | Some j when j <> Finish && j <> Pause ->
               (mls @@ MLif
                  (construct_test_expr sigs tv,
@@ -513,16 +523,22 @@ end
 
 
 let generate sigs env tast =
+
+
   let selection_tree, controlflow_graph as grc = Of_ast.construct tast in
   Schedule.tag_tested_stmts selection_tree controlflow_graph;
   let _deps = Schedule.check_causality_cycles grc in
   let interleaved_cfg = Schedule.interleave controlflow_graph in
-
   let deps = deplist selection_tree in
   let dep_array = Array.make (List.length deps + 1) [] in
   List.iter (fun (i, l) -> dep_array.(i) <- l) deps;
 
+
+
   let ml_ast = grc2ml dep_array interleaved_cfg in
+
+
+  Format.print_newline ();
 
   let ocaml_ast = Ocaml_gen.instantiate dep_array sigs env selection_tree ml_ast in
   ocaml_ast

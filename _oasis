@@ -48,13 +48,13 @@ Executable "ppx_pendulum"
   CompiledObject: best
 
 Executable "test_ppx"
-  Path: tests/ppx
-  Build$: flag(tests) || flag(ppx)
-  Install: false
-  CompiledObject: best
-  MainIs: test_ppx.ml
-  BuildTools: ppx_pendulum
-  BuildDepends: oUnit, pendulum
+ Path: tests/ppx
+ Build$: flag(tests) || flag(ppx)
+ Install: false
+ CompiledObject: best
+ MainIs: test_ppx.ml
+ BuildTools: ppx_pendulum
+ BuildDepends: oUnit, pendulum
 
 Executable test_lang_bin
   Build$: flag(tests)
@@ -65,12 +65,12 @@ Executable test_lang_bin
   BuildDepends:
     oUnit, pendulum
     
-Test "test_pendulum"
-  Run$:		flag(tests)
-  Command: 	$test_lang_bin
-  WorkingDirectory: tests
-  
-# Test "test_ppx"
-#   Run$:		flag(tests)
-#   Command: 	$test_ppx
-#   WorkingDirectory: tests/ppx
+#Test "test_pendulum"
+#  Run$:		flag(tests)
+#  Command: 	$test_lang_bin
+#  WorkingDirectory: tests
+#  
+#Test "test_ppx"
+#  Run$:		flag(tests)
+#  Command: 	$test_ppx
+#  WorkingDirectory: tests/ppx
