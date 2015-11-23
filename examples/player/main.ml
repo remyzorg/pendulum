@@ -36,17 +36,17 @@ let%sync reactive_player =
     present pause (atom ((!!media)##pause));
     pause
   end
-  (* || loop begin *)
-  (*   await start_slide; *)
-  (*   trap t' (loop ( *)
-  (*       emit cant_update (); *)
-  (*       present stop_slide ( *)
-  (*         atom (update_media !!media !!stop_slide); *)
-  (*         exit t'); *)
-  (*       pause) *)
-  (*     ); *)
-  (*   pause *)
-  (* end *)
+  || loop begin
+    await start_slide;
+    trap t' (loop (
+        emit cant_update ();
+        present stop_slide (
+          atom (update_media !!media !!stop_slide);
+          exit t');
+        pause)
+      );
+    pause
+  end
   ||
   loop begin present cant_update nothing
       (present media_time (atom(

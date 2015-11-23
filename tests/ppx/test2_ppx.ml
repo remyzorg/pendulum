@@ -29,9 +29,29 @@ open Pendulum.Runtime_ast
 (*     pause *)
 (*   ) *)
 
-
-
 let%to_dot_grc many_par =
   loop pause
   || loop pause
   || loop pause
+
+
+(* let%to_dot_grc reactive_player = *)
+(*   input play; *)
+(*   input pause; *)
+(*   input start_slide; *)
+(*   input stop_slide; *)
+(*   input media_time; *)
+(*   input media; *)
+(*   input slider; *)
+
+(*   let cant_update = () in *)
+(*   loop begin *)
+(*     trap t' (loop ( *)
+(*         present stop_slide ( *)
+(*           atom (print_string "stop_slide"); *)
+(*           exit t'); *)
+(*         pause) *)
+(*       ); *)
+(*     pause *)
+(*   end *)
+

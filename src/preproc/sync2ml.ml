@@ -198,61 +198,30 @@ let construct_test_expr mr tv =
 
 let grc2ml dep_array fg =
   let open Flowgraph in
+  let tbl = Fgtbl.create 19 in
   let sigs = ref SignalSet.empty in
   let rec construct stop fg =
     match stop with
     | Some fg' when fg == fg' && fg' <> Finish && fg' <> Pause ->
       nop
     | _ ->
-      begin match fg with
+      if Fgtbl.mem tbl fg && Pause <> fg && Finish <> fg then begin
+        match stop with None -> ()
+        | Some stop' ->
+        Format.printf "MISS:\n%a\n============\n%a\n"
+          Flowgraph.pp fg Flowgraph.pp stop'
+      end;
+      let res = begin match fg with
         | Call (a, t) -> construct_ml_action dep_array sigs a ++ construct stop t
-
         | Test (tv, t1, t2, endt) ->
-
-
-
-          (* let t = Unix.gettimeofday () in *)
-          (* let res = Schedule.find_join true t1 t2 in *)
-          (* let t' = Unix.gettimeofday () in *)
-
-          (* Format.printf "find_join : %f\n" (t' -. t); *)
-
-          (* let res = begin match endt, res with *)
-          (*   | None, None -> *)
-          (*     Format.printf "We found nothing\n"; None *)
-
-          (*   | Some endt', None -> *)
-          (*     Format.printf "endt but no join (%a)\n%a===========\n" *)
-          (*       Flowgraph.pp_test_value tv *)
-          (*       Flowgraph.pp endt'; *)
-          (*       endt *)
-
-          (*   | None, Some res' -> *)
-          (*     Format.printf "JOIN_NO_ENDT (%a) \n" *)
-          (*       Flowgraph.pp_test_value tv; *)
-          (*     res *)
-
-          (*   | Some endt', Some res' when res' == endt'-> *)
-          (*     Format.printf "OK:\n"; res *)
-
-          (*   | Some endt', Some res' -> *)
-          (*     Format.printf "NOT_OK: (%a) %d %d\n" *)
-          (*       Flowgraph.pp_test_value tv *)
-          (*       (Obj.magic endt') (Obj.magic res'); *)
-          (*       (\* Flowgraph.pp endt'; *\) *)
-          (*     (\* Format.printf "%a" Flowgraph.pp res'; *\) *)
-          (*     res *)
-          (* end in *)
-
-          (* let t = Unix.gettimeofday () in *)
-          (* let res = Schedule.find_join true t1 t2 in *)
-          (* let t' = Unix.gettimeofday () in *)
-
-          (* Format.printf "%f\n" (t' -. t); *)
-
-
           begin
-            match endt with
+
+            let t = Unix.gettimeofday () in
+            let res = Schedule.find_join true t1 t2 in
+            let t' = Unix.gettimeofday () in
+            Format.printf "%f\n" (t' -. t);
+
+            match res with
             | Some j when j <> Finish && j <> Pause ->
               (mls @@ MLif
                  (construct_test_expr sigs tv,
@@ -272,6 +241,10 @@ let grc2ml dep_array fg =
         | Pause -> mls MLpause
         | Finish -> mls MLfinish
       end
+      in
+      Fgtbl.add tbl fg res;
+      res
+
   in
   construct None fg
 
