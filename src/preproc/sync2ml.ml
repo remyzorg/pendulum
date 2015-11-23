@@ -209,16 +209,26 @@ let grc2ml dep_array fg =
 
         | Test (tv, t1, t2, endt) ->
 
-          (* let t = Unix.gettimeofday () in *)
-          (* let res = Schedule.find_join true t1 t2 in *)
-          (* let t' = Unix.gettimeofday () in *)
+          let t = Unix.gettimeofday () in
+          let res = Schedule.find_join true t1 t2 in
+          let t' = Unix.gettimeofday () in
 
-          (* if t' -. t > 0.1 then begin *)
-          (*   Format.printf "find_join : %f\n" (t' -. t); *)
-          (* end; *)
+          if t' -. t > 0.1 then begin
+            Format.printf "find_join : %f\n" (t' -. t);
+
+            begin match endt, res with
+            | None, None -> Format.printf "We found nothing\n"
+            | Some endt, None -> Format.printf "endt but no join\n"
+            | None, Some join -> Format.printf "join but no endt\n"
+            | Some endt, Some res -> Format.printf "both %B\n" (endt == res);
+            Format.printf "%a" Flowgraph.pp res;
+            end;
+
+          end;
+
 
           begin
-            match endt with
+            match res with
             | Some j when j <> Finish && j <> Pause ->
               (mls @@ MLif
                  (construct_test_expr sigs tv,

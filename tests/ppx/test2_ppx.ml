@@ -34,9 +34,7 @@ open Pendulum.Runtime_ast
 let%to_dot_grc many_par =
   loop pause
   || loop pause
-  (* || loop pause *)
-  (* || loop pause *)
-  (* || loop pause *)
+  || loop pause
 
 
 
