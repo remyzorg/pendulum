@@ -201,29 +201,23 @@ let grc2ml dep_array fg =
   let tbl = Fgtbl.create 19 in
   let sigs = ref SignalSet.empty in
   let rec construct stop fg =
-    match stop with
-    | Some fg' when fg == fg' && fg' <> Finish && fg' <> Pause ->
-      nop
-    | _ ->
+    let rec aux stop fg =
       let res = begin match fg with
         | Call (a, t) -> construct_ml_action dep_array sigs a ++ construct stop t
         | Test (tv, t1, t2, endt) ->
           begin
-
             match endt with
             | Some j when j <> Finish && j <> Pause ->
               (mls @@ MLif
                  (construct_test_expr sigs tv,
                   construct (Some j) t1,
                   construct (Some j) t2))
-
               ++ (match stop with
                   | Some fg' when fg' == j -> nop
                   | _ -> construct stop j)
             | _ ->
               mls @@ MLif
                 (construct_test_expr sigs tv, construct None t1, construct None t2)
-
           end
         | Fork (t1, t2, sync) -> assert false
         | Pause -> mls MLpause
@@ -232,7 +226,10 @@ let grc2ml dep_array fg =
       in
       Fgtbl.add tbl fg res;
       res
-
+    in match stop with
+    | Some fg' when fg == fg' && fg' <> Finish && fg' <> Pause ->
+      nop
+    | _ -> aux stop fg
   in
   construct None fg
 
