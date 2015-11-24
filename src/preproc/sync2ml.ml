@@ -152,7 +152,6 @@ let nop = Seqlist []
 let ml l = Seqlist l
 let mls e = Seqlist [e]
 let (++) c1 c2 = Seq (c1, c2)
-let (++) c1 c2 = Seq (c1, c2)
 
 let concat_setter ident n = Ast.mk_loc ~loc:ident.loc (* creation of a setter given by a run *)
     (Format.sprintf "set~%s~arg~%d" ident.content n)
@@ -193,6 +192,7 @@ let construct_test_expr mr tv =
   match tv with
   | Signal vs -> mr := SignalSet.add vs !mr; MLsig vs
   | Selection i -> MLselect i
+  | Sync (i1, i2) -> MLor (MLselect i1, MLselect i2)
   | Finished -> MLfinished
   | Is_paused (id, sigs, loc) -> MLis_pause (MLcall (id, sigs, loc))
 
@@ -205,23 +205,47 @@ let grc2ml dep_array fg =
     | Some fg' when fg == fg' && fg' <> Finish && fg' <> Pause ->
       nop
     | _ ->
-      if Fgtbl.mem tbl fg && Pause <> fg && Finish <> fg then begin
-        match stop with None -> ()
-        | Some stop' ->
-        Format.printf "MISS:\n%a\n============\n%a\n"
-          Flowgraph.pp fg Flowgraph.pp stop'
-      end;
       let res = begin match fg with
         | Call (a, t) -> construct_ml_action dep_array sigs a ++ construct stop t
         | Test (tv, t1, t2, endt) ->
           begin
 
-            let t = Unix.gettimeofday () in
-            let res = Schedule.find_join true t1 t2 in
-            let t' = Unix.gettimeofday () in
-            Format.printf "%f\n" (t' -. t);
+            (* let t = Unix.gettimeofday () in *)
+            (* let res = Schedule.find_join true t1 t2 in *)
+            (* let t' = Unix.gettimeofday () in *)
 
-            match res with
+            (* let res = begin match endt, res with *)
+            (*   | None, None -> *)
+            (*     Format.printf "Nothing: (%a)\n" *)
+            (*       Flowgraph.pp_test_value tv ; *)
+            (*     None *)
+
+            (*   | Some endt', None -> *)
+            (*     Format.printf "endt but no join on (%a)\n%a===========\n" *)
+            (*       Flowgraph.pp_test_value tv *)
+            (*       Flowgraph.pp endt'; *)
+            (*     endt *)
+
+            (*   | None, Some res' -> *)
+            (*     Format.printf "Join_no_endt: (%a) \n" *)
+            (*       Flowgraph.pp_test_value tv; *)
+            (*     res *)
+
+            (*   | Some endt', Some res' when res' == endt'-> *)
+            (*     Format.printf "OK:\n"; res *)
+
+            (*   | Some endt', Some res' -> *)
+            (*     Format.printf "NOT_OK: (%a) %d %d\n" *)
+            (*       Flowgraph.pp_test_value tv *)
+            (*       (Obj.magic endt') (Obj.magic res'); *)
+            (*     (\* Flowgraph.pp endt'; *\) *)
+            (*     (\* Format.printf "%a" Flowgraph.pp res'; *\) *)
+            (*     res *)
+            (* end in *)
+
+            (* Format.printf "%f\n" (t' -. t); *)
+
+            match endt with
             | Some j when j <> Finish && j <> Pause ->
               (mls @@ MLif
                  (construct_test_expr sigs tv,
@@ -234,10 +258,9 @@ let grc2ml dep_array fg =
             | _ ->
               mls @@ MLif
                 (construct_test_expr sigs tv, construct None t1, construct None t2)
+
           end
         | Fork (t1, t2, sync) -> assert false
-        | Sync ((i1, i2), t1, t2) ->
-          mls @@ MLif (MLor (MLselect i1, MLselect i2), construct stop t1, construct stop t2)
         | Pause -> mls MLpause
         | Finish -> mls MLfinish
       end

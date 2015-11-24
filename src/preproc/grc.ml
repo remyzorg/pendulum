@@ -103,6 +103,7 @@ module Flowgraph = struct
     type test_value =
       | Signal of Ast.signal
       | Selection of int
+      | Sync of (int * int)
       | Is_paused of Ast.ident * Ast.signal list * Ast.loc
       | Finished
 
@@ -110,7 +111,6 @@ module Flowgraph = struct
       | Call of action * t
       | Test of test_value * t * t * t option (* then * else * end *)
       | Fork of t * t * t (* left * right * sync *)
-      | Sync of (int * int) * t * t
       | Pause
       | Finish
 
@@ -127,6 +127,7 @@ module Flowgraph = struct
     val pp_test_value : Format.formatter -> test_value -> unit
     val pp_action: Format.formatter -> action -> unit
     val test_node : test_value -> t * t * t option -> t
+    val sync_node : (int * int) -> (t * t * t option) -> t
 
     val (>>) : action -> t -> t
     val exit_node : Ast.Tagged.t -> t -> t
@@ -183,8 +184,16 @@ module Flowgraph = struct
     type test_value =
       | Signal of Ast.signal
       | Selection of int
+      | Sync of (int * int)
       | Is_paused of Ast.ident * Ast.signal list * Ast.loc
       | Finished
+
+    type t =
+      | Call of action * t
+      | Test of test_value * t * t * t option (* then * else *)
+      | Fork of t * t * t (* left * right * sync *)
+      | Pause
+      | Finish
 
     let pp_test_value_dot fmt tv =
       Format.(begin
@@ -192,6 +201,7 @@ module Flowgraph = struct
           | Signal s -> fprintf fmt "%s ?" s.ident.content
           | Selection i -> fprintf fmt "%d ?" i
           | Finished -> fprintf fmt "finished ?"
+          | Sync (i1, i2) -> fprintf fmt "sync(%d, %d)" i1 i2
           | Is_paused (id, _, _) -> fprintf fmt "paused %s ?" id.content
         end)
 
@@ -200,17 +210,10 @@ module Flowgraph = struct
           match tv with
           | Signal s -> fprintf fmt "Signal %s" s.ident.content
           | Selection i -> fprintf fmt "Selection %d" i
+          | Sync (i1, i2) -> fprintf fmt "Sync(%d, %d)" i1 i2
           | Finished -> fprintf fmt "Finished"
           | Is_paused (id, _, _) -> fprintf fmt "Is_paused %s" id.content
         end)
-
-    type t =
-      | Call of action * t
-      | Test of test_value * t * t * t option (* then * else *)
-      | Fork of t * t * t (* left * right * sync *)
-      | Sync of (int * int) * t * t
-      | Pause
-      | Finish
 
     let rec pp fmt t =
       let rec aux lvl fmt t =
@@ -220,12 +223,12 @@ module Flowgraph = struct
             | Call (a, t) ->
               fprintf fmt "%sCall(%a,\n%a)"
                 indent pp_action a (aux (lvl + 1)) t
+            | Test(Sync (i1, i2), t1, t2, _) ->
+              fprintf fmt "%sSync((%d, %d),\n%a,\n%a)" indent
+                i1 i2 (aux @@ lvl + 1) t1 (aux @@ lvl + 1) t2
             | Test (tv, t1, t2, _) ->
               fprintf fmt "%sTest(%a,\n%a,\n%a) "
                 indent pp_test_value tv (aux @@ lvl + 1) t1 (aux @@ lvl + 1) t2
-            | Sync ((i1, i2), t1, t2) ->
-              fprintf fmt "%sSync((%d, %d),\n%a,\n%a)" indent
-                i1 i2 (aux @@ lvl + 1) t1 (aux @@ lvl + 1) t2
             | Fork (t1, t2, _) ->
               fprintf fmt "%sFork(\n%a, \n%a)"
                 indent (aux @@ lvl + 1) t1 (aux @@ lvl + 1) t2
@@ -238,8 +241,8 @@ module Flowgraph = struct
       Format.(begin
           match t with
           | Call (a, _) -> fprintf fmt "%a" pp_action_dot a
+          | Test(Sync (i1, i2), _, _, _) -> fprintf fmt "sync(%d, %d)" i1 i2
           | Test (tv, _, _, _) -> fprintf fmt "test <B>%a</B>  " pp_test_value_dot tv
-          | Sync ((i1, i2), _, _) -> fprintf fmt "sync(%d, %d)" i1 i2
           | Fork (_, _, _) -> fprintf fmt "fork"
           | Pause -> fprintf fmt "pause"
           | Finish -> fprintf fmt "finish"
@@ -292,6 +295,8 @@ module Flowgraph = struct
     let exit_node p next = Exit p.Tagged.id >> next
     let enter_node p next = Enter p.Tagged.id >> next
 
+    let sync_node c (t1, t2, endt) = test_node (Sync (c)) (t1, t2, endt)
+
     let style_of_node = function
       | Call (a, _) -> "shape=oval" ^ begin match a with
           | Emit _ | Local_signal _ ->", fontcolor=blue, "
@@ -300,8 +305,8 @@ module Flowgraph = struct
           | Exit i -> ", fontcolor=red, "
           | Instantiate_run _ -> ", fontcolor=darkgreen, "
         end
+      | Test (Sync _, _, _, _) -> "shape=invtrapezium"
       | Test _ -> "shape=box, "
-      | Sync _ -> "shape=invtrapezium"
       | Finish -> ", fontcolor=red, "
       | Pause -> ", fontcolor=darkgreen, "
       | Fork _ -> ""
@@ -322,9 +327,9 @@ module Flowgraph = struct
               fprintf fmt "N%d -> N%d ;@\n" my_id fg_id;
               my_id
 
-            | Test (_, t1, t2, _) | Fork (t1, t2, _) | Sync (_, t1, t2) ->
+            | Test (_, t1, t2, _) | Fork (t1, t2, _) ->
               let my_id = id () in
-              let shape = match fg with Test _ | Sync _ -> "[style = dashed]" | _ -> "" in
+              let shape = match fg with Test _ -> "[style = dashed]" | _ -> "" in
               fprintf fmt "N%d [%s label=<%a>]; @\n" my_id (style_of_node fg) pp_dot fg;
               let fg1_id, fg2_id = visit t1, visit t2 in
               fprintf fmt "N%d -> N%d;@\n" my_id fg1_id;
@@ -461,7 +466,7 @@ module Of_ast = struct
         | Par (q, r) ->
           let syn = try Hashtbl.find env.synctbl (q.id, r.id) with
             | Not_found ->
-              let n = Sync ((q.id, r.id), pause, exit_node p endp)
+              let n = sync_node (q.id, r.id) (pause, exit_node p endp, Some pause)
               in Hashtbl.add env.synctbl (q.id, r.id) n; n
           in
           enter_node p @@
@@ -520,7 +525,7 @@ module Of_ast = struct
         | Par (q, r) ->
           let syn = try Hashtbl.find env.synctbl (q.id, r.id) with
             | Not_found ->
-              let n = Sync ((q.id, r.id), pause, exit_node p endp)
+              let n = sync_node (q.id, r.id) (pause, exit_node p endp, Some pause)
               in Hashtbl.add env.synctbl (q.id, r.id) n; n
           in
           Fork (
@@ -646,7 +651,7 @@ module Schedule = struct
               | _ -> None
             ) m1 m2
 
-        | Fork (t1, t2, _) | Sync (_, t1, t2) ->
+        | Fork (t1, t2, _) | Test (Sync _, t1, t2, _) ->
           let m1 = visit m t1 in
           let m2 = visit m t2 in
           merge (fun k v1 v2 ->
@@ -687,7 +692,7 @@ module Schedule = struct
         | Call (_, t) -> aux t
         | Test (Selection i, t1, t2, _) ->
           lr := i :: !lr
-        | Sync ((i1, i2) , t1, t2) ->
+        | Test (Sync (i1, i2) , t1, t2, _) ->
           lr := i1 :: i2 :: !lr
         | Test (_, t1, t2, _) | Fork (t1, t2, _)  ->
           aux t1; aux t2
@@ -717,7 +722,7 @@ module Schedule = struct
 
 
         | Call (_, t) -> aux (t, stop, s)
-        | Test (_, t1, t2, _) | Fork (t1, t2, _) | Sync (_ , t1, t2) ->
+        | Test (_, t1, t2, _) | Fork (t1, t2, _) ->
           aux (t1, stop, s) || aux (t2, stop, s)
         | Pause | Finish -> false
       in memo_rec (module Fg.FgEmitsTbl) aux (fg, stop, s)
@@ -743,7 +748,7 @@ module Schedule = struct
           let emits1, tests1 = aux (t1, stop) in
           let emits2, tests2 = aux (t2, stop) in
           union emits1 emits2, add s (union tests1 tests2)
-        | Test (_, t1, t2, _) | Fork (t1, t2, _) | Sync (_ , t1, t2) ->
+        | Test (_, t1, t2, _) | Fork (t1, t2, _) ->
           let emits1, tests1 = aux (t1, stop) in
           let emits2, tests2 = aux (t2, stop) in
           union emits1 emits2, union tests1 tests2
@@ -755,7 +760,6 @@ module Schedule = struct
     let children fg t1 t2 =
       let children _ (fg, t1, t2) =
         let newfg = match fg with
-          | Sync (ids, _, _) -> Sync (ids, t1, t2)
           | Test (tv, _, _, tend) -> Test (tv, t1, t2, tend)
           | Fork (_, _, sync) -> Fork (t1, t2, sync)
           | Call (a, _) -> Call(a, t1)
@@ -771,7 +775,7 @@ module Schedule = struct
           else Some fg
         else match fg with
           | Call (a, t) -> aux (t, elt)
-          | Sync(_ , t1, t2) | Test (_, t1, t2, _) | Fork (t1, t2, _) ->
+          | Test (_, t1, t2, _) | Fork (t1, t2, _) ->
             Option.mapn (aux (t1, elt)) (fun () -> aux (t2, elt))
           | Pause | Finish -> None
       in memo_rec (module Fgtbl2) aux (fg, t)
@@ -785,7 +789,7 @@ module Schedule = struct
             let res, t' = aux (t, elt) in
             let t = if res then t' else t in
             res, children fg t t
-          | Sync(_ , t1, t2) | Test (_, t1, t2, _) | Fork (t1, t2, _)->
+          | Test (_, t1, t2, _) | Fork (t1, t2, _)->
             let res1, t1' = aux (t1, elt) in
             let res2, t2' = aux (t2, elt) in
             res1 || res2,
@@ -798,7 +802,7 @@ module Schedule = struct
       Option.mapn (find nopause fg2 fg1) begin fun () ->
         match fg1 with
         | Call(a, t) -> find_join nopause fg2 t
-        | Sync(_ , t1, t2) | Test (_, t1, t2, _) | Fork (t1, t2, _) ->
+        | Test (_, t1, t2, _) | Fork (t1, t2, _) ->
 
           begin match (find_join nopause fg2 t1), (find_join nopause fg2 t2) with
           | Some v1, Some v2 when v1 == v2 && v1 <> Pause && v1 <> Finish -> Some v1
@@ -812,7 +816,7 @@ module Schedule = struct
         | fg when fg == stop -> None
         | Call (Exit n, t) -> Option.map (max n) (aux (stop, t))
         | Call (a, t) -> aux (stop, t)
-        | Sync(_ , t1, t2) | Test (_, t1, t2, _) | Fork (t1, t2, _) -> None
+        | Test (_, t1, t2, _) | Fork (t1, t2, _) -> None
         | Pause | Finish -> Some 0
       in memo_rec (module Fgtbl2) aux (stop, fg)
 
@@ -826,7 +830,7 @@ module Schedule = struct
             let t, fg2' = aux (t, fg2) in
             let fg1' = Call (a, t) in
             fg1', fg2'
-          | Sync(_ , t1, t2) | Test (_, t1, t2, _) | Fork (t1, t2, _) ->
+          | Test (_, t1, t2, _) | Fork (t1, t2, _) ->
             let fg2_r = ref fg2 in
             let t1, t2 = replace_join t1 t2 (fun x ->
                 let x', fg2' = aux (x, fg2) in
@@ -839,7 +843,7 @@ module Schedule = struct
 
 
     let fork_id = function
-      | Fg.Sync (c, _, _) -> c
+      | (Fg.Test (Fg.Sync c, _, _, _)) -> c
       | _ -> 0, 0
 
     let rec interleave fg =
@@ -877,7 +881,6 @@ module Schedule = struct
                   | Call (a, t) ->
                     Call (a, sequence_of_fork stop t fg1)
                   | Pause | Finish -> assert false (* TODO: Raise exn *)
-                  | Sync(_, t1, t2) -> assert false
                   | Test (test, t1, t2, joinfg2) ->
                     begin match joinfg2 with
                     | Some j ->
@@ -913,20 +916,6 @@ module Schedule = struct
                 let fg1 = sequence_of_fork sync t1 t2 in
                 sequence_of_fork stop fg1 fg2
 
-              | Sync (_, t1, t2), fg2 ->
-                let fg1_emits, fg1_tests = extract_emits_tests_sets fg1 stop in
-                let fg2_emits, fg2_tests = extract_emits_tests_sets fg2 stop in
-                let open SignalSet in
-                if inter fg2_emits fg1_tests <> empty then
-                  if inter fg1_emits fg2_tests <> empty then
-                    assert false
-                  else
-                    sequence_of_fork stop fg2 fg1
-                else
-                  let t1, t2 =
-                    replace_join t1 t2 (sequence_of_fork stop fg2)
-                  in children fg1 t1 t2
-
               | Test (test, t1, t2, joinfg1), fg2 ->
 
                 let fg1_emits, fg1_tests = extract_emits_tests_sets fg1 stop in
@@ -950,8 +939,9 @@ module Schedule = struct
                   | None ->
                     let rep = ref joinfg1 in
                     let t1, t2 = replace_join t1 t2 (fun x ->
-                        rep := Some x;
-                        sequence_of_fork stop fg2 x)
+                        let r = sequence_of_fork stop fg2 x in
+                        rep := Some r; r
+                        )
                     in Test(test, t1, t2, !rep)
                 end
 
@@ -967,7 +957,6 @@ module Schedule = struct
             | Test (tv, t1, t2, tend) ->
               Test (tv, visit t1, visit t2, Option.map visit tend)
             | Fork (t1, t2, sync) -> sequence_of_fork sync (visit t1) (visit t2)
-            | Sync ((i1, i2), t1, t2) -> Sync ((i1, i2), visit t1, visit t2)
             | Pause -> Pause
             | Finish -> Finish
           in
