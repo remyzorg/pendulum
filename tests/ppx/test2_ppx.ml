@@ -78,7 +78,7 @@ open Pendulum.Runtime_ast
 (*   end *)
 
 
-let%to_dot_grc reactive_player =
+let%sync reactive_player =
   input play;
   input start_slide;
   input stop_slide;
@@ -93,50 +93,4 @@ let%to_dot_grc reactive_player =
       pause;
     pause
   end
-
-let player_lol =
-  let open Pendulum.Runtime_misc in
-  let open Pendulum.Machine in
-  fun (play,start_slide,stop_slide)  ->
-    let pendulum_state = Bitset.make 15 in
-    let play = make_signal play in
-    let start_slide = make_signal start_slide in
-    let stop_slide = make_signal stop_slide in
-    let set_absent () =
-      set_absent play; set_absent start_slide; set_absent stop_slide; () in
-
-
-    let f () =
-      try
-        (Bitset.remove pendulum_state 3;
-         if !? start_slide
-         then
-           (Bitset.add pendulum_state 8;
-            Bitset.add pendulum_state 4;
-            if
-              (Bitset.mem pendulum_state 6) ||
-              (Bitset.mem pendulum_state 12)
-            then
-              raise Pause_exc
-            else
-              (Bitset.remove pendulum_state 13; raise Finish_exc))
-         else
-           (Bitset.remove pendulum_state 9;
-            Bitset.add pendulum_state 10;
-            Bitset.add pendulum_state 4;
-            if
-              (Bitset.mem pendulum_state 6) ||
-              (Bitset.mem pendulum_state 12)
-            then raise Pause_exc
-            else
-              (Bitset.remove pendulum_state 13; raise Finish_exc));
-         if
-           (Bitset.mem pendulum_state 6) ||
-           (Bitset.mem pendulum_state 12)
-         then raise Pause_exc
-         else (Bitset.remove pendulum_state 13; raise Finish_exc))
-      with | Pause_exc  -> Pause
-           | Finish_exc  -> Finish
-    in
-    f ()
 
