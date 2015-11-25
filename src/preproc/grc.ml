@@ -124,7 +124,6 @@ module Flowgraph = struct
 
     val print_to_dot : Format.formatter -> t -> unit
     val pp : Format.formatter -> t -> unit
-    val pp_dot : Format.formatter -> t -> unit
     val pp_test_value : Format.formatter -> test_value -> unit
     val pp_action: Format.formatter -> action -> unit
     val test_node : test_value -> t * t * t option -> t
@@ -452,7 +451,7 @@ module Of_ast = struct
           @@ test_node (Signal s) (
             surface env q pause end_pres,
             surface env r pause end_pres,
-            None
+            Some end_pres
           )
 
         | Run (id, sigs, loc) ->
@@ -486,7 +485,7 @@ module Of_ast = struct
           let end_trap = exit_node p endp in
           enter_node p
           @@ surface {env with exits =
-              (StringMap.add s.content end_trap env.exits)} q pause end_trap
+                                 (StringMap.add s.content end_trap env.exits)} q pause end_trap
       in
       memo_rec h surface
 
@@ -518,7 +517,7 @@ module Of_ast = struct
             test_node (Selection q.id) (
               depth env q pause (surface env r pause end_seq),
               depth env r pause end_seq,
-              None
+              Some end_seq
             )
           else
             depth env r pause end_seq
@@ -526,7 +525,7 @@ module Of_ast = struct
         | Par (q, r) ->
           let syn = try Hashtbl.find env.synctbl (q.id, r.id) with
             | Not_found ->
-              let n = sync_node (q.id, r.id) (pause, exit_node p endp, None)
+              let n = sync_node (q.id, r.id) (pause, exit_node p endp, Some pause)
               in Hashtbl.add env.synctbl (q.id, r.id) n; n
           in
           Fork (
@@ -548,7 +547,7 @@ module Of_ast = struct
           test_node (Selection q.id) (
             depth env q pause end_pres,
             depth env r pause end_pres,
-            None
+            Some end_pres
           )
 
         | Run (id, sigs, loc) ->
@@ -587,8 +586,8 @@ module Of_ast = struct
 
       test_node Finished (
         Finish,
-        test_node (Selection p.id) (d, s, Some Finish),
-        Some Finish
+        test_node (Selection p.id) (d, s, None),
+        None
       )
 
 
@@ -889,27 +888,25 @@ module Schedule = struct
                       let rep = ref j in
                       let _, t2' = find_and_replace (fun x ->
                           let r = sequence_of_fork stop fg1 x in
-                          rep := x; r
+                          rep := r; r
                         ) t2 j
                       in
                       Test(test, t1', t2', Some !rep)
                     | None ->
                       let rep = ref joinfg2 in
                       let t1, t2 = replace_join t1 t2 (fun x ->
-                          let r = sequence_of_fork stop fg1 x
-                          in rep := Some r; r)
-                      in
-                      Test(test, t1, t2, !rep)
+                          rep := Some x;
+                          sequence_of_fork stop fg1 x)
+                      in Test(test, t1, t2, !rep)
                     end
 
 
                   | Fork (t1, t2, sync) ->
                     let fg2 = sequence_of_fork stop t1 t2 in
                     sequence_of_fork sync fg1 fg2
-                else (
+                else
                   let t1, t2 = replace_join t1 t2 (fun x -> sequence_of_fork stop x fg2) in
                   children fg1 t1 t2
-                )
 
               | Call (action, t), fg2 ->
                 Call (action, sequence_of_fork stop fg2 t)

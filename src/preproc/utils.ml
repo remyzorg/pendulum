@@ -58,11 +58,6 @@ module Option = struct
   let mapn v f =
     match v with None -> f () | Some v -> Some v
 
-  let print f fmt v =
-    match v with
-    | None -> Format.fprintf fmt "None"
-    | Some v' -> Format.fprintf fmt "Some (%a)" f v'
-
   let map2or v1 v2 f =
     match v1, v2 with
     | None, None -> None
