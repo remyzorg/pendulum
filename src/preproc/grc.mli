@@ -60,6 +60,7 @@ module Flowgraph : sig
 
     val print_to_dot : Format.formatter -> t -> unit
     val pp : Format.formatter -> t -> unit
+    val pp_dot : Format.formatter -> t -> unit
     val pp_test_value : Format.formatter -> test_value -> unit
     val pp_action: Format.formatter -> action -> unit
 
