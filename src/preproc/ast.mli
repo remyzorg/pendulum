@@ -26,7 +26,7 @@ module type S = sig
 
   type signal_origin = Local | Input | Output
 
-  type signal = { ident : ident; origin : signal_origin }
+  type signal = { ident : ident; origin : signal_origin; tag : string option}
   type label = Label of ident
   type atom = { locals : signal list; exp : exp}
 
@@ -59,14 +59,14 @@ module type S = sig
       | Suspend of statement * ident
       | Trap of label * statement
       | Exit of label
-      | Present of ident * statement * statement
+      | Present of (ident * ident) * statement * statement
       | Atom of exp
       | Signal of valued_ident * statement
       | Run of ident * ident list * loc
 
       | Halt
       | Sustain of valued_ident
-      | Present_then of ident * statement
+      | Present_then of (ident * ident) * statement
       | Await of ident
       | Await_imm of ident
       | Suspend_imm of statement * ident
@@ -106,7 +106,8 @@ module type S = sig
     type env = {
       labels : int IdentMap.t;
       global_scope : int IdentMap.t ref;
-      signals : (int * signal_origin) SignalMap.t;
+      signals : (int * signal_origin * string option) SignalMap.t;
+      signals_tags : (string, string list) Hashtbl.t;
       local_signals : (valued_signal) list ref;
       local_scope : valued_signal list;
       machine_runs : (int * (int * signal list) list) IdentMap.t ref;

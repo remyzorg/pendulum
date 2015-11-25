@@ -58,6 +58,8 @@ module Option = struct
   let mapn v f =
     match v with None -> f () | Some v -> Some v
 
+  let default d v = match v with None -> d | Some v -> v
+
   let print f fmt v =
     match v with
     | None -> Format.fprintf fmt "None"

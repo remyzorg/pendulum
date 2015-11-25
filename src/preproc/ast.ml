@@ -1,3 +1,4 @@
+open Utils
 
 module type Location = sig
   type t
@@ -26,7 +27,7 @@ module type S = sig
 
   type signal_origin = Local | Input | Output
 
-  type signal = { ident : ident; origin : signal_origin }
+  type signal = { ident : ident; origin : signal_origin; tag : string option}
   type label = Label of ident
   type atom = { locals : signal list; exp : exp}
 
@@ -59,14 +60,14 @@ module type S = sig
       | Suspend of statement * ident
       | Trap of label * statement
       | Exit of label
-      | Present of ident * statement * statement
+      | Present of (ident * string) * statement * statement
       | Atom of exp
       | Signal of valued_ident * statement
       | Run of ident * ident list * loc
 
       | Halt
       | Sustain of valued_ident
-      | Present_then of ident * statement
+      | Present_then of (ident * ident) * statement
       | Await of ident
       | Await_imm of ident
       | Suspend_imm of statement * ident
@@ -106,7 +107,8 @@ module type S = sig
     type env = {
       labels : int IdentMap.t;
       global_scope : int IdentMap.t ref;
-      signals : (int * signal_origin) SignalMap.t;
+      signals : (int * signal_origin * string option) SignalMap.t;
+      signals_tags : (string, string list) Hashtbl.t;
       local_signals : (valued_signal) list ref;
       local_scope : valued_signal list;
       machine_runs : (int * (int * signal list) list) IdentMap.t ref;
@@ -144,7 +146,7 @@ module Make (E : Exp) = struct
 
   type signal_origin = Local | Input | Output
 
-  type signal = { ident : ident; origin : signal_origin }
+  type signal = { ident : ident; origin : signal_origin; tag  : string option}
 
   type atom = { locals : signal list; exp : exp}
 
@@ -154,7 +156,7 @@ module Make (E : Exp) = struct
 
 
   let mk_loc ?(loc=dummy_loc) content = {loc; content}
-  let mk_signal ?(origin=Local) ident = {ident; origin}
+  let mk_signal ?(origin=Local) ident = {ident; origin; tag = None}
 
   let mk_vid sname ivalue = {sname; ivalue}
   let mk_vsig signal locals exp = {signal; svalue = {locals; exp}}
@@ -173,7 +175,7 @@ module Make (E : Exp) = struct
       | Suspend of statement * ident
       | Trap of label * statement
       | Exit of label
-      | Present of ident * statement * statement
+      | Present of (ident * ident) * statement * statement
       | Atom of exp
       | Signal of valued_ident * statement
       | Run of ident * ident list * loc
@@ -253,7 +255,8 @@ module Make (E : Exp) = struct
     type env = {
       labels : int IdentMap.t;
       global_scope : int IdentMap.t ref;
-      signals : (int * signal_origin) SignalMap.t;
+      signals : (int * signal_origin * string option) SignalMap.t;
+      signals_tags : (string, string list) Hashtbl.t;
       local_signals : (valued_signal) list ref;
       local_scope : valued_signal list;
       machine_runs : (int * (int * signal list) list) IdentMap.t ref;
@@ -276,11 +279,11 @@ module Make (E : Exp) = struct
         | exception Not_found ->
           let s = mk_signal vi.sname in
           env.global_scope := IdentMap.add vi.sname 0 !(env.global_scope);
-          SignalMap.add (mk_signal vi.sname) (0, Local) env.signals, s
+          SignalMap.add (mk_signal vi.sname) (0, Local, s.tag) env.signals, s
         | i ->
           let s = mk_signal vi.sname in
           env.global_scope := IdentMap.add vi.sname (succ i) !(env.global_scope);
-          SignalMap.add (mk_signal vi.sname) (succ i, Local) env.signals,
+          SignalMap.add (mk_signal vi.sname) (succ i, Local, s.tag) env.signals,
           {s with ident = {s.ident with content = Format.sprintf "%s~%d" s.ident.content (succ i)}}
       in
       let vs = {signal = s'; svalue = mk_atom ~locals vi.ivalue} in
@@ -307,12 +310,21 @@ module Make (E : Exp) = struct
             env := add s (succ i, (i, args) :: insts) !env ;
             {s with content = Format.sprintf "%s~%d" s.content i})
 
-    let rename ~loc env s =
-      SignalMap.(match find (mk_signal s) env with
-          | exception Not_found ->
-            error ~loc @@ Unbound_identifier s.content
-          | (0, origin) -> {ident = s; origin}
-          | (i, origin) -> {ident = mk_loc ~loc:s.loc (Format.sprintf "%s~%d" s.content i); origin})
+    let rename ~loc env tag s =
+      SignalMap.(match find (mk_signal s) env.signals with
+       | exception Not_found -> error ~loc @@ Unbound_identifier s.content
+       | (0, origin, _) ->
+          begin match tag with
+          | Some ext ->
+             let tags = try Hashtbl.find env.signals_tags s.content with Not_found -> [] in
+             Hashtbl.add env.signals_tags s.content (ext.content :: tags);
+             let ident = mk_loc ~loc:s.loc (Format.sprintf "%s##%s" s.content ext.content) in
+             {ident; origin; tag = Some ext.content}
+          | None -> {ident = s; origin; tag = None}
+          end
+       | (i, origin, _) ->
+             {ident = mk_loc ~loc:s.loc (Format.sprintf "%s~%d" s.content i); origin; tag = None})
+
 
     let create_env sigs = {
       labels = IdentMap.empty;
@@ -321,9 +333,10 @@ module Make (E : Exp) = struct
           empty sigs);
 
       signals = SignalMap.(List.fold_left (fun accmap s ->
-          add s (0, s.origin) accmap )
+          add s (0, s.origin, s.tag) accmap )
           empty sigs);
 
+      signals_tags = Hashtbl.create 19;
       local_signals = ref [];
       local_scope = [];
       machine_runs = ref IdentMap.empty
@@ -352,16 +365,16 @@ module Make (E : Exp) = struct
 
         | Derived.Emit s ->
           let locals = (List.map (fun x -> x.signal) env.local_scope) in
-          let s' = rename ~loc env.signals s.sname in
+          let s' = rename ~loc env None s.sname in
           mk_tagged (Emit {signal = s'; svalue = mk_atom ~locals s.ivalue}) !+id
 
         | Derived.Nothing -> mk_tagged Nothing !+id
         | Derived.Pause -> mk_tagged Pause !+id
 
-        | Derived.Await s -> mk_tagged (Await (rename ~loc env.signals s)) !+id
+        | Derived.Await s -> mk_tagged (Await (rename ~loc env None s)) !+id
 
         | Derived.Suspend (t, s) ->
-          let s = rename ~loc:ast.loc env.signals s in
+          let s = rename ~loc:ast.loc env None s in
           mk_tagged (Suspend (visit env t, s)) !+id
 
         | Derived.Trap (Label s, t) ->
@@ -371,8 +384,8 @@ module Make (E : Exp) = struct
         | Derived.Exit (Label s) ->
           mk_tagged (Exit (Label (rename_ident env.labels s ast))) !+id
 
-        | Derived.Present (s, t1, t2) ->
-          let s = rename ~loc env.signals s in
+        | Derived.Present ((s, tag), t1, t2) ->
+          let s = rename ~loc env (Some tag) s in
           mk_tagged (Present(s, visit env t1, visit env t2)) !+id
         | Derived.Atom f -> mk_tagged (Atom (
             mk_atom ~locals:(List.map (fun x -> x.signal) env.local_scope) f
@@ -384,7 +397,7 @@ module Make (E : Exp) = struct
           mk_tagged (Signal (s', visit env t)) !+id
 
         | Derived.Run (mident, ids, loc) ->
-          let sigs = List.map (rename ~loc env.signals) ids in
+          let sigs = List.map (rename ~loc env None) ids in
           let machine_id = add_rename_machine env.machine_runs mident sigs in
           mk_tagged (Run (machine_id, sigs, loc)) !+id
 
