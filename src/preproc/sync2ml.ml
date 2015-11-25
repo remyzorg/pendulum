@@ -205,67 +205,36 @@ let grc2ml dep_array fg =
       let res = begin match fg with
         | Call (a, t) -> construct_ml_action dep_array sigs a ++ construct stop t
         | Test (tv, t1, t2, endt) ->
-
-            let t = Unix.gettimeofday () in
-            let res = Schedule.find_join true t1 t2 in
-            let t' = Unix.gettimeofday () in
-
-            let res = begin match endt, res with
-              | None, None ->
-                Format.printf "Nothing: (%a)\n"
-                  Flowgraph.pp_test_value tv ;
-                None
-
-              | Some endt', None ->
-                Format.printf "endt but no join on (%a)\n%a\n===========\n"
-                  Flowgraph.pp_test_value tv
-                  Flowgraph.pp endt';
-                endt
-
-              | None, Some res' ->
-                Format.printf "Join_no_endt: (%a) \n"
-                  Flowgraph.pp_test_value tv;
-                res
-
-              | Some endt', Some res' when res' == endt'->
-                Format.printf "OK:\n"; res
-
-              | Some endt', Some res' ->
-                Format.printf "NOT_OK: (%a) %d %d\n"
-                  Flowgraph.pp_test_value tv
-                  (Obj.magic endt') (Obj.magic res');
-                (* Flowgraph.pp endt'; *)
-                (* Format.printf "%a" Flowgraph.pp res'; *)
-                res
-            end in
-
-            Format.printf "%f\n" (t' -. t);
-
-          begin
-            match res with
-            | Some j when j <> Finish && j <> Pause ->
-              (mls @@ MLif
-                 (construct_test_expr sigs tv,
-                  construct (Some j) t1,
-                  construct (Some j) t2))
-              ++ (match stop with
-                  | Some fg' when fg' == j -> nop
-                  | _ -> construct stop j)
-            | _ ->
-              mls @@ MLif
-                (construct_test_expr sigs tv, construct None t1, construct None t2)
-          end
+           let res =
+             match endt with
+             | None -> Schedule.find_join true t1 t2
+             | Some endt' -> endt
+           in
+           begin
+             match res with
+             | Some j when j <> Finish && j <> Pause ->
+                (mls @@ MLif
+                          (construct_test_expr sigs tv,
+                           construct (Some j) t1,
+                           construct (Some j) t2))
+                ++ (match stop with
+                    | Some fg' when fg' == j -> nop
+                    | _ -> construct stop j)
+             | _ ->
+                mls @@ MLif
+                         (construct_test_expr sigs tv, construct None t1, construct None t2)
+           end
         | Fork (t1, t2, sync) -> assert false
         | Pause -> mls MLpause
         | Finish -> mls MLfinish
-      end
+                end
       in
       Fgtbl.add tbl fg res;
       res
     in match stop with
-    | Some fg' when fg == fg' && fg' <> Finish && fg' <> Pause ->
-      nop
-    | _ -> aux stop fg
+       | Some fg' when fg == fg' && fg' <> Finish && fg' <> Pause ->
+          nop
+       | _ -> aux stop fg
   in
   construct None fg
 
