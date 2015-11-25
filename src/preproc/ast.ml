@@ -57,24 +57,24 @@ module type S = sig
       | Emit of valued_ident
       | Nothing
       | Pause
-      | Suspend of statement * ident
+      | Suspend of statement * (ident * ident option)
       | Trap of label * statement
       | Exit of label
-      | Present of (ident * string) * statement * statement
+      | Present of (ident * ident option) * statement * statement
       | Atom of exp
       | Signal of valued_ident * statement
       | Run of ident * ident list * loc
 
       | Halt
       | Sustain of valued_ident
-      | Present_then of (ident * ident) * statement
-      | Await of ident
-      | Await_imm of ident
-      | Suspend_imm of statement * ident
-      | Abort of statement * ident
-      | Weak_abort of statement * ident
-      | Loop_each of statement * ident
-      | Every of ident * statement
+      | Present_then of (ident * ident option) * statement
+      | Await of (ident * ident option)
+      | Await_imm of (ident * ident option)
+      | Suspend_imm of statement * (ident * ident option)
+      | Abort of statement * (ident * ident option)
+      | Weak_abort of statement * (ident * ident option)
+      | Loop_each of statement * (ident * ident option)
+      | Every of (ident * ident option) * statement
   end
 
   type error =
@@ -172,24 +172,24 @@ module Make (E : Exp) = struct
       | Emit of valued_ident
       | Nothing
       | Pause
-      | Suspend of statement * ident
+      | Suspend of statement * (ident * ident option)
       | Trap of label * statement
       | Exit of label
-      | Present of (ident * ident) * statement * statement
+      | Present of (ident * ident option) * statement * statement
       | Atom of exp
       | Signal of valued_ident * statement
       | Run of ident * ident list * loc
 
       | Halt
       | Sustain of valued_ident
-      | Present_then of ident * statement
-      | Await of ident
-      | Await_imm of ident
-      | Suspend_imm of statement * ident
-      | Abort of statement * ident
-      | Weak_abort of statement * ident
-      | Loop_each of statement * ident
-      | Every of ident * statement
+      | Present_then of (ident * ident option) * statement
+      | Await of (ident * ident option)
+      | Await_imm of (ident * ident option)
+      | Suspend_imm of statement * (ident * ident option)
+      | Abort of statement * (ident * ident option)
+      | Weak_abort of statement * (ident * ident option)
+      | Loop_each of statement * (ident * ident option)
+      | Every of (ident * ident option) * statement
   end
 
 
@@ -371,10 +371,10 @@ module Make (E : Exp) = struct
         | Derived.Nothing -> mk_tagged Nothing !+id
         | Derived.Pause -> mk_tagged Pause !+id
 
-        | Derived.Await s -> mk_tagged (Await (rename ~loc env None s)) !+id
+        | Derived.Await (s, tag) -> mk_tagged (Await (rename ~loc env tag s)) !+id
 
-        | Derived.Suspend (t, s) ->
-          let s = rename ~loc:ast.loc env None s in
+        | Derived.Suspend (t, (s, tag)) ->
+          let s = rename ~loc:ast.loc env tag s in
           mk_tagged (Suspend (visit env t, s)) !+id
 
         | Derived.Trap (Label s, t) ->
@@ -385,7 +385,7 @@ module Make (E : Exp) = struct
           mk_tagged (Exit (Label (rename_ident env.labels s ast))) !+id
 
         | Derived.Present ((s, tag), t1, t2) ->
-          let s = rename ~loc env (Some tag) s in
+          let s = rename ~loc env tag s in
           mk_tagged (Present(s, visit env t1, visit env t2)) !+id
         | Derived.Atom f -> mk_tagged (Atom (
             mk_atom ~locals:(List.map (fun x -> x.signal) env.local_scope) f

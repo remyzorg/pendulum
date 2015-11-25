@@ -83,7 +83,7 @@ let signal_tuple_to_list e =
 let check_signal_presence_expr e =
   let open Ast in
   match e with
-  | { pexp_desc = Pexp_ident {txt = Lident content; loc} } -> {loc; content}
+  | { pexp_desc = Pexp_ident {txt = Lident content; loc} } -> {loc; content}, None
   | [%expr [%e? elt] ## [%e? event]] ->
      let elt_ident = check_expr_ident elt in
      let event_ident =
@@ -92,7 +92,7 @@ let check_signal_presence_expr e =
        | _ -> Error.(syntax_error ~loc:event.pexp_loc Event_name)
        end
      in
-     0
+     elt_ident, Some event_ident
   | _ -> Error.(syntax_error ~loc:e.pexp_loc Signal_name)
 
 
@@ -181,7 +181,7 @@ let ast_of_expr e =
       Error.signal_value_missing e (check_expr_ident signal).content
 
     | [%expr suspend [%e? e] [%e? signal]] ->
-      Suspend (visit e, check_expr_ident signal)
+      Suspend (visit e, check_signal_presence_expr signal)
 
     | [%expr trap [%e? label] [%e? e]] ->
       Trap (Label (check_expr_ident label), visit e)
@@ -203,16 +203,16 @@ let ast_of_expr e =
         (check_signal_presence_expr signal, visit e)
 
     | [%expr await [%e? signal]] ->
-      Await (check_expr_ident signal)
+      Await (check_signal_presence_expr signal)
 
     | [%expr abort [%e? e] [%e? signal]] ->
-      Abort (visit e, check_expr_ident signal)
+      Abort (visit e, check_signal_presence_expr signal)
 
     | [%expr loopeach [%e? e] [%e? signal]] ->
-      Loop_each (visit e, check_expr_ident signal)
+      Loop_each (visit e, check_signal_presence_expr signal)
 
     | [%expr every [%e? e] [%e? signal]] ->
-      Every (check_expr_ident signal, visit e)
+      Every (check_signal_presence_expr signal, visit e)
 
     | [%expr nothing [%e? e_err]]
     (* | [%expr pause [%e? e_err]] *)

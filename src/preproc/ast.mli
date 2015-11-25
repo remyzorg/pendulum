@@ -56,24 +56,24 @@ module type S = sig
       | Emit of valued_ident
       | Nothing
       | Pause
-      | Suspend of statement * ident
+      | Suspend of statement * (ident * ident option)
       | Trap of label * statement
       | Exit of label
-      | Present of (ident * ident) * statement * statement
+      | Present of (ident * ident option) * statement * statement
       | Atom of exp
       | Signal of valued_ident * statement
       | Run of ident * ident list * loc
 
       | Halt
       | Sustain of valued_ident
-      | Present_then of (ident * ident) * statement
-      | Await of ident
-      | Await_imm of ident
-      | Suspend_imm of statement * ident
-      | Abort of statement * ident
-      | Weak_abort of statement * ident
-      | Loop_each of statement * ident
-      | Every of ident * statement
+      | Present_then of (ident * ident option) * statement
+      | Await of (ident * ident option)
+      | Await_imm of (ident * ident option)
+      | Suspend_imm of statement * (ident * ident option)
+      | Abort of statement * (ident * ident option)
+      | Weak_abort of statement * (ident * ident option)
+      | Loop_each of statement * (ident * ident option)
+      | Every of (ident * ident option) * statement
   end
 
   type error =
