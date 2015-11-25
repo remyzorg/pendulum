@@ -175,7 +175,9 @@ let (<::) sel l =
 let deplist sel =
   let open Selection_tree in
   let env = ref [] in
+  let maxid = ref 0 in
   let rec visit sel =
+    maxid := max !maxid sel.label;
     match sel.t with
     | Bottom -> env := (sel.label, []) :: !env; sel <:: []
     | Pause -> env := (sel.label, []) :: !env; sel <:: []
@@ -185,7 +187,7 @@ let deplist sel =
     | Ref st ->
       let l = visit st in
       env := (sel.label, l) :: !env; sel <:: l
-  in ignore (visit sel); !env
+  in ignore(visit sel); !maxid, !env
 
 let construct_test_expr mr tv =
   let open Flowgraph in
@@ -205,36 +207,31 @@ let grc2ml dep_array fg =
       let res = begin match fg with
         | Call (a, t) -> construct_ml_action dep_array sigs a ++ construct stop t
         | Test (tv, t1, t2, endt) ->
-           let res =
-             match endt with
-             | None -> Schedule.find_join true t1 t2
-             | Some endt' -> endt
-           in
-           begin
-             match res with
-             | Some j when j <> Finish && j <> Pause ->
-                (mls @@ MLif
-                          (construct_test_expr sigs tv,
-                           construct (Some j) t1,
-                           construct (Some j) t2))
-                ++ (match stop with
-                    | Some fg' when fg' == j -> nop
-                    | _ -> construct stop j)
-             | _ ->
-                mls @@ MLif
-                         (construct_test_expr sigs tv, construct None t1, construct None t2)
-           end
+          begin
+            match endt with
+            | Some j when j <> Finish && j <> Pause ->
+              (mls @@ MLif
+                 (construct_test_expr sigs tv,
+                  construct (Some j) t1,
+                  construct (Some j) t2))
+              ++ (match stop with
+                  | Some fg' when fg' == j -> nop
+                  | _ -> construct stop j)
+            | _ ->
+              mls @@ MLif
+                (construct_test_expr sigs tv, construct None t1, construct None t2)
+          end
         | Fork (t1, t2, sync) -> assert false
         | Pause -> mls MLpause
         | Finish -> mls MLfinish
-                end
+      end
       in
       Fgtbl.add tbl fg res;
       res
     in match stop with
-       | Some fg' when fg == fg' && fg' <> Finish && fg' <> Pause ->
-          nop
-       | _ -> aux stop fg
+    | Some fg' when fg == fg' && fg' <> Finish && fg' <> Pause ->
+      nop
+    | _ -> aux stop fg
   in
   construct None fg
 
@@ -511,8 +508,8 @@ module Ocaml_gen = struct
         | l -> Ast_helper.Exp.tuple ~loc @@ List.map (fun s -> [%expr !! [%e add_ref_local s]]) l
       in [%expr [%e mk_ident ident] [%e tuple]]
 
-  let instantiate dep_array sigs env sel ml =
-    init (Array.length dep_array) sigs env sel (construct_sequence env dep_array ml)
+  let instantiate maxid dep_array sigs env sel ml =
+    init maxid sigs env sel (construct_sequence env dep_array ml)
 
 
 
@@ -520,14 +517,12 @@ end
 
 
 let generate sigs env tast =
-
-  let selection_tree, controlflow_graph as grc = Of_ast.construct tast in
-  Schedule.tag_tested_stmts selection_tree controlflow_graph;
+  let selection_tree, flowgraph as grc = Of_ast.construct tast in
+  Schedule.tag_tested_stmts selection_tree flowgraph;
   let _deps = Schedule.check_causality_cycles grc in
-  let interleaved_cfg = Schedule.interleave controlflow_graph in
-  let deps = deplist selection_tree in
-  let dep_array = Array.make (List.length deps + 1) [] in
-  List.iter (fun (i, l) -> dep_array.(i) <- l) deps;
+  let interleaved_cfg = Schedule.interleave flowgraph in
+  let maxid, deps = deplist selection_tree in
+  let dep_array = Array.make (maxid + 1) [] in
   let ml_ast = grc2ml dep_array interleaved_cfg in
-  let ocaml_ast = Ocaml_gen.instantiate dep_array sigs env selection_tree ml_ast in
+  let ocaml_ast = Ocaml_gen.instantiate maxid dep_array sigs env selection_tree ml_ast in
   ocaml_ast
