@@ -26,7 +26,7 @@ module type S = sig
 
   type signal_origin = Local | Input | Output
 
-  type signal = { ident : ident; origin : signal_origin; tag : string option}
+  type signal = { ident : ident; origin : signal_origin; tag : ident option}
   type label = Label of ident
   type atom = { locals : signal list; exp : exp}
 
@@ -104,12 +104,13 @@ module type S = sig
 
 
     type env = {
+      global_signals : signal list;
       labels : int IdentMap.t;
-      global_scope : int IdentMap.t ref;
-      signals : (int * signal_origin * string option) SignalMap.t;
-      signals_tags : (string, string list) Hashtbl.t;
-      local_signals : (valued_signal) list ref;
-      local_scope : valued_signal list;
+      global_occurences : int IdentMap.t ref;
+      signals : (int * signal_origin * ident option) SignalMap.t;
+      signals_tags : (string, ident list) Hashtbl.t;
+      all_local_signals : (valued_signal) list ref;
+      local_signals_scope : valued_signal list;
       machine_runs : (int * (int * signal list) list) IdentMap.t ref;
     }
 

@@ -303,7 +303,6 @@ module Ocaml_gen = struct
                 in [%e acc]]
        ) e locals)
 
-
   let mk_machine_instantiation machine_ident inst_int_id args =
     let inst_ident = mk_mach_inst_ident machine_ident inst_int_id in (* usefull to name setters *)
     let step_fun_ident = mk_mach_inst_step inst_ident in (* the actual reaction function *)
@@ -325,8 +324,69 @@ module Ocaml_gen = struct
     in idents_as_pat, machine_fun, args_init_tuple_exp, idents_as_ref, idents
 
 
+  let construct_local_signals_definitions env e = List.fold_left (fun acc vs ->
+      let rebinds = rebind_locals_let vs.svalue.locals
+          [%expr ref (make_signal [%e vs.svalue.exp])]
+      in
+      [%expr let [%p mk_pat_var vs.signal.ident] = [%e rebinds] in [%e acc]]
+    ) e !(env.Tagged.all_local_signals)
+
+  let append_tag s tag =
+    { s with ident = {s.ident with
+          content = Format.sprintf "%s##%s" s.ident.content tag.content;
+        }} 
+
+  let construct_global_signals_definitions env e = Tagged.(List.fold_left (fun acc s ->
+      let signal_to_definition init_val next_def s =
+        [%expr let [%p mk_pat_var s.ident] =
+                 make_signal [%e init_val] in [%e next_def]]
+      in
+      try
+        Hashtbl.find env.signals_tags s.ident.content
+        |> List.map (append_tag s)
+        |> List.fold_left (signal_to_definition [%expr ()]) acc
+      with Not_found -> signal_to_definition (mk_ident s.ident) acc s
+    ) (construct_local_signals_definitions env e) env.global_signals)
+
+  let construct_signals_setters_definitions env e =
+    let open Tagged in
+    let locals_setters =
+      (List.fold_left (fun acc vs ->
+           [%expr set_absent ![%e mk_ident vs.signal.ident]; [%e acc]]
+         ) [%expr ()] !(env.all_local_signals))
+    in
+    let globals_setters = (List.fold_left (fun acc s ->
+        [%expr set_absent [%e mk_ident s.ident]; [%e acc]]
+      ) locals_setters env.global_signals)
+    in
+    [%expr let set_absent () = [%e globals_setters] in [%e e]]
+
+  let construct_input_setters_tuple env stepfun =
+    let open Tagged in
+    match env.global_signals with
+    | [] -> true, [%expr stepfun]
+    | [s] -> false, [%expr fun [%p mk_pat_var setter_arg] ->
+                    set_present_value [%e mk_ident s.ident]
+                      [%e mk_ident setter_arg], [%e stepfun]]
+    | l -> false, Exp.tuple @@ List.rev @@ (stepfun :: List.map (fun s ->
+        [%expr fun [%p mk_pat_var setter_arg ] ->
+               set_present_value [%e mk_ident s.ident] [%e mk_ident setter_arg]]
+      ) env.global_signals)
+
+  let construct_machine_registers_definitions env e =
+    IdentMap.fold (fun k (_, insts) acc ->
+        List.fold_left (fun acc (inst_int_id, args) ->
+            let idents_as_pat, machine_fun, args_init_tuple_exp, idents_as_ref, _ =
+              mk_machine_instantiation k inst_int_id args
+            in
+            [%expr let [%p idents_as_pat] =
+                     let [%p idents_as_pat] = [%e machine_fun] [%e args_init_tuple_exp]
+                     in [%e idents_as_ref]
+                   in [%e acc]]
+          ) acc (List.rev insts)
+      ) !(env.Tagged.machine_runs) e
+
   let init nstmts global_sigs env sel step_function_body =
-    let open Ast.Tagged in
     let open Selection_tree in
     let sigs_step_arg =
       match global_sigs with
@@ -334,65 +394,23 @@ module Ocaml_gen = struct
       | [s] -> mk_pat_var s.ident
       | l -> Pat.tuple @@ List.rev_map (fun s -> mk_pat_var s.ident) l
     in
-    let let_sigs_local e = List.fold_left (fun acc vs ->
-        let rebinds = rebind_locals_let vs.svalue.locals
-            [%expr ref (make_signal [%e vs.svalue.exp])]
-        in
-        [%expr let [%p mk_pat_var vs.signal.ident] = [%e rebinds] in [%e acc]]
-      ) e !(env.local_signals)
+    let stepfun_expression =
+      [%expr fun () -> try [%e step_function_body] with
+             | Pause_exc -> set_absent (); Pause
+             | Finish_exc -> set_absent (); Bitset.add [%e select_env_ident] 0; Finish]
     in
-    let let_sigs_global e = List.fold_left (fun acc s ->
-        [%expr let [%p mk_pat_var s.ident] =
-                 make_signal [%e mk_ident s.ident] in [%e acc]]
-      ) (let_sigs_local e) (global_sigs)
+    let no_params, input_setters =
+      construct_input_setters_tuple env stepfun_expression
     in
-    let let_set_sigs_absent e =
-      let set_absent_locals =
-        (List.fold_left (fun acc vs ->
-             [%expr set_absent ![%e mk_ident vs.signal.ident]; [%e acc]]
-           ) [%expr ()] !(env.local_signals))
-      in
-      let set_absent_globals = (List.fold_left (fun acc s ->
-          [%expr set_absent [%e mk_ident s.ident]; [%e acc]]
-        ) set_absent_locals global_sigs)
-      in
-      [%expr let set_absent () = [%e set_absent_globals] in [%e e]]
-    in
-    let return_input_setters stepfun =
-      match global_sigs with
-      | [] -> true, [%expr stepfun]
-      | [s] -> false, [%expr fun [%p mk_pat_var setter_arg] ->
-                      set_present_value [%e mk_ident s.ident]
-                        [%e mk_ident setter_arg], [%e stepfun]]
-      | l -> false, Exp.tuple @@ List.rev @@ (stepfun :: List.map (fun s ->
-          [%expr fun [%p mk_pat_var setter_arg ] ->
-                 set_present_value [%e mk_ident s.ident] [%e mk_ident setter_arg]]
-        ) global_sigs)
-    in
-    let machine_registers e =
-      IdentMap.fold (fun k (_, insts) acc ->
-          List.fold_left (fun acc (inst_int_id, args) ->
-              (* Format.printf "Instantiating machine %s, inst n°%d\n" k.content inst_int_id; *)
-              (* Format.printf "%a" Ast.Tagged.print_env env; *)
-              let idents_as_pat, machine_fun, args_init_tuple_exp, idents_as_ref, _ =
-                mk_machine_instantiation k inst_int_id args
-              in
-              [%expr let [%p idents_as_pat] =
-                       let [%p idents_as_pat] = [%e machine_fun] [%e args_init_tuple_exp]
-                       in [%e idents_as_ref]
-                     in [%e acc]]
-            ) acc (List.rev insts)
-        ) !(env.machine_runs) e
-    in
-    let returns =
-      let stepfun =
-        [%expr fun () -> try [%e step_function_body] with
-               | Pause_exc -> set_absent (); Pause
-               | Finish_exc -> set_absent (); Bitset.add [%e select_env_ident] 0; Finish]
-      in
-      let empty_params, input_setters = return_input_setters stepfun in
-      if empty_params then [%expr fun () -> [%e stepfun]]
+    let return_value_expr =
+      if no_params then [%expr fun () -> [%e stepfun_expression]]
       else [%expr [%e input_setters]]
+    in
+    let body_expression =
+      construct_global_signals_definitions env
+      @@ construct_signals_setters_definitions env
+      @@ construct_machine_registers_definitions env
+      @@ return_value_expr
     in
     [%expr
       let open Pendulum.Runtime_misc in
@@ -400,8 +418,7 @@ module Ocaml_gen = struct
       fun [%p sigs_step_arg] ->
         let [%p Pat.var select_env_var] =
           Bitset.make [%e int_const (1 + nstmts)]
-        in
-        [%e let_sigs_global (let_set_sigs_absent @@ machine_registers returns)]]
+        in [%e body_expression ]]
 
 
   let rec construct_test env depl test =

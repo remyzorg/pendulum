@@ -27,7 +27,7 @@ module type S = sig
 
   type signal_origin = Local | Input | Output
 
-  type signal = { ident : ident; origin : signal_origin; tag : string option}
+  type signal = { ident : ident; origin : signal_origin; tag : ident option}
   type label = Label of ident
   type atom = { locals : signal list; exp : exp}
 
@@ -103,14 +103,14 @@ module type S = sig
       | Run of ident * signal list * loc
     and tagged = (tagged_ast) location
 
-
     type env = {
+      global_signals : signal list;
       labels : int IdentMap.t;
-      global_scope : int IdentMap.t ref;
-      signals : (int * signal_origin * string option) SignalMap.t;
-      signals_tags : (string, string list) Hashtbl.t;
-      local_signals : (valued_signal) list ref;
-      local_scope : valued_signal list;
+      global_occurences : int IdentMap.t ref;
+      signals : (int * signal_origin * ident option) SignalMap.t;
+      signals_tags : (string, ident list) Hashtbl.t;
+      all_local_signals : (valued_signal) list ref;
+      local_signals_scope : valued_signal list;
       machine_runs : (int * (int * signal list) list) IdentMap.t ref;
     }
 
@@ -146,7 +146,7 @@ module Make (E : Exp) = struct
 
   type signal_origin = Local | Input | Output
 
-  type signal = { ident : ident; origin : signal_origin; tag  : string option}
+  type signal = { ident : ident; origin : signal_origin; tag  : ident option}
 
   type atom = { locals : signal list; exp : exp}
 
@@ -253,19 +253,20 @@ module Make (E : Exp) = struct
       {id; st = {loc ; content}}
 
     type env = {
+      global_signals : signal list;
       labels : int IdentMap.t;
-      global_scope : int IdentMap.t ref;
-      signals : (int * signal_origin * string option) SignalMap.t;
-      signals_tags : (string, string list) Hashtbl.t;
-      local_signals : (valued_signal) list ref;
-      local_scope : valued_signal list;
+      global_occurences : int IdentMap.t ref;
+      signals : (int * signal_origin * ident option) SignalMap.t;
+      signals_tags : (string, ident list) Hashtbl.t;
+      all_local_signals : (valued_signal) list ref;
+      local_signals_scope : valued_signal list;
       machine_runs : (int * (int * signal list) list) IdentMap.t ref;
     }
 
   let print_env fmt e =
     let open Format in
-    fprintf fmt "====================\nglobal_scope: ";
-    IdentMap.iter (fun k v -> fprintf fmt "%s (%d), " k.content v) (!(e.global_scope));
+    fprintf fmt "====================\nglobal_occurences: ";
+    IdentMap.iter (fun k v -> fprintf fmt "%s (%d), " k.content v) (!(e.global_occurences));
     fprintf fmt "\nmachine_runs: \n";
     IdentMap.iter (fun k (cntinst, insts) ->
         fprintf fmt "  mach(%s) (%d) : " k.content cntinst;
@@ -275,20 +276,20 @@ module Make (E : Exp) = struct
     fprintf fmt "\n====================\n"
 
     let add_signal env locals vi =
-      let signals, s' = match IdentMap.find vi.sname !(env.global_scope) with
+      let signals, s' = match IdentMap.find vi.sname !(env.global_occurences) with
         | exception Not_found ->
           let s = mk_signal vi.sname in
-          env.global_scope := IdentMap.add vi.sname 0 !(env.global_scope);
+          env.global_occurences := IdentMap.add vi.sname 0 !(env.global_occurences);
           SignalMap.add (mk_signal vi.sname) (0, Local, s.tag) env.signals, s
         | i ->
           let s = mk_signal vi.sname in
-          env.global_scope := IdentMap.add vi.sname (succ i) !(env.global_scope);
+          env.global_occurences := IdentMap.add vi.sname (succ i) !(env.global_occurences);
           SignalMap.add (mk_signal vi.sname) (succ i, Local, s.tag) env.signals,
           {s with ident = {s.ident with content = Format.sprintf "%s~%d" s.ident.content (succ i)}}
       in
       let vs = {signal = s'; svalue = mk_atom ~locals vi.ivalue} in
-      env.local_signals := vs :: !(env.local_signals);
-      {env with signals; local_scope = vs :: env.local_scope}, vs
+      env.all_local_signals := vs :: !(env.all_local_signals);
+      {env with signals; local_signals_scope = vs :: env.local_signals_scope}, vs
 
 
     let add_label env s = IdentMap.(match find s env with
@@ -317,9 +318,9 @@ module Make (E : Exp) = struct
           begin match tag with
           | Some ext ->
              let tags = try Hashtbl.find env.signals_tags s.content with Not_found -> [] in
-             Hashtbl.add env.signals_tags s.content (ext.content :: tags);
+             Hashtbl.add env.signals_tags s.content (ext :: tags);
              let ident = mk_loc ~loc:s.loc (Format.sprintf "%s##%s" s.content ext.content) in
-             {ident; origin; tag = Some ext.content}
+             {ident; origin; tag = Some ext}
           | None -> {ident = s; origin; tag = None}
           end
        | (i, origin, _) ->
@@ -327,8 +328,9 @@ module Make (E : Exp) = struct
 
 
     let create_env sigs = {
+      global_signals = sigs;
       labels = IdentMap.empty;
-      global_scope = ref IdentMap.(List.fold_left (fun accmap s ->
+      global_occurences = ref IdentMap.(List.fold_left (fun accmap s ->
           add s.ident 0 accmap )
           empty sigs);
 
@@ -337,8 +339,8 @@ module Make (E : Exp) = struct
           empty sigs);
 
       signals_tags = Hashtbl.create 19;
-      local_signals = ref [];
-      local_scope = [];
+      all_local_signals = ref [];
+      local_signals_scope = [];
       machine_runs = ref IdentMap.empty
     }
 
@@ -364,7 +366,7 @@ module Make (E : Exp) = struct
           mk_tagged (Par (st1, st2)) !+id
 
         | Derived.Emit s ->
-          let locals = (List.map (fun x -> x.signal) env.local_scope) in
+          let locals = (List.map (fun x -> x.signal) env.local_signals_scope) in
           let s' = rename ~loc env None s.sname in
           mk_tagged (Emit {signal = s'; svalue = mk_atom ~locals s.ivalue}) !+id
 
@@ -388,11 +390,11 @@ module Make (E : Exp) = struct
           let s = rename ~loc env tag s in
           mk_tagged (Present(s, visit env t1, visit env t2)) !+id
         | Derived.Atom f -> mk_tagged (Atom (
-            mk_atom ~locals:(List.map (fun x -> x.signal) env.local_scope) f
+            mk_atom ~locals:(List.map (fun x -> x.signal) env.local_signals_scope) f
           )) !+id
 
         | Derived.Signal (vid,t) ->
-          let locals = List.map (fun x -> x.signal) env.local_scope in
+          let locals = List.map (fun x -> x.signal) env.local_signals_scope in
           let env, s' = add_signal env locals vid in
           mk_tagged (Signal (s', visit env t)) !+id
 
