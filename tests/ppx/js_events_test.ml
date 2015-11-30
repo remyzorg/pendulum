@@ -2,7 +2,7 @@
 open Pendulum.Runtime_ast
 
 
-let%sync basic =
+let%to_dot_grc basic =
   input elt;
   input elt2;
 
