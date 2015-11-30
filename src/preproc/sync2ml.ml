@@ -207,8 +207,13 @@ let grc2ml dep_array fg =
       let res = begin match fg with
         | Call (a, t) -> construct_ml_action dep_array sigs a ++ construct stop t
         | Test (tv, t1, t2, endt) ->
-          begin
+          let res =
             match endt with
+            | None -> Schedule.find_join true t1 t2
+            | Some endt' -> endt
+          in
+          begin
+            match res with
             | Some j when j <> Finish && j <> Pause ->
               (mls @@ MLif
                  (construct_test_expr sigs tv,

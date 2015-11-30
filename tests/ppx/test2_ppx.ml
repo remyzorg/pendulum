@@ -97,7 +97,7 @@ let%sync reactive_player =
   end
 
 
-let%to_dot_grc basic =
+let%sync basic =
   input elt;
   input elt2;
 
