@@ -3,7 +3,7 @@ open OUnit
 open Pendulum.Runtime_ast
 
 open Test2_ppx
-open Js_events_test
+
 
 
 let test_loop_pause ctx =

@@ -268,7 +268,7 @@ module Ocaml_gen = struct
     in ignore (visit sel); !env
 
   let setter_arg = Ast.mk_loc "set~arg" (* argument name for the returned setter *)
-
+  let stepfun_name = "p~stepfun"
   let select_env_name = "pendulum~state"
   let select_env_var = Location.(mkloc select_env_name !Ast_helper.default_loc)
   let select_env_ident = mk_ident (Ast.mk_loc select_env_name)
@@ -334,7 +334,7 @@ module Ocaml_gen = struct
   let append_tag s tag =
     { s with ident = {s.ident with
           content = Format.sprintf "%s##%s" s.ident.content tag.content;
-        }} 
+        }}
 
   let construct_global_signals_definitions env e = Tagged.(List.fold_left (fun acc s ->
       let signal_to_definition init_val next_def s =
@@ -386,55 +386,42 @@ module Ocaml_gen = struct
           ) acc (List.rev insts)
       ) !(env.Tagged.machine_runs) e
 
-  let construct_init nstmts global_sigs env sel step_function_body =
+  let construct_callbacks_assigns env e =
+    let opexpr loc = mk_ident @@ Ast.mk_loc ~loc "##." in
+    let construct_lhs s tag =
+      [%expr [%e opexpr tag.loc] !![%e mk_ident s.ident] [%e mk_ident tag]]
+    in
+    let construct_rhs s tag =
+      [%expr Dom_html.handler (
+             fun _ ->
+               set_present_value [%e mk_ident (append_tag s tag).ident] ();
+               ignore @@ [%e mk_ident @@ Ast.mk_loc stepfun_name] ();
+               Js._true)]
+    in
+    let construct_assign s acc tag =
+      [%expr [%e construct_lhs s tag] := [%e construct_rhs s tag]; [%e acc]]
+    in List.fold_left (
+      fun acc s -> try
+          Hashtbl.find env.Tagged.signals_tags s.ident.content
+          |> List.fold_left (construct_assign s) acc
+        with Not_found -> acc
+    ) e env.Tagged.global_signals
+
+
+
+  let construct_instanciation_body nstmts env sel stepfun_body =
     let open Selection_tree in
     let sigs_step_arg =
-      match global_sigs with
+      match env.Tagged.global_signals with
       | [] -> [%pat? ()]
       | [s] -> mk_pat_var s.ident
       | l -> Pat.tuple @@ List.rev_map (fun s -> mk_pat_var s.ident) l
     in
-    let stepfun_expression =
-      [%expr fun () -> try [%e step_function_body] with
-             | Pause_exc -> set_absent (); Pause
-             | Finish_exc -> set_absent (); Bitset.add [%e select_env_ident] 0; Finish]
-    in
-    let no_params, input_setters =
-      construct_input_setters_tuple env stepfun_expression
-    in
-    let return_value_expr =
-      if no_params then [%expr fun () -> [%e stepfun_expression]]
-      else [%expr [%e input_setters]]
-    in
-    let body_expression =
-      construct_global_signals_definitions env
-      @@ construct_signals_setters_definitions env
-      @@ construct_machine_registers_definitions env
-      @@ return_value_expr
-    in
-    [%expr
-      let open Pendulum.Runtime_misc in
-      let open Pendulum.Machine in
-      fun [%p sigs_step_arg] ->
-        let [%p Pat.var select_env_var] =
-          Bitset.make [%e int_const (1 + nstmts)]
-        in [%e body_expression ]]
-
-  let construct_init nstmts global_sigs env sel stepfun_body =
-    let open Selection_tree in
-    let sigs_step_arg =
-      match global_sigs with
-      | [] -> [%pat? ()]
-      | [s] -> mk_pat_var s.ident
-      | l -> Pat.tuple @@ List.rev_map (fun s -> mk_pat_var s.ident) l
-    in
-
     let stepfun_lambda_expr =
       [%expr fun () -> try [%e stepfun_body] with
              | Pause_exc -> set_absent (); Pause
              | Finish_exc -> set_absent (); Bitset.add [%e select_env_ident] 0; Finish]
     in
-    let stepfun_name = "p~stepfun" in
     let stepfun_ident_expr = mk_ident @@ Ast.mk_loc stepfun_name in
     let stepfun_definition e =
       [%expr let [%p mk_pat_var @@ Ast.mk_loc stepfun_name] =
@@ -444,7 +431,6 @@ module Ocaml_gen = struct
     let no_params, input_setters_tuple =
       construct_input_setters_tuple env stepfun_ident_expr
     in
-
     let return_value_expr =
       if no_params then [%expr [%e stepfun_ident_expr]]
       else [%expr [%e input_setters_tuple]]
@@ -454,6 +440,7 @@ module Ocaml_gen = struct
       @@ construct_signals_setters_definitions env
       @@ construct_machine_registers_definitions env
       @@ stepfun_definition
+      @@ construct_callbacks_assigns env
       @@ return_value_expr
     in
     [%expr
@@ -573,7 +560,7 @@ module Ocaml_gen = struct
 end
 
 
-let generate sigs env tast =
+let generate env tast =
   let selection_tree, flowgraph as grc = Of_ast.construct tast in
   Schedule.tag_tested_stmts selection_tree flowgraph;
   let _deps = Schedule.check_causality_cycles grc in
@@ -582,6 +569,6 @@ let generate sigs env tast =
   let dep_array = Array.make (maxid + 1) [] in
   let ml_ast = grc2ml dep_array interleaved_cfg in
   Ocaml_gen.(
-    construct_init maxid sigs env selection_tree
+    construct_instanciation_body maxid env selection_tree
     @@ construct_sequence env dep_array ml_ast
   )

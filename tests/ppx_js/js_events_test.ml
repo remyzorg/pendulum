@@ -2,18 +2,21 @@
 open Pendulum.Runtime_ast
 
 
-let%to_dot_grc basic =
+let%sync basic =
   input elt;
   input elt2;
 
   loop begin
-    present elt2##mousedown
-      (atom (Format.printf "click\n"))
+    present elt2##onmouseover
+      (atom (Format.printf "mouseover\n"))
   end
   ||
   loop begin
-    present elt##click
+    present elt##onclick
       (atom (Format.printf "click\n"))
   end
+
+
+
 
 
