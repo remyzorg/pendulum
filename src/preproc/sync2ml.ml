@@ -353,30 +353,37 @@ module Ocaml_gen = struct
       with Not_found -> signal_to_definition (mk_ident s.ident) acc s
     ) (construct_local_signals_definitions env e) env.global_signals)
 
-  let construct_signals_setters_definitions env e =
+  let construct_set_all_absent_definition env e =
     let open Tagged in
     let locals_setters =
       (List.fold_left (fun acc vs ->
            [%expr set_absent ![%e mk_ident vs.signal.ident]; [%e acc]]
          ) [%expr ()] !(env.all_local_signals))
     in
-    let globals_setters = (List.fold_left (fun acc s ->
-        [%expr set_absent [%e mk_ident s.ident]; [%e acc]]
-      ) locals_setters env.global_signals)
+    let globals_setters =
+      let cons_setabs s acc tag =
+        [%expr set_absent [%e mk_ident @@ (append_tag s tag).ident]; [%e acc]]
+      in List.fold_left (
+        fun acc s -> try
+            Hashtbl.find env.Tagged.signals_tags s.ident.content
+            |> List.fold_left (cons_setabs s) acc
+          with Not_found -> [%expr set_absent [%e mk_ident s.ident]; [%e acc]]
+      ) locals_setters env.global_signals
     in
     [%expr let set_absent () = [%e globals_setters] in [%e e]]
 
   let construct_input_setters_tuple env stepfun =
     let open Tagged in
-    match env.global_signals with
+    let globals =
+      List.filter (fun s -> not @@ Hashtbl.mem env.Tagged.signals_tags s.ident.content)
+        env.global_signals
+    in
+    match globals with
     | [] -> true, [%expr stepfun]
-    | [s] -> false, [%expr fun [%p mk_pat_var setter_arg] ->
-                    set_present_value [%e mk_ident s.ident]
-                      [%e mk_ident setter_arg], [%e stepfun]]
-    | l -> false, Exp.tuple @@ List.rev @@ (stepfun :: List.map (fun s ->
-        [%expr fun [%p mk_pat_var setter_arg ] ->
-               set_present_value [%e mk_ident s.ident] [%e mk_ident setter_arg]]
-      ) env.global_signals)
+    | [s] -> false, [%expr set_present_value [%e mk_ident s.ident], [%e stepfun]]
+    | l -> false, Exp.tuple @@ List.fold_left (fun acc s ->
+        [%expr set_present_value [%e mk_ident s.ident]] :: acc
+      ) [stepfun] l
 
   let construct_machine_registers_definitions env e =
     IdentMap.fold (fun k (_, insts) acc ->
@@ -394,7 +401,7 @@ module Ocaml_gen = struct
   let construct_callbacks_assigns env e =
     let opexpr loc = mk_ident @@ Ast.mk_loc ~loc "##." in
     let construct_lhs s tag =
-      [%expr [%e opexpr tag.loc] !![%e mk_ident s.ident] [%e mk_ident tag]]
+      [%expr [%e opexpr tag.loc] [%e mk_ident s.ident] [%e mk_ident tag]]
     in
     let construct_rhs s tag =
       [%expr Dom_html.handler (
@@ -442,7 +449,7 @@ module Ocaml_gen = struct
     in
     let body_expression =
       construct_global_signals_definitions env
-      @@ construct_signals_setters_definitions env
+      @@ construct_set_all_absent_definition env
       @@ construct_machine_registers_definitions env
       @@ stepfun_definition
       @@ construct_callbacks_assigns env
