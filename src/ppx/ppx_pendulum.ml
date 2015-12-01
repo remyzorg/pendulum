@@ -159,6 +159,9 @@ let ast_of_expr e =
     | [%expr atom [%e? e]] ->
       Atom e
 
+    | [%expr !([%e? e])] ->
+      Atom e
+
     | [%expr loop [%e? e]] ->
       Loop (visit e)
 

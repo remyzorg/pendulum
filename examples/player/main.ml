@@ -57,34 +57,26 @@ let%sync reactive_player =
   let no_update = () in
   let state = false in
   loop begin
-    present play_pause##onclick
-      (emit state (not !!state));
+    present play_pause##onclick (emit state (not !!state));
     pause
-  end
-  ||
-  loop begin
-    present state (
-      atom (update_state (!!state) media play_pause)
-    );
+  end || loop begin
+    present state !(update_state (!!state) media play_pause);
     pause
-  end
-  ||
-  loop begin
+  end || loop begin
     await progress_bar##onmousedown;
     trap t' (loop (
         emit no_update ();
         present progress_bar##onmouseup (
-          atom (update_media media progress_bar);
+          !(update_media media progress_bar);
           exit t');
         pause)
-      ); pause
-  end
-  ||
-  loop begin
+      );
+    pause
+  end || loop begin
     present no_update nothing
-      (present media##ontimeupdate (atom(
-           update_slider progress_bar media
-         ))); pause
+      (present media##ontimeupdate !(
+          update_slider progress_bar media
+        )); pause
   end
 
 

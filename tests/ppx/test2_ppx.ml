@@ -110,3 +110,10 @@ let%sync basic =
     present elt##onclick
       (atom (Format.printf "click\n"))
   end
+
+
+let%sync tilde =
+  loop begin
+    !(Format.printf "lol");
+    pause
+  end
