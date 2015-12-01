@@ -163,19 +163,29 @@ let ast_of_expr e =
       Loop (visit e)
 
     | [%expr [%e? e1]; [%e? e2]] ->
-      Seq (visit e1, visit e2)
+      let e1' = visit e1 in
+      let e2' = visit e2 in
+      Seq (e1', e2')
 
     | [%expr [%e? e1] || [%e? e2]] ->
-      Par (visit e1, visit e2)
+      let e1' = visit e1 in
+      let e2' = visit e2 in
+      Par (e1', e2')
 
     | [%expr present [%e? signal] [%e? e1] [%e? e2]] ->
-      Present (check_signal_presence_expr signal, visit e1, visit e2)
+      let e1' = visit e1 in
+      let e2' = visit e2 in
+      Present (check_signal_presence_expr signal, e1', e2')
 
     | [%expr let [%p? signal] = [%e? e_value] in [%e? e]] ->
-      Signal (Ast.mk_vid (check_pat_ident signal) e_value, visit e)
+      let vid = Ast.mk_vid (check_pat_ident signal) e_value in
+      let e' = visit e in
+      Signal (vid, e')
 
     | [%expr signal [%e? signal] [%e? e_value] [%e? e]] ->
-      Signal (Ast.mk_vid (check_expr_ident signal) e_value, visit e)
+      let vid = Ast.mk_vid (check_expr_ident signal) e_value in
+      let e' = visit e in
+      Signal (vid, e')
 
     | [%expr signal [%e? signal] [%e? _]] ->
       Error.signal_value_missing e (check_expr_ident signal).content

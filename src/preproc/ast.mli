@@ -35,7 +35,8 @@ module type S = sig
   val mk_signal : ?origin:signal_origin -> ident -> signal
 
   val mk_vsig : signal -> signal list -> exp -> valued_signal
-  val mk_vid : ident -> exp -> valued_ident
+
+  val mk_vid : ident -> exp -> valued_ident 
 
   val mk_atom : ?locals:signal list -> exp -> atom
 

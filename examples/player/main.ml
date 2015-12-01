@@ -1,6 +1,19 @@
 
 open Firebug
 
+module Dom_html = struct
+  include Dom_html
+  open Js
+  class type _audioElement = object
+    inherit mediaElement
+    method ontimeupdate : (_audioElement t, mouseEvent t) event_listener writeonly_prop
+  end
+  module Coerce = struct
+    include CoerceTo
+    let unsafeCoerce tag (e : #element t) = Js.some (Js.Unsafe.coerce e)
+    let audio :  #element t -> _audioElement t opt = fun e -> unsafeCoerce "audio" e
+  end
+end
 
 let error f = Printf.ksprintf
     (fun s -> Firebug.console##error (Js.string s); failwith s) f
@@ -12,6 +25,13 @@ let alert f = Printf.ksprintf
 let (@>) s coerce =
   Js.Opt.get (coerce @@ Dom_html.getElementById s)
     (fun () -> error "can't find element %s" s)
+
+
+
+
+
+
+
 
 let update_slider slider media =
   slider##.value := Js.string @@ Format.sprintf "%0.f"
@@ -74,7 +94,7 @@ let main _ =
   let open Dom_html in
   let play_button = "play" @> CoerceTo.button in
   let progress_bar = "progress" @> CoerceTo.input in
-  let media = "media" @> CoerceTo.audio in
+  let media = "media" @> Coerce.audio in
   let _react = reactive_player (play_button, progress_bar, media) in
   Js._false
 
