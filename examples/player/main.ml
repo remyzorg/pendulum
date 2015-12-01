@@ -92,8 +92,8 @@ let wrapper react f p = Dom_html.handler (fun _ -> f p;  react (); Js._true)
 
 let main _ =
   let open Dom_html in
-  let play_button = "play" @> CoerceTo.button in
-  let progress_bar = "progress" @> CoerceTo.input in
+  let play_button = "play" @> Coerce.button in
+  let progress_bar = "progress" @> Coerce.input in
   let media = "media" @> Coerce.audio in
   let _react = reactive_player (play_button, progress_bar, media) in
   Js._false

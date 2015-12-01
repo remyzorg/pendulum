@@ -29,10 +29,7 @@ let _ =
   let open Dom_html in
   window##.onload := handler (fun _ ->
       let area = "tarea" @> CoerceTo.a in
-      (* let c = "canvas" @> CoerceTo.canvas in *)
-      (* let ctx = canvas##getContext (Dom_html._2d_) in *)
-
-      let (set_tarea, set_move), step =
+      let set_tarea, set_move, step =
         mouse_machine (area, (0,0))
       in
 
