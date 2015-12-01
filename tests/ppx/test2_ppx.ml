@@ -112,8 +112,16 @@ let%sync basic =
   end
 
 
-let%sync tilde =
+let%sync bang =
   loop begin
     !(Format.printf "lol");
     pause
   end
+
+let%sync testexpr =
+  input iinp;
+
+  loop begin
+    present (iinp & (!!iinp = 0)) nothing
+  end
+

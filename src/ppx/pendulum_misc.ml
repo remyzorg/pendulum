@@ -44,7 +44,7 @@ let rec expr_of_ast e =
     | Par (e1, e2) ->
       [%expr Par ([%e visit e1], [%e visit e2])]
 
-    | Present ((signal, tag), e1, e2) ->
+    | Present ((signal,_ , tag), e1, e2) ->
       [%expr Present ([%e string_const signal], [%e visit e1], [%e visit e2])]
 
     | Signal (vid, e) ->
@@ -53,7 +53,7 @@ let rec expr_of_ast e =
     | Run (id, args, loc) ->
       [%expr Run ([%e string_const id])]
 
-    | Suspend (e, (signal, tag)) ->
+    | Suspend (e, (signal, _, tag)) ->
       [%expr Suspend ([%e visit e], [%e string_const signal])]
 
     | Trap (Label label, e) ->
@@ -65,19 +65,19 @@ let rec expr_of_ast e =
     | Sustain vid ->
       [%expr Sustain ([%e string_const vid.sname])]
 
-    | Present_then ((signal, tag), e) ->
+    | Present_then ((signal, _, tag), e) ->
       [%expr Present_then ([%e string_const signal], [%e visit e])]
 
-    | Await (signal, tag) ->
+    | Await (signal, _, tag) ->
       [%expr (Await [%e string_const signal])]
 
-    | Abort (e, (signal, tag)) ->
+    | Abort (e, (signal, _, tag)) ->
       [%expr Abort ([%e visit e], [%e string_const signal])]
 
-    | Loop_each (e, (signal, tag)) ->
+    | Loop_each (e, (signal, _, tag)) ->
       [%expr Loop_each ([%e visit e], [%e string_const signal])]
 
-    | Every ((signal, tag), e) ->
+    | Every ((signal, _, tag), e) ->
       [%expr Every ([%e string_const signal], [%e visit e])]
 
     | _ -> assert false

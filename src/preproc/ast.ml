@@ -31,6 +31,8 @@ module type S = sig
   type label = Label of ident
   type atom = { locals : signal list; exp : exp}
 
+  type test = ident * ident option * exp option
+
   type valued_signal = {signal : signal ; svalue : atom}
   type valued_ident = {sname : ident ; ivalue : exp}
   val mk_signal : ?origin:signal_origin -> ident -> signal
@@ -57,24 +59,24 @@ module type S = sig
       | Emit of valued_ident
       | Nothing
       | Pause
-      | Suspend of statement * (ident * ident option)
+      | Suspend of statement * test
       | Trap of label * statement
       | Exit of label
-      | Present of (ident * ident option) * statement * statement
+      | Present of test * statement * statement
       | Atom of exp
       | Signal of valued_ident * statement
       | Run of ident * ident list * loc
 
       | Halt
       | Sustain of valued_ident
-      | Present_then of (ident * ident option) * statement
-      | Await of (ident * ident option)
-      | Await_imm of (ident * ident option)
-      | Suspend_imm of statement * (ident * ident option)
-      | Abort of statement * (ident * ident option)
-      | Weak_abort of statement * (ident * ident option)
-      | Loop_each of statement * (ident * ident option)
-      | Every of (ident * ident option) * statement
+      | Present_then of test * statement
+      | Await of test
+      | Await_imm of test
+      | Suspend_imm of statement * test
+      | Abort of statement * test
+      | Weak_abort of statement * test
+      | Loop_each of statement * test
+      | Every of test * statement
   end
 
   type error =
@@ -86,6 +88,7 @@ module type S = sig
   module Tagged : sig
 
     type t = {id : int; st : tagged}
+    and test = signal * exp option
     and tagged_ast =
       | Loop of t
       | Seq of t * t
@@ -93,13 +96,13 @@ module type S = sig
       | Emit of valued_signal
       | Nothing
       | Pause
-      | Suspend of t * signal
+      | Suspend of t * test
       | Trap of label * t
       | Exit of label
-      | Present of signal * t * t
+      | Present of test * t * t
       | Atom of atom
       | Signal of valued_signal * t
-      | Await of signal
+      | Await of test
       | Run of ident * signal list * loc
     and tagged = (tagged_ast) location
 
@@ -150,10 +153,13 @@ module Make (E : Exp) = struct
 
   type atom = { locals : signal list; exp : exp}
 
+  type test = ident * ident option * exp option
+
   type valued_signal = {signal : signal ; svalue : atom}
   type valued_ident = {sname : ident ; ivalue : exp}
   type label = Label of ident
 
+  
 
   let mk_loc ?(loc=dummy_loc) content = {loc; content}
   let mk_signal ?(origin=Local) ident = {ident; origin; tag = None}
@@ -172,24 +178,24 @@ module Make (E : Exp) = struct
       | Emit of valued_ident
       | Nothing
       | Pause
-      | Suspend of statement * (ident * ident option)
+      | Suspend of statement * test
       | Trap of label * statement
       | Exit of label
-      | Present of (ident * ident option) * statement * statement
+      | Present of test * statement * statement
       | Atom of exp
       | Signal of valued_ident * statement
       | Run of ident * ident list * loc
 
       | Halt
       | Sustain of valued_ident
-      | Present_then of (ident * ident option) * statement
-      | Await of (ident * ident option)
-      | Await_imm of (ident * ident option)
-      | Suspend_imm of statement * (ident * ident option)
-      | Abort of statement * (ident * ident option)
-      | Weak_abort of statement * (ident * ident option)
-      | Loop_each of statement * (ident * ident option)
-      | Every of (ident * ident option) * statement
+      | Present_then of test * statement
+      | Await of test
+      | Await_imm of test
+      | Suspend_imm of statement * test
+      | Abort of statement * test
+      | Weak_abort of statement * test
+      | Loop_each of statement * test
+      | Every of test * statement
   end
 
 
@@ -231,7 +237,7 @@ module Make (E : Exp) = struct
   module Tagged = struct
 
     type t = {id : int; st : tagged}
-
+    and test = signal * exp option
     and tagged_ast =
       | Loop of t
       | Seq of t * t
@@ -239,13 +245,13 @@ module Make (E : Exp) = struct
       | Emit of valued_signal
       | Nothing
       | Pause
-      | Suspend of t * signal
+      | Suspend of t * test
       | Trap of label * t
       | Exit of label
-      | Present of signal * t * t
+      | Present of test * t * t
       | Atom of atom
       | Signal of valued_signal * t
-      | Await of signal
+      | Await of test
       | Run of ident * signal list * loc
     and tagged = (tagged_ast) location
 
@@ -373,11 +379,12 @@ module Make (E : Exp) = struct
         | Derived.Nothing -> mk_tagged Nothing !+id
         | Derived.Pause -> mk_tagged Pause !+id
 
-        | Derived.Await (s, tag) -> mk_tagged (Await (rename ~loc env tag s)) !+id
+        | Derived.Await (s, tag, expopt) ->
+          mk_tagged (Await (rename ~loc env tag s, expopt)) !+id
 
-        | Derived.Suspend (t, (s, tag)) ->
+        | Derived.Suspend (t, (s, tag, expopt)) ->
           let s = rename ~loc:ast.loc env tag s in
-          mk_tagged (Suspend (visit env t, s)) !+id
+          mk_tagged (Suspend (visit env t, (s, expopt))) !+id
 
         | Derived.Trap (Label s, t) ->
           let labels, s = add_label env.labels s in
@@ -386,9 +393,9 @@ module Make (E : Exp) = struct
         | Derived.Exit (Label s) ->
           mk_tagged (Exit (Label (rename_ident env.labels s ast))) !+id
 
-        | Derived.Present ((s, tag), t1, t2) ->
+        | Derived.Present ((s, tag, expopt), t1, t2) ->
           let s = rename ~loc env tag s in
-          mk_tagged (Present(s, visit env t1, visit env t2)) !+id
+          mk_tagged (Present((s, expopt), visit env t1, visit env t2)) !+id
         | Derived.Atom f -> mk_tagged (Atom (
             mk_atom ~locals:(List.map (fun x -> x.signal) env.local_signals_scope) f
           )) !+id
@@ -406,8 +413,8 @@ module Make (E : Exp) = struct
 
         | Derived.Halt -> mk_tagged (Loop (mk_tagged Pause !+id)) !+id
         | Derived.Sustain s -> visit env Derived.(mkl @@ Loop ((mkl@@ Emit s)))
-        | Derived.Present_then (s, st) ->
-          visit env Derived.(mkl @@ Present (s, st, mkl @@ Nothing))
+        | Derived.Present_then (test, st) ->
+          visit env Derived.(mkl @@ Present (test, st, mkl @@ Nothing))
         | Derived.Await_imm s ->
           mk_tagged (Trap (trap_signal,
                            mk_tagged (Loop (
@@ -465,7 +472,7 @@ module Make (E : Exp) = struct
           fprintf fmt "N%d [label=\"%d nothing\"]; @\n" x.id x.id
         | Pause  ->
           fprintf fmt "N%d [label=\"%d pause\"]; @\n" x.id x.id
-        | Suspend (st, s) ->
+        | Suspend (st, (s, _)) ->
           fprintf fmt "N%d [label=\"%d suspend(%s)\"]; @\n" x.id x.id s.ident.content;
           fprintf fmt "N%d -> N%d ;@\n" x.id st.id;
           visit st
@@ -475,13 +482,13 @@ module Make (E : Exp) = struct
           visit st
         | Exit (Label s) -> fprintf fmt "N%d [label=\"%d exit(%s)\"]; @\n" x.id x.id s.content
         | Atom f -> fprintf fmt "N%d [label=\"%d atom\"]; @\n" x.id x.id
-        | Present (s, st1, st2) ->
+        | Present ((s, _), st1, st2) ->
           fprintf fmt "N%d [label=\"%d present(%s)\"]; @\n" x.id x.id s.ident.content;
           fprintf fmt "N%d -> N%d ;@\n" x.id st1.id;
           fprintf fmt "N%d -> N%d ;@\n" x.id st2.id;
           visit st1;
           visit st2;
-        | Await s ->
+        | Await (s, _) ->
           fprintf fmt "N%d [label=\"%d await(%s)\"]; @\n" x.id x.id s.ident.content
         | Signal (vs, st) ->
           fprintf fmt "N%d [label=\"%d signal(%s)\"]; @\n" x.id x.id vs.signal.ident.content;

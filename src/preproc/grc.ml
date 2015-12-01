@@ -416,7 +416,7 @@ module Of_ast = struct
         match p.st.content with
         | Pause -> enter_node p pause
 
-        | Await s ->
+        | Await (s, _) ->
           enter_node p @@
           test_node (Signal s) (
             exit_node p endp,
@@ -446,7 +446,7 @@ module Of_ast = struct
           @@ surface env q pause
           @@ surf_r
 
-        | Present (s, q, r) ->
+        | Present ((s, _), q, r) ->
           let end_pres = exit_node p endp in
           enter_node p
           @@ test_node (Signal s) (
@@ -500,7 +500,7 @@ module Of_ast = struct
 
         | Pause -> Exit p.id >> endp
 
-        | Await s ->
+        | Await (s, _) ->
           test_node (Signal s) (
             exit_node p endp,
             pause,
@@ -557,7 +557,7 @@ module Of_ast = struct
 
         | Signal (s,q) ->
           depth env q pause @@ exit_node p endp
-        | Suspend (q, s) ->
+        | Suspend (q, (s, _)) ->
           test_node (Signal s) (
             pause,
             depth env q pause (Exit p.id >> endp),

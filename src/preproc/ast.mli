@@ -30,6 +30,8 @@ module type S = sig
   type label = Label of ident
   type atom = { locals : signal list; exp : exp}
 
+  type test = ident * ident option * exp option
+
   type valued_signal = {signal : signal ; svalue : atom}
   type valued_ident = {sname : ident ; ivalue : exp}
   val mk_signal : ?origin:signal_origin -> ident -> signal
@@ -45,6 +47,7 @@ module type S = sig
   module SignalMap : Map.S with type key = signal
   module SignalSet : Set.S with type elt = signal
 
+
   val dummy_loc : loc
   val mk_loc : ?loc:loc -> 'a -> 'a location
 
@@ -57,24 +60,24 @@ module type S = sig
       | Emit of valued_ident
       | Nothing
       | Pause
-      | Suspend of statement * (ident * ident option)
+      | Suspend of statement * test
       | Trap of label * statement
       | Exit of label
-      | Present of (ident * ident option) * statement * statement
+      | Present of test * statement * statement
       | Atom of exp
       | Signal of valued_ident * statement
       | Run of ident * ident list * loc
 
       | Halt
       | Sustain of valued_ident
-      | Present_then of (ident * ident option) * statement
-      | Await of (ident * ident option)
-      | Await_imm of (ident * ident option)
-      | Suspend_imm of statement * (ident * ident option)
-      | Abort of statement * (ident * ident option)
-      | Weak_abort of statement * (ident * ident option)
-      | Loop_each of statement * (ident * ident option)
-      | Every of (ident * ident option) * statement
+      | Present_then of test * statement
+      | Await of test
+      | Await_imm of test
+      | Suspend_imm of statement * test
+      | Abort of statement * test
+      | Weak_abort of statement * test
+      | Loop_each of statement * test
+      | Every of test * statement
   end
 
   type error =
@@ -86,6 +89,7 @@ module type S = sig
   module Tagged : sig
 
     type t = {id : int; st : tagged}
+    and test = signal * exp option
     and tagged_ast =
       | Loop of t
       | Seq of t * t
@@ -93,13 +97,13 @@ module type S = sig
       | Emit of valued_signal
       | Nothing
       | Pause
-      | Suspend of t * signal
+      | Suspend of t * test
       | Trap of label * t
       | Exit of label
-      | Present of signal * t * t
+      | Present of test * t * t
       | Atom of atom
       | Signal of valued_signal * t
-      | Await of signal
+      | Await of test
       | Run of ident * signal list * loc
     and tagged = (tagged_ast) location
 

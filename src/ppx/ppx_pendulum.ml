@@ -83,7 +83,9 @@ let signal_tuple_to_list e =
 let check_signal_presence_expr e =
   let open Ast in
   match e with
-  | { pexp_desc = Pexp_ident {txt = Lident content; loc} } -> {loc; content}, None
+  | { pexp_desc = Pexp_ident {txt = Lident content; loc} } -> {loc; content}, None, None
+  | [%expr [%e? pres_expr] & ([%e? boolexpr])] -> assert false
+
   | [%expr [%e? elt] ## [%e? event]] ->
      let elt_ident = check_expr_ident elt in
      let event_ident =
@@ -92,7 +94,7 @@ let check_signal_presence_expr e =
        | _ -> Error.(syntax_error ~loc:event.pexp_loc Event_name)
        end
      in
-     elt_ident, Some event_ident
+     elt_ident, Some event_ident, None
   | _ -> Error.(syntax_error ~loc:e.pexp_loc Signal_name)
 
 
