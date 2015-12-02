@@ -30,6 +30,7 @@ module Error = struct
     | Forgot_sem -> fprintf fmt "maybe you forgot a `;`"
     | Keyword -> fprintf fmt "keyword expected"
     | Signal_name -> fprintf fmt "signal name expected"
+    (* | Signal_test -> fprintf fmt "signal test expected" *)
     | Event_name -> fprintf fmt "event name expected"
     | Signal_test_expression -> fprintf fmt "signal test expression expected"
     | Signal_tuple -> fprintf fmt "signal tuple expected"
@@ -80,11 +81,13 @@ let signal_tuple_to_list e =
   | Pexp_tuple exprs -> List.map check_expr_ident exprs
   | _ -> Error.syntax_error ~loc:e.pexp_loc Error.Signal_tuple
 
-let check_signal_presence_expr e =
+let rec check_signal_presence_expr e =
   let open Ast in
   match e with
   | { pexp_desc = Pexp_ident {txt = Lident content; loc} } -> {loc; content}, None, None
-  | [%expr [%e? pres_expr] & ([%e? boolexpr])] -> assert false
+  | [%expr [%e? sigexpr] & ([%e? boolexpr])] ->
+    let ident, tag, _ = check_signal_presence_expr sigexpr in
+    ident, tag, Some boolexpr
 
   | [%expr [%e? elt] ## [%e? event]] ->
      let elt_ident = check_expr_ident elt in
