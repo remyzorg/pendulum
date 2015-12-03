@@ -89,7 +89,7 @@ module type S = sig
   module Tagged : sig
 
     type t = {id : int; st : tagged}
-    and test = signal * exp option
+    and test = signal * atom option
     and tagged_ast =
       | Loop of t
       | Seq of t * t

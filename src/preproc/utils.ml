@@ -60,9 +60,9 @@ module Option = struct
 
   let default d v = match v with None -> d | Some v -> v
 
-  let print f fmt v =
+  let print s f fmt v =
     match v with
-    | None -> Format.fprintf fmt "None"
+    | None -> Format.fprintf fmt "%s" s
     | Some v' -> Format.fprintf fmt "Some (%a)" f v'
 
   let map2or v1 v2 f =

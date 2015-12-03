@@ -88,7 +88,7 @@ module type S = sig
   module Tagged : sig
 
     type t = {id : int; st : tagged}
-    and test = signal * exp option
+    and test = signal * atom option
     and tagged_ast =
       | Loop of t
       | Seq of t * t
@@ -237,7 +237,7 @@ module Make (E : Exp) = struct
   module Tagged = struct
 
     type t = {id : int; st : tagged}
-    and test = signal * exp option
+    and test = signal * atom option
     and tagged_ast =
       | Loop of t
       | Seq of t * t
@@ -380,11 +380,13 @@ module Make (E : Exp) = struct
         | Derived.Pause -> mk_tagged Pause !+id
 
         | Derived.Await (s, tag, expopt) ->
-          mk_tagged (Await (rename ~loc env tag s, expopt)) !+id
+          let locals = (List.map (fun x -> x.signal) env.local_signals_scope) in
+          mk_tagged (Await (rename ~loc env tag s, Option.map (mk_atom ~locals) expopt)) !+id
 
         | Derived.Suspend (t, (s, tag, expopt)) ->
           let s = rename ~loc:ast.loc env tag s in
-          mk_tagged (Suspend (visit env t, (s, expopt))) !+id
+          let locals = (List.map (fun x -> x.signal) env.local_signals_scope) in
+          mk_tagged (Suspend (visit env t, (s, Option.map (mk_atom ~locals) expopt))) !+id
 
         | Derived.Trap (Label s, t) ->
           let labels, s = add_label env.labels s in
@@ -395,7 +397,8 @@ module Make (E : Exp) = struct
 
         | Derived.Present ((s, tag, expopt), t1, t2) ->
           let s = rename ~loc env tag s in
-          mk_tagged (Present((s, expopt), visit env t1, visit env t2)) !+id
+          let locals = (List.map (fun x -> x.signal) env.local_signals_scope) in
+          mk_tagged (Present((s, Option.map (mk_atom ~locals) expopt), visit env t1, visit env t2)) !+id
         | Derived.Atom f -> mk_tagged (Atom (
             mk_atom ~locals:(List.map (fun x -> x.signal) env.local_signals_scope) f
           )) !+id

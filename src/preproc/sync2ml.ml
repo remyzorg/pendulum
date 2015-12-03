@@ -40,6 +40,8 @@ type ml_test_expr =
   | MLsig of Ast.signal
   | MLselect of int
   | MLor of ml_test_expr * ml_test_expr
+  | MLand of ml_test_expr * ml_test_expr
+  | MLboolexpr of Ast.atom
   | MLfinished
   | MLis_pause of ml_ast
 
@@ -64,6 +66,8 @@ let rec pp_ml_test_expr fmt = Format.(function
   | MLselect i -> fprintf fmt "select %d" i
   | MLfinished -> fprintf fmt "finished"
   | MLor (mlt1, mlt2) -> fprintf fmt "%a || %a" pp_ml_test_expr mlt1 pp_ml_test_expr mlt2
+  | MLand (mlt1, mlt2) -> fprintf fmt "%a && %a" pp_ml_test_expr mlt1 pp_ml_test_expr mlt2
+  | MLboolexpr e -> fprintf fmt "%a" Ast.printexp e.exp
   | MLis_pause mle -> fprintf fmt "%a == Pause" (pp_ml_ast 0) mle
   )
 
@@ -192,7 +196,9 @@ let deplist sel =
 let construct_test_expr mr tv =
   let open Flowgraph in
   match tv with
-  | Signal vs -> mr := SignalSet.add vs !mr; MLsig vs
+  | Signal (vs, None) -> mr := SignalSet.add vs !mr; MLsig vs
+  | Signal (vs, Some at) ->
+    mr := SignalSet.add vs !mr; MLand (MLsig vs, MLboolexpr at)
   | Selection i -> MLselect i
   | Sync (i1, i2) -> MLor (MLselect i1, MLselect i2)
   | Finished -> MLfinished
@@ -470,6 +476,10 @@ module Ocaml_gen = struct
     | MLselect i -> [%expr Bitset.mem [%e select_env_ident] [%e int_const i]]
     | MLor (mlte1, mlte2) ->
       [%expr [%e construct_test env depl mlte1 ] || [%e construct_test env depl mlte2]]
+    | MLand (mlte1, mlte2) ->
+      [%expr [%e construct_test env depl mlte1 ] && [%e construct_test env depl mlte2]]
+    | MLboolexpr pexpr ->
+      rebind_locals_let pexpr.locals pexpr.exp
     | MLfinished -> [%expr Bitset.mem [%e select_env_ident] 0]
     | MLis_pause (MLcall (id, args, loc)) ->
       let step_ident = {id with content = Format.sprintf "%s~step" id.content} in

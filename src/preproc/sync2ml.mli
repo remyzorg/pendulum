@@ -28,6 +28,8 @@ type ml_test_expr =
   | MLsig of Ast.signal
   | MLselect of int
   | MLor of ml_test_expr * ml_test_expr
+  | MLand of ml_test_expr * ml_test_expr
+  | MLboolexpr of Ast.atom
   | MLfinished
   | MLis_pause of ml_ast
 

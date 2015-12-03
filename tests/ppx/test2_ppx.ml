@@ -118,10 +118,12 @@ let%sync bang =
     pause
   end
 
-let%sync testexpr =
+let%to_dot_grc testexpr =
   input iinp;
 
   loop begin
-    present (iinp & (!!iinp = 0)) nothing
+    present (iinp & (!!iinp = 0))
+      !(Format.printf "lol");
+    pause
   end
 

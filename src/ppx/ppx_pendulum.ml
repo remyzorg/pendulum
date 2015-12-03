@@ -13,7 +13,7 @@ module Ast = Sync2ml.Ast
 
 module Error = struct
 
-    type syntax = | Forgot_sem | Keyword | Signal_name | Signal_test_expression
+    type syntax = | Forgot_sem | Keyword | Signal_name | Signal_test | Signal_test_expression
                 | Signal_tuple | Signal_decl_at_start | Event_name
 
   type 'a t =
@@ -30,7 +30,7 @@ module Error = struct
     | Forgot_sem -> fprintf fmt "maybe you forgot a `;`"
     | Keyword -> fprintf fmt "keyword expected"
     | Signal_name -> fprintf fmt "signal name expected"
-    (* | Signal_test -> fprintf fmt "signal test expected" *)
+    | Signal_test -> fprintf fmt "signal test expected"
     | Event_name -> fprintf fmt "event name expected"
     | Signal_test_expression -> fprintf fmt "signal test expression expected"
     | Signal_tuple -> fprintf fmt "signal tuple expected"
@@ -98,7 +98,7 @@ let rec check_signal_presence_expr e =
        end
      in
      elt_ident, Some event_ident, None
-  | _ -> Error.(syntax_error ~loc:e.pexp_loc Signal_name)
+  | _ -> Error.(syntax_error ~loc:e.pexp_loc Signal_test)
 
 
 let pop_signals_decl e =

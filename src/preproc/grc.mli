@@ -37,7 +37,7 @@ module Flowgraph : sig
       | Instantiate_run of Ast.ident * Ast.signal list * Ast.loc
 
     type test_value =
-      | Signal of Ast.signal
+      | Signal of Ast.signal * Ast.atom option
       | Selection of int
       | Sync of (int * int)
       | Is_paused of Ast.ident * Ast.signal list * Ast.loc

@@ -101,7 +101,7 @@ module Flowgraph = struct
       | Instantiate_run of Ast.ident * Ast.signal list * Ast.loc
 
     type test_value =
-      | Signal of Ast.signal
+      | Signal of Ast.signal * Ast.atom option
       | Selection of int
       | Sync of (int * int)
       | Is_paused of Ast.ident * Ast.signal list * Ast.loc
@@ -151,6 +151,7 @@ module Flowgraph = struct
     module Ast = Ast
     open Ast
 
+
     type action =
       | Emit of Ast.valued_signal
       | Atom of Ast.atom
@@ -183,7 +184,7 @@ module Flowgraph = struct
         end)
 
     type test_value =
-      | Signal of Ast.signal
+      | Signal of Ast.signal * atom option
       | Selection of int
       | Sync of (int * int)
       | Is_paused of Ast.ident * Ast.signal list * Ast.loc
@@ -199,7 +200,7 @@ module Flowgraph = struct
     let pp_test_value_dot fmt tv =
       Format.(begin
           match tv with
-          | Signal s -> fprintf fmt "%s ?" s.ident.content
+          | Signal (s, exp) -> fprintf fmt "%s ?" s.ident.content
           | Selection i -> fprintf fmt "%d ?" i
           | Finished -> fprintf fmt "finished ?"
           | Sync (i1, i2) -> fprintf fmt "sync(%d, %d)" i1 i2
@@ -209,7 +210,8 @@ module Flowgraph = struct
     let pp_test_value fmt tv =
       Format.(begin
           match tv with
-          | Signal s -> fprintf fmt "Signal %s" s.ident.content
+          | Signal (s, None) -> fprintf fmt "Signal (%s) " s.ident.content
+          | Signal (s, Some at) -> fprintf fmt "Signal (%s, %a) " s.ident.content printexp at.exp
           | Selection i -> fprintf fmt "Selection %d" i
           | Sync (i1, i2) -> fprintf fmt "Sync(%d, %d)" i1 i2
           | Finished -> fprintf fmt "Finished"
@@ -416,9 +418,9 @@ module Of_ast = struct
         match p.st.content with
         | Pause -> enter_node p pause
 
-        | Await (s, _) ->
+        | Await (s, atopt) ->
           enter_node p @@
-          test_node (Signal s) (
+          test_node (Signal (s, atopt)) (
             exit_node p endp,
             pause,
             None
@@ -446,10 +448,10 @@ module Of_ast = struct
           @@ surface env q pause
           @@ surf_r
 
-        | Present ((s, _), q, r) ->
+        | Present ((s, atopt), q, r) ->
           let end_pres = exit_node p endp in
           enter_node p
-          @@ test_node (Signal s) (
+          @@ test_node (Signal (s, atopt)) (
             surface env q pause end_pres,
             surface env r pause end_pres,
             None
@@ -500,8 +502,8 @@ module Of_ast = struct
 
         | Pause -> Exit p.id >> endp
 
-        | Await (s, _) ->
-          test_node (Signal s) (
+        | Await (s, atopt) ->
+          test_node (Signal (s, atopt)) (
             exit_node p endp,
             pause,
             None)
@@ -557,8 +559,8 @@ module Of_ast = struct
 
         | Signal (s,q) ->
           depth env q pause @@ exit_node p endp
-        | Suspend (q, (s, _)) ->
-          test_node (Signal s) (
+        | Suspend (q, (s, atopt)) ->
+          test_node (Signal (s, atopt)) (
             pause,
             depth env q pause (Exit p.id >> endp),
             None
@@ -638,7 +640,7 @@ module Schedule = struct
       let st, fg = grc in
       let rec visit m fg =
         match fg with
-        | Test (Signal s, t1, t2, _) ->
+        | Test (Signal (s, _), t1, t2, _) ->
           let prev = try find s m with
             | Not_found -> []
           in
@@ -745,7 +747,7 @@ module Schedule = struct
 
 
         | Call (_, t) -> aux (t, stop)
-        | Test (Signal s, t1, t2, _) ->
+        | Test (Signal (s, atopt), t1, t2, _) ->
           let emits1, tests1 = aux (t1, stop) in
           let emits2, tests2 = aux (t2, stop) in
           union emits1 emits2, add s (union tests1 tests2)
@@ -876,7 +878,7 @@ module Schedule = struct
               | fg, (Finish | Pause) ->
                 Fg.error ~loc:Ast.dummy_loc (Par_leads_to_finish fg2)
 
-              | Test (Signal s, t1, t2, _), fg2 ->
+              | Test (Signal (s, atopt), t1, t2, _), fg2 ->
                 if emits fg2 stop s then
                   match fg2 with
                   | Call (a, t) ->

@@ -42,6 +42,7 @@ configure:
 
 clean-test: test
 	@rm -rf _build/tests
+	@rm test_ppx.*
 
 pdfout: build
 	./main.native	
