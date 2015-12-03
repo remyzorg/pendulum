@@ -325,9 +325,12 @@ let tagged_signals_mapper =
                    ## [%e? {pexp_desc = Pexp_ident {txt = Lident tag_content}}])] ->
          let ident =
            {Ast.content = Format.sprintf "%s##%s" content tag_content; loc}
+         in let e' =
+           [%expr !![%e Sync2ml.Ocaml_gen.mk_ident ident]][@metaloc exp.pexp_loc]
          in
-         [%expr !![%e Sync2ml.Ocaml_gen.mk_ident ident]]
-       | x -> default_mapper.expr mapper x
+         mapper.expr mapper e'
+       | x ->
+         default_mapper.expr mapper x
      );
   }
 
@@ -340,7 +343,7 @@ let pendulum_mapper argv =
            { pstr_desc = Pstr_value (Nonrecursive, vbs) }]), attrs); pstr_loc }
          when expected_ext ext ->
          Str.value Nonrecursive
-         @@ gen_bindings (tagged_signals_mapper.expr mapper)  ext vbs
+         @@ gen_bindings (tagged_signals_mapper.expr tagged_signals_mapper)  ext vbs
 
        | { pstr_desc = Pstr_extension (({ txt = ext }, PStr [
            { pstr_desc = Pstr_value (Recursive, _) }]), _); pstr_loc }
@@ -357,7 +360,7 @@ let pendulum_mapper argv =
            | PStr [{ pstr_desc = Pstr_eval (e, _)}] ->
              begin match e.pexp_desc with
                | Pexp_let (Nonrecursive, vbl, e) ->
-                 Exp.let_ Nonrecursive (gen_bindings (tagged_signals_mapper.expr mapper) ext vbl)
+                 Exp.let_ Nonrecursive (gen_bindings (tagged_signals_mapper.expr tagged_signals_mapper) ext vbl)
                  @@ mapper.expr mapper e
                | Pexp_let (Recursive, vbl, e) ->
                  Error.(error ~loc Non_recursive_let)

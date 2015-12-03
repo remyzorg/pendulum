@@ -356,7 +356,7 @@ module Ocaml_gen = struct
       try
         Hashtbl.find env.signals_tags s.ident.content
         |> List.map (append_tag s)
-        |> List.fold_left (signal_to_definition [%expr ()]) acc
+        |> List.fold_left (signal_to_definition [%expr None]) acc
       with Not_found -> signal_to_definition (mk_ident s.ident) acc s
     ) (construct_local_signals_definitions env e) env.global_signals)
 
@@ -412,8 +412,8 @@ module Ocaml_gen = struct
     in
     let construct_rhs s tag =
       [%expr Dom_html.handler (
-             fun _ ->
-               set_present_value [%e mk_ident (append_tag s tag).ident] ();
+             fun ev ->
+               set_present_value [%e mk_ident (append_tag s tag).ident] (Some ev);
                ignore @@ [%e mk_ident @@ Ast.mk_loc stepfun_name] ();
                Js._true)]
     in

@@ -9,8 +9,8 @@
  communicating with broadcasted signals. Its constructions and implementation
  are mostly based on Esterel. The language is embedded in OCaml as a syntax
  extension. It allows the programmer to describe **reactive machines** as OCaml
- values, and run them on signals arguments. The compilation of concurrency in pendulum is
- completely sequential and static.
+ values, and run them on signals arguments. The execution of concurrency in pendulum is
+ completely sequential and the scheduling is static.
  ([similar work and inspiration](https://github.com/remyzorg/pendulum/wiki/Similar-works-and-inspiration))
 
 The core language is completely compatible with vanilla OCaml compiler.

@@ -103,12 +103,14 @@ let%sync basic =
 
   loop begin
     present elt2##onmouseover
-      (atom (Format.printf "mouseover\n"))
+      !(Format.printf "mouseover\n");
+    pause
   end
   ||
   loop begin
     present elt##onclick
-      (atom (Format.printf "click\n"))
+      !(Format.printf "click\n");
+    pause
   end
 
 
