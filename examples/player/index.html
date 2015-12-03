@@ -6,12 +6,18 @@
   </head>
   <body>
     <div>
-    <video autoplay id="media" width="800px">
-      <source src="http://download.blender.org/peach/bigbuckbunny_movies/big_buck_bunny_720p_stereo.ogg" type="audio/mp3">
-    </video>
+      <video autoplay id="media" width="800px">
+        <source src="http://download.blender.org/peach/bigbuckbunny_movies/big_buck_bunny_720p_stereo.ogg" type="audio/mp3">
+      </video>
     </div>
-    <button id="play" width="80px">Play </button>
-    <!-- <button id="pause">Pause</button> -->
-    <input type="range" id="progress" min="0" max="700" value="0" />
+    <br>
+    <div>
+      <input type="range" id="progress" min="0" max="1000" value="0" />
+    </div>
+    <br>
+    <div>
+      <button id="play" width="80px">Play </button>
+      <a id="timetxt">0/0</a>
+    </div>
   </body>
 </html>

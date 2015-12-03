@@ -34,14 +34,14 @@ let (@>) s coerce =
 
 
 
-
+let str s = Js.some @@ Js.string s
 
 let update_slider slider media =
   slider##.value := Js.string @@ Format.sprintf "%0.f"
-      (if media##.duration = 0. then 0. else media##.currentTime /. media##.duration *. 700.)
+      (if media##.duration = 0. then 0. else media##.currentTime /. media##.duration *. 800.)
 
 let update_media media slider =
-  media##.currentTime := (Js.parseFloat slider##.value) /. 700. *. media##.duration
+  media##.currentTime := (Js.parseFloat slider##.value) /. 800. *. media##.duration
 
 let update_state state media button =
   if state then begin
@@ -52,10 +52,23 @@ let update_state state media button =
     media##pause
   end
 
-let%sync reactive_player =
+let ftime_to_min_sec t =
+  let sec = int_of_float t in
+  let min = sec / 60 in
+  let sec = sec mod 60 in
+  (min, sec)
+
+let update_time_a media time_a =
+  let cmin, csec = ftime_to_min_sec media##.currentTime in
+  let tmin, tsec = ftime_to_min_sec media##.duration in
+  time_a##.textContent := str @@ Format.sprintf "%2d:%0d / %0d:%0d" cmin csec tmin tsec
+
+
+let%syncdebug reactive_player =
   input play_pause;
   input progress_bar;
   input media;
+  input time_a;
 
   let no_update = () in
   let state = Js.to_bool media##.paused in
@@ -73,10 +86,12 @@ let%sync reactive_player =
         pause)
       ); pause)
   || loop (
-    present no_update nothing
-      (present media##onprogress !(
-          update_slider progress_bar media
-        )); pause)
+    present media##onprogress (
+      present no_update nothing !(update_slider progress_bar media)
+      ||
+      !(update_time_a media (!!time_a))
+    ); pause
+  )
 
 
 let wrapper react f p = Dom_html.handler (fun _ -> f p;  react (); Js._true)
@@ -86,7 +101,8 @@ let main _ =
   let play_button = "play" @> Coerce.button in
   let progress_bar = "progress" @> Coerce.input in
   let media = "media" @> Coerce.media in
-  let _react = reactive_player (play_button, progress_bar, media) in
+  let time = "timetxt" @> Coerce.a in
+  let _set_time, _react = reactive_player (play_button, progress_bar, media, time) in
   Js._false
 
 

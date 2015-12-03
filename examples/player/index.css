@@ -1,7 +1,7 @@
 
 input[type=range]{
     -webkit-appearance: none;
-    width: 700px;
+    width: 800px;
     height: 8px;
     background: #ddd;
     border: none;
