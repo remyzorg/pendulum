@@ -81,13 +81,13 @@ let signal_tuple_to_list e =
   | Pexp_tuple exprs -> List.map check_expr_ident exprs
   | _ -> Error.syntax_error ~loc:e.pexp_loc Error.Signal_tuple
 
-let rec check_signal_presence_expr e =
+let rec check_signal_presence_expr atom_mapper e =
   let open Ast in
   match e with
   | { pexp_desc = Pexp_ident {txt = Lident content; loc} } -> {loc; content}, None, None
   | [%expr [%e? sigexpr] & ([%e? boolexpr])] ->
-    let ident, tag, _ = check_signal_presence_expr sigexpr in
-    ident, tag, Some boolexpr
+    let ident, tag, _ = check_signal_presence_expr atom_mapper sigexpr in
+    ident, tag, Some (atom_mapper boolexpr)
 
   | [%expr [%e? elt] ## [%e? event]] ->
      let elt_ident = check_expr_ident elt in
@@ -137,7 +137,7 @@ let pop_signals_decl e =
     | e -> e, sigs
   in aux [] e
 
-let ast_of_expr e =
+let ast_of_expr atom_mapper e =
   let rec visit e =
     let open Ast in
     let open Ast.Derived in
@@ -153,7 +153,7 @@ let ast_of_expr e =
       Pause
 
     | [%expr emit [%e? signal] [%e? e_value]] ->
-      Emit (Ast.mk_vid (check_expr_ident signal) e_value)
+      Emit (Ast.mk_vid (check_expr_ident signal) @@ atom_mapper e_value)
 
     | [%expr emit [%e? signal]] ->
       Error.signal_value_missing e (check_expr_ident signal).content
@@ -162,10 +162,10 @@ let ast_of_expr e =
       Exit (Label(check_expr_ident label))
 
     | [%expr atom [%e? e]] ->
-      Atom e
+      Atom (atom_mapper e)
 
     | [%expr !([%e? e])] ->
-      Atom e
+      Atom (atom_mapper e)
 
     | [%expr loop [%e? e]] ->
       Loop (visit e)
@@ -183,15 +183,15 @@ let ast_of_expr e =
     | [%expr present [%e? signal] [%e? e1] [%e? e2]] ->
       let e1' = visit e1 in
       let e2' = visit e2 in
-      Present (check_signal_presence_expr signal, e1', e2')
+      Present (check_signal_presence_expr atom_mapper signal, e1', e2')
 
     | [%expr let [%p? signal] = [%e? e_value] in [%e? e]] ->
-      let vid = Ast.mk_vid (check_pat_ident signal) e_value in
+      let vid = Ast.mk_vid (check_pat_ident signal) @@ atom_mapper e_value in
       let e' = visit e in
       Signal (vid, e')
 
     | [%expr signal [%e? signal] [%e? e_value] [%e? e]] ->
-      let vid = Ast.mk_vid (check_expr_ident signal) e_value in
+      let vid = Ast.mk_vid (check_expr_ident signal) @@ atom_mapper e_value in
       let e' = visit e in
       Signal (vid, e')
 
@@ -199,7 +199,7 @@ let ast_of_expr e =
       Error.signal_value_missing e (check_expr_ident signal).content
 
     | [%expr suspend [%e? e] [%e? signal]] ->
-      Suspend (visit e, check_signal_presence_expr signal)
+      Suspend (visit e, check_signal_presence_expr atom_mapper signal)
 
     | [%expr trap [%e? label] [%e? e]] ->
       Trap (Label (check_expr_ident label), visit e)
@@ -218,19 +218,19 @@ let ast_of_expr e =
 
     | [%expr present [%e? signal] [%e? e]] ->
       Present_then
-        (check_signal_presence_expr signal, visit e)
+        (check_signal_presence_expr atom_mapper signal, visit e)
 
     | [%expr await [%e? signal]] ->
-      Await (check_signal_presence_expr signal)
+      Await (check_signal_presence_expr atom_mapper signal)
 
     | [%expr abort [%e? e] [%e? signal]] ->
-      Abort (visit e, check_signal_presence_expr signal)
+      Abort (visit e, check_signal_presence_expr atom_mapper signal)
 
     | [%expr loopeach [%e? e] [%e? signal]] ->
-      Loop_each (visit e, check_signal_presence_expr signal)
+      Loop_each (visit e, check_signal_presence_expr atom_mapper signal)
 
     | [%expr every [%e? e] [%e? signal]] ->
-      Every (check_signal_presence_expr signal, visit e)
+      Every (check_signal_presence_expr atom_mapper signal, visit e)
 
     | [%expr nothing [%e? e_err]]
     (* | [%expr pause [%e? e_err]] *)
@@ -256,32 +256,32 @@ let ast_of_expr e =
     | e -> Error.(syntax_error ~loc:e.pexp_loc Keyword)
   in visit e
 
-let parse_ast ext vb =
+let parse_ast atom_mapper ext vb =
   let e, sigs = pop_signals_decl vb.pvb_expr in
   let loc = vb.pvb_loc in
   begin match ext with
     | "sync_ast" ->
-      [%expr ([%e Pendulum_misc.expr_of_ast @@ ast_of_expr e])]
+      [%expr ([%e Pendulum_misc.expr_of_ast @@ ast_of_expr atom_mapper e])]
 
-    | "to_dot_grc" ->
+    | "syncdebug" ->
       let pat =
         match vb.pvb_pat.ppat_desc with
         | Ppat_var id -> id.txt
         | _ -> "unknown"
       in
-      let ast = ast_of_expr e in
+      let ast = ast_of_expr atom_mapper e in
       let tast, env = Ast.Tagged.of_ast ~sigs ast in
       let tast = Ast.Analysis.filter_dead_trees tast in
 
       Pendulum_misc.print_to_dot loc pat tast;
-      let _ocaml_expr =
+      let ocaml_expr =
         Sync2ml.generate env tast
       in
-      Format.printf "%a@." Pprintast.expression _ocaml_expr;
-      [%expr [%e Pendulum_misc.expr_of_ast ast]]
+      Format.printf "%a@." Pprintast.expression ocaml_expr;
+      [%expr [%e ocaml_expr]]
 
     | "sync" ->
-      let ast = ast_of_expr e in
+      let ast = ast_of_expr atom_mapper e in
       let tast, env = Ast.Tagged.of_ast ~sigs ast in
       let tast = Ast.Analysis.filter_dead_trees tast in
       let ocaml_expr =
@@ -292,16 +292,15 @@ let parse_ast ext vb =
     | _ -> assert false
   end
 
-let gen_bindings ext vbl =
+let gen_bindings atom_mapper ext vbl =
   List.map (fun vb ->
-      {vb with pvb_expr = parse_ast ext vb}
+      {vb with pvb_expr = parse_ast atom_mapper ext vb}
     ) vbl
 
+let expected_ext = function
+  | "syncdebug" | "sync_ast" | "sync" -> true
+  | _ -> false
 
-let expected_ext = Utils.StringSet.(
-    add "to_dot_grc" (
-      add "sync_ast" (
-        singleton "sync" )))
 
 let try_compile_error f mapper str =
   let open Sync2ml in
@@ -318,20 +317,34 @@ let try_compile_error f mapper str =
              (Other_err (e, fun fmt e ->
                   Format.fprintf fmt "%s" (Printexc.to_string e))))
 
+let tagged_signals_mapper =
+  {default_mapper with
+   expr = (fun mapper exp ->
+       match exp with
+       | [%expr !!([%e? {pexp_desc = Pexp_ident {txt = Lident content; loc}}]
+                   ## [%e? {pexp_desc = Pexp_ident {txt = Lident tag_content}}])] ->
+         let ident =
+           {Ast.content = Format.sprintf "%s##%s" content tag_content; loc}
+         in
+         [%expr !![%e Sync2ml.Ocaml_gen.mk_ident ident]]
+       | x -> default_mapper.expr mapper x
+     );
+  }
 
-let extend_mapper argv =
+let pendulum_mapper argv =
   let open Sync2ml in
   {default_mapper with
    structure_item = try_compile_error (fun mapper stri ->
        match stri with
        | { pstr_desc = Pstr_extension (({ txt = ext }, PStr [
            { pstr_desc = Pstr_value (Nonrecursive, vbs) }]), attrs); pstr_loc }
-         when StringSet.mem ext expected_ext ->
-         (Str.value Nonrecursive (gen_bindings ext vbs))
+         when expected_ext ext ->
+         Str.value Nonrecursive
+         @@ gen_bindings (tagged_signals_mapper.expr mapper)  ext vbs
 
        | { pstr_desc = Pstr_extension (({ txt = ext }, PStr [
            { pstr_desc = Pstr_value (Recursive, _) }]), _); pstr_loc }
-         when StringSet.mem ext expected_ext ->
+         when expected_ext ext ->
          Error.(error ~loc:pstr_loc Non_recursive_let)
        | x -> default_mapper.structure_item mapper x
      ) ;
@@ -339,12 +352,12 @@ let extend_mapper argv =
    expr = try_compile_error (fun mapper exp ->
        match exp with
        | { pexp_desc = Pexp_extension ({ txt = ext; loc }, e)}
-         when StringSet.mem ext expected_ext ->
+         when expected_ext ext ->
          begin match e with
            | PStr [{ pstr_desc = Pstr_eval (e, _)}] ->
              begin match e.pexp_desc with
                | Pexp_let (Nonrecursive, vbl, e) ->
-                 Exp.let_ Nonrecursive (gen_bindings ext vbl)
+                 Exp.let_ Nonrecursive (gen_bindings (tagged_signals_mapper.expr mapper) ext vbl)
                  @@ mapper.expr mapper e
                | Pexp_let (Recursive, vbl, e) ->
                  Error.(error ~loc Non_recursive_let)
@@ -358,4 +371,4 @@ let extend_mapper argv =
   }
 
 let () =
-  register "pendulum" extend_mapper
+  register "pendulum" pendulum_mapper

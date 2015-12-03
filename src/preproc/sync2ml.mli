@@ -49,6 +49,10 @@ and ml_ast =
   | MLfinish
   | MLcall of Ast.ident * Ast.signal list * Ast.loc
 
+module Ocaml_gen : sig
+  val mk_ident : Ast.ident -> Parsetree.expression
+end
+
 val pp_ml_sequence : int -> Format.formatter -> ml_sequence -> unit
 
 val grc2ml : int list array -> Flowgraph.t -> ml_sequence

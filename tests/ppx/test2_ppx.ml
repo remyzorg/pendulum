@@ -118,11 +118,11 @@ let%sync bang =
     pause
   end
 
-let%to_dot_grc testexpr =
+let%syncdebug testexpr =
   input iinp;
 
   loop begin
-    present (iinp & (!!iinp = 0))
+    present (iinp & !!iinp)
       !(Format.printf "lol");
     pause
   end
