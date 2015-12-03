@@ -118,7 +118,7 @@ let%sync bang =
     pause
   end
 
-let%syncdebug testexpr =
+let%sync testexpr =
   input iinp;
 
   loop begin
