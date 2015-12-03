@@ -52,17 +52,13 @@ let update_state state media button =
     media##pause
   end
 
-let%syncdebug reactive_player =
+let%sync reactive_player =
   input play_pause;
   input progress_bar;
   input media;
 
   let no_update = () in
   let state = Js.to_bool media##.paused in
-  loop (
-    !(debug "well typed ?"; !!(media##onplay));
-    pause)
-  ||
   loop (
     present media##onplay
       !(play_pause##.textContent := Js.some @@ Js.string "Pause"); pause)

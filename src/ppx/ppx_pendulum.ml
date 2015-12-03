@@ -325,7 +325,8 @@ let tagged_signals_mapper =
                    ## [%e? {pexp_desc = Pexp_ident {txt = Lident tag_content}}])] ->
          let ident =
            {Ast.content = Format.sprintf "%s##%s" content tag_content; loc}
-         in let e' =
+         in
+         let e' =
            [%expr !![%e Sync2ml.Ocaml_gen.mk_ident ident]][@metaloc exp.pexp_loc]
          in
          mapper.expr mapper e'
