@@ -1,6 +1,8 @@
 
 open Pendulum.Runtime_ast
 
+let dummyatom () = Format.printf "Hello\n"
+
 let%sync mouse_machine1 =
   input s;
   let s' = !!s + 1 in
@@ -56,6 +58,8 @@ let%sync many_par =
   || loop pause
   || loop pause
 
+
+
 let%sync reactive_player =
   input play;
   input pause;
@@ -88,6 +92,8 @@ let%sync reactive_player =
            print_string "media_time"
          ))); pause
   end
+
+
 
 let%sync reactive_player =
   loop begin
@@ -129,3 +135,46 @@ let%sync testexpr =
     pause
   end
 
+let%sync reactive_player =
+  input play_pause;
+  input progress_bar;
+  input media;
+  input time_a;
+
+  let no_update = () in
+  let state = Js.to_bool media##.paused in
+  loop (
+    present media##onplay !(dummyatom ()); pause)
+  || loop (present play_pause##onclick (emit state (not !!state)); pause)
+  || loop (present state !(dummyatom ()); pause)
+  || loop (
+    await progress_bar##onmousedown;
+    trap t' (loop (
+        emit no_update ();
+        present progress_bar##onmouseup
+          (!(dummyatom ()); exit t');
+        pause)
+      ); pause)
+  || loop (
+    present media##onprogress (
+      present no_update nothing !(dummyatom ())
+      ||
+      !(dummyatom ())
+    ); pause)
+
+
+let%sync reactive_player =
+  input a;
+  input b;
+
+  loop (
+    present a !(dummyatom ());
+    pause
+  )
+  ||
+  loop (
+    present b (emit a (not !!a));
+    pause
+  )
+  ||
+  loop pause

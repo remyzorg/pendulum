@@ -273,10 +273,12 @@ let parse_ast atom_mapper ext vb =
       let tast, env = Ast.Tagged.of_ast ~sigs ast in
       let tast = Ast.Analysis.filter_dead_trees tast in
 
+
       Pendulum_misc.print_to_dot loc pat tast;
       let ocaml_expr =
         Sync2ml.generate env tast
       in
+
       Format.printf "%a@." Pprintast.expression ocaml_expr;
       [%expr [%e ocaml_expr]]
 
@@ -286,6 +288,7 @@ let parse_ast atom_mapper ext vb =
       let tast = Ast.Analysis.filter_dead_trees tast in
       let ocaml_expr =
         Sync2ml.generate env tast in
+
 
       [%expr [%e ocaml_expr]]
 

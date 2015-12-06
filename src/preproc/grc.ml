@@ -469,7 +469,7 @@ module Of_ast = struct
         | Par (q, r) ->
           let syn = try Hashtbl.find env.synctbl (q.id, r.id) with
             | Not_found ->
-              let n = sync_node (q.id, r.id) (pause, exit_node p endp, Some pause)
+              let n = sync_node (q.id, r.id) (pause, exit_node p endp, None)
               in Hashtbl.add env.synctbl (q.id, r.id) n; n
           in
           enter_node p @@
@@ -535,12 +535,12 @@ module Of_ast = struct
             test_node (Selection q.id) (
               depth env q syn syn,
               syn,
-              Some syn
+              None (* Some syn *)
             ),
             test_node (Selection r.id) (
               depth env r syn syn,
               syn,
-              Some syn
+              None (* Some syn *)
             ),
             syn
           )
@@ -587,13 +587,15 @@ module Of_ast = struct
       let s = surface env p Pause Finish in
       let d = depth depthtbl surface env p Pause Finish in
 
+      let endsync = match d with
+        | Fork (_ , _, sync) -> Some sync
+        | _ -> Some Finish
+      in
       test_node Finished (
         Finish,
-        test_node (Selection p.id) (d, s, Some Finish),
+        test_node (Selection p.id) (d, s, endsync),
         Some Finish
       )
-
-
     let construct p =
       St.of_ast p, flowgraph p
 
@@ -885,24 +887,11 @@ module Schedule = struct
                     Call (a, sequence_of_fork stop t fg1)
                   | Pause | Finish -> assert false (* TODO: Raise exn *)
                   | Test (test, t1, t2, joinfg2) ->
-                    begin match joinfg2 with
-                    | Some j ->
-                      let _, t1' = find_and_replace (sequence_of_fork stop fg1) t1 j in
-                      let rep = ref j in
-                      let _, t2' = find_and_replace (fun x ->
-                          let r = sequence_of_fork stop fg1 x in
-                          rep := x; r
-                        ) t2 j
-                      in
-                      Test(test, t1', t2', Some !rep)
-                    | None ->
-                      let rep = ref joinfg2 in
-                      let t1, t2 = replace_join t1 t2 (fun x ->
-                          let r = sequence_of_fork stop fg1 x
-                          in rep := Some r; r)
-                      in
-                      Test(test, t1, t2, !rep)
-                    end
+                    let t1, t2 = replace_join t1 t2 (fun x ->
+                        sequence_of_fork stop fg1 x
+                      )
+                    in
+                    Test(test, t1, t2, joinfg2)
 
 
                   | Fork (t1, t2, sync) ->
@@ -931,24 +920,11 @@ module Schedule = struct
                     assert false
                   else
                     sequence_of_fork stop fg2 fg1
-                else begin match joinfg1 with
-                  | Some j ->
-                    let _, t1' = find_and_replace (sequence_of_fork stop fg2) t1 j in
-                    let rep = ref j in
-                    let _, t2' = find_and_replace (fun x ->
-                        let r = sequence_of_fork stop fg2 x in
-                        rep := r; r
-                      ) t2 j
-                    in
-                    Test(test, t1', t2', Some !rep)
-                  | None ->
-                    let rep = ref joinfg1 in
-                    let t1, t2 = replace_join t1 t2 (fun x ->
-                        let r = sequence_of_fork stop fg2 x in
-                        rep := Some r; r
-                        )
-                    in Test(test, t1, t2, !rep)
-                end
+                else
+                  let t1, t2 = replace_join t1 t2 (fun x ->
+                      sequence_of_fork stop fg2 x
+                    )
+                  in Test(test, t1, t2, joinfg1)
 
             in Fgtbl2.add fork_tbl (fg1, fg2) fg; fg
       in

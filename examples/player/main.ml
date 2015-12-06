@@ -64,7 +64,7 @@ let update_time_a media time_a =
   time_a##.textContent := str @@ Format.sprintf "%2d:%0d / %0d:%0d" cmin csec tmin tsec
 
 
-let%syncdebug reactive_player =
+let%sync reactive_player =
   input play_pause;
   input progress_bar;
   input media;
@@ -90,8 +90,9 @@ let%syncdebug reactive_player =
       present no_update nothing !(update_slider progress_bar media)
       ||
       !(update_time_a media (!!time_a))
-    ); pause
-  )
+    ); pause)
+  || loop pause
+  || loop pause
 
 
 let wrapper react f p = Dom_html.handler (fun _ -> f p;  react (); Js._true)
