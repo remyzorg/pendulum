@@ -135,7 +135,7 @@ let%sync testexpr =
     pause
   end
 
-let%sync reactive_player ~dsource =
+let%sync reactive_player =
   input play_pause;
   input progress_bar;
   input media;
@@ -166,7 +166,6 @@ let%sync reactive_player ~dsource =
 let%sync reactive_player =
   input a;
   input b;
-
   loop (
     present a !(dummyatom ());
     pause
@@ -178,5 +177,22 @@ let%sync reactive_player =
   )
   ||
   loop pause
+
+let%sync test_animate ~animate ~dsource =
+  input btn;
+  let loca = Dom_html.(createDiv document) in
+  let localol = 0 in
+  loop begin
+    present btn##onclick !(
+      let newitem = Dom_html.(createButton document) in
+      (newitem##.onclick) :=
+        (Dom_html.handler
+           (fun ev  ->
+              set_present_value localol (!!localol + 1);
+              animate ();
+              Js._true));
+    );
+    pause
+  end
 
 

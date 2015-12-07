@@ -22,20 +22,6 @@ module View = struct
     ignore @@ Dom_html.window##requestAnimationFrame
       (Js.wrap_callback @@ fun _ -> ignore @@ f (); ())
 
-  open Tyxml_js
-  (* let task_entry f = *)
-  (*   let task_input = *)
-  (*     Html5.(input ~a:[ *)
-  (*         a_class ["new-todo"] ; *)
-  (*         a_placeholder "What needs to be done?" ; *)
-  (*         a_autofocus `Autofocus ; *)
-  (*       ] ()) *)
-  (*   in *)
-  (*   Html5.(header ~a:[a_class ["header"]] [ *)
-  (*       h1 [pcdata "todos"]; *)
-  (*       task_input *)
-  (*     ]) *)
-
   let create_item cnt delete_sig str =
     let mli = Dom_html.(createLi document) in
     (* mli##.className := Js.string "editing"; *)
@@ -57,15 +43,6 @@ module View = struct
 
 
 
-    (* Html5.(div ~a:[a_class ["view"]] [ *)
-    (*     input ~a:[a_class ["toggle"]; a_input_type `Checkbox ] (); *)
-    (*     label [pcdata str]; *)
-    (*     button ~a:[a_class ["destroy"]] [] *)
-    (* ]) *)
-
-  (* let add_item ul newit = *)
-  (*   Dom.appendChild ul (create_item (Js.to_string (newit##.value))); *)
-  (*   newit##.value := Js.string "" *)
 
 end
 
@@ -118,16 +95,6 @@ module Controller = struct
     end
 
 
-  let addifenter render set_add ev =
-    if ev##.keyCode = 13 then begin
-      Js.Opt.iter (Dom_html.CoerceTo.input (Dom.eventTarget ev))
-        (fun x ->
-           set_add (Js.to_string x##.value);
-           x##.value := Js.string ""
-        );
-      View.raf render
-    end;
-    true
 
 end
 
@@ -135,9 +102,6 @@ let main _ =
   let items_ul = "todo-list" @> CoerceTo.ul in
   let new_todo = "new-todo" @> CoerceTo.input in
   let _m_react = Controller.machine (items_ul, new_todo) in
-
-
-
   Js._false
 
 

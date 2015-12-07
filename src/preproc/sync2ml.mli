@@ -57,4 +57,4 @@ val pp_ml_sequence : int -> Format.formatter -> ml_sequence -> unit
 
 val grc2ml : int list array -> Flowgraph.t -> ml_sequence
 
-val generate: Ast.Tagged.env -> Ast.Tagged.t -> Parsetree.expression
+val generate: animate:bool -> Ast.Tagged.env -> Ast.Tagged.t -> Parsetree.expression

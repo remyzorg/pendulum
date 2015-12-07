@@ -280,6 +280,7 @@ module Ocaml_gen = struct
 
   let setter_arg = Ast.mk_loc "set~arg" (* argument name for the returned setter *)
   let stepfun_name = "p~stepfun"
+  let animate_name = "animate"
   let select_env_name = "pendulum~state"
   let select_env_var = Location.(mkloc select_env_name !Ast_helper.default_loc)
   let select_env_ident = mk_ident (Ast.mk_loc select_env_name)
@@ -426,9 +427,17 @@ module Ocaml_gen = struct
         with Not_found -> acc
     ) e env.Tagged.global_signals
 
+  let construct_raf_call stepfun_ident =
+      [%expr fun () ->
+             let _ = Dom_html.window##requestAnimationFrame
+                 (Js.wrap_callback (fun _ ->
+                      ignore @@ [%e stepfun_ident] ()))
+             in ()
+      ]
 
 
-  let construct_instanciation_body nstmts env sel stepfun_body =
+
+  let construct_instanciation_body animate nstmts env sel stepfun_body =
     let open Selection_tree in
     let sigs_step_arg =
       match env.Tagged.global_signals with
@@ -442,10 +451,17 @@ module Ocaml_gen = struct
              | Finish_exc -> set_absent (); Bitset.add [%e select_env_ident] 0; Finish]
     in
     let stepfun_ident_expr = mk_ident @@ Ast.mk_loc stepfun_name in
+    let stepfun_pat_var = mk_pat_var @@ Ast.mk_loc stepfun_name in
+    let animate_pat_var = mk_pat_var @@ Ast.mk_loc animate_name in
+
     let stepfun_definition e =
-      [%expr let [%p mk_pat_var @@ Ast.mk_loc stepfun_name] =
-               [%e stepfun_lambda_expr]
-             in [%e e]]
+      if animate then
+        Exp.let_ Asttypes.Recursive [
+          Vb.mk stepfun_pat_var stepfun_lambda_expr;
+          Vb.mk animate_pat_var (construct_raf_call stepfun_ident_expr);
+        ] e
+      else
+        Exp.let_ Asttypes.Nonrecursive [Vb.mk stepfun_pat_var stepfun_lambda_expr] e
     in
     let no_params, input_setters_tuple =
       construct_input_setters_tuple env stepfun_ident_expr
@@ -583,7 +599,7 @@ module Ocaml_gen = struct
 end
 
 
-let generate env tast =
+let generate ~animate env tast =
   let selection_tree, flowgraph as grc = Of_ast.construct tast in
   Schedule.tag_tested_stmts selection_tree flowgraph;
   let _deps = Schedule.check_causality_cycles grc in
@@ -592,6 +608,6 @@ let generate env tast =
   let dep_array = Array.make (maxid + 1) [] in
   let ml_ast = grc2ml dep_array interleaved_cfg in
   Ocaml_gen.(
-    construct_instanciation_body maxid env selection_tree
+    construct_instanciation_body animate maxid env selection_tree
     @@ construct_sequence env dep_array ml_ast
   )

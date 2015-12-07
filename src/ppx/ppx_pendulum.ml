@@ -258,8 +258,11 @@ let ast_of_expr atom_mapper e =
 
 let parse_ast atom_mapper vb =
   let dsource, dot, genast = ref false, ref false, ref false in
+  let animate = ref false in
   let rec parse_args_options exp =
     begin match exp with
+      | [%expr fun ~animate -> [%e? exp']] ->
+        animate := true; parse_args_options exp'
       | [%expr fun ~dsource -> [%e? exp']] ->
         dsource := true;
         parse_args_options exp'
@@ -286,7 +289,7 @@ let parse_ast atom_mapper vb =
     let tast, env = Ast.Tagged.of_ast ~sigs ast in
     let tast = Ast.Analysis.filter_dead_trees tast in
     if !dot then Pendulum_misc.print_to_dot loc pat tast;
-    let ocaml_expr = Sync2ml.generate env tast in
+    let ocaml_expr = Sync2ml.generate ~animate:!animate env tast in
     if !dsource then Format.printf "%a@." Pprintast.expression ocaml_expr;
     [%expr [%e ocaml_expr]]
 
