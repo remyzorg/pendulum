@@ -23,55 +23,100 @@ module View = struct
       (Js.wrap_callback @@ fun _ -> ignore @@ f (); ())
 
   open Tyxml_js
-  let task_entry f =
-    let task_input =
-      Html5.(input ~a:[
-          a_class ["new-todo"] ;
-          a_placeholder "What needs to be done?" ;
-          a_autofocus `Autofocus ;
-          a_onkeypress f
-        ] ())
-    in
-    Html5.(header ~a:[a_class ["header"]] [
-        h1 [pcdata "todos"];
-        task_input
-      ])
+  (* let task_entry f = *)
+  (*   let task_input = *)
+  (*     Html5.(input ~a:[ *)
+  (*         a_class ["new-todo"] ; *)
+  (*         a_placeholder "What needs to be done?" ; *)
+  (*         a_autofocus `Autofocus ; *)
+  (*       ] ()) *)
+  (*   in *)
+  (*   Html5.(header ~a:[a_class ["header"]] [ *)
+  (*       h1 [pcdata "todos"]; *)
+  (*       task_input *)
+  (*     ]) *)
 
-  let create_item str =
-    Html5.(div ~a:[a_class ["view"]] [
-        input ~a:[a_class ["toggle"]; a_input_type `Checkbox ] ();
-        label [pcdata str];
-        button ~a:[a_class ["destroy"]] []
-    ])
+  let create_item cnt delete_sig str =
+    let mli = Dom_html.(createLi document) in
+    (* mli##.className := Js.string "editing"; *)
+    let mdiv = Dom_html.(createDiv document)  in
+    mdiv##.className := Js.string "view";
+    let tgl = Dom_html.(createInput document) in
+    tgl##.className := Js.string "toggle";
+    tgl##setAttribute (Js.string "type")(Js.string "checkbox");
+    let lbl = Dom_html.(createLabel document) in
+    lbl##.textContent := Js.some str;
+    let btn = Dom_html.(createButton document) in
+    btn##.className := Js.string "destroy";
+    Dom.appendChild mdiv tgl;
+    Dom.appendChild mdiv lbl;
+    Dom.appendChild mdiv btn;
+    Dom.appendChild mli mdiv;
+    Pendulum.Machine.set_present_value delete_sig cnt;
+    mli
+
+
+
+    (* Html5.(div ~a:[a_class ["view"]] [ *)
+    (*     input ~a:[a_class ["toggle"]; a_input_type `Checkbox ] (); *)
+    (*     label [pcdata str]; *)
+    (*     button ~a:[a_class ["destroy"]] [] *)
+    (* ]) *)
+
+  (* let add_item ul newit = *)
+  (*   Dom.appendChild ul (create_item (Js.to_string (newit##.value))); *)
+  (*   newit##.value := Js.string "" *)
 
 end
+
+let iter f opt =
+  match opt with
+  | None -> ()
+  | Some o -> f o
+
+let default v f opt = 
+  match opt with
+  | None -> v
+  | Some o -> f o
+
+let jstr s = Js.some @@ Js.string ""
+
+let is_eq_char k q = Js.Optdef.case k
+    (fun _ -> false)
+    (fun x -> x = Char.code q)
+
+let enter_pressed ev =
+   default false (fun ev ->
+      Js.Optdef.case ev##.charCode
+        (fun () -> false)
+        (fun c -> c = 13)
+    ) ev
 
 
 module Controller = struct
   let%sync machine =
     input items_ul;
-    input add_item;
-    input remove_item;
-    input toggle_item;
-    input edit_item;
-    input toggle_all;
+    input newit;
 
-    let items = [] in
+    let delete_item = -1 in
+    let add_item = Dom_html.(createDiv document) in
+    let tasks = [] in
+    let cnt = 0 in
     loop begin
-      present add_item begin
-        atom (debug "%s" !!add_item);
-        emit items (View.create_item !!add_item :: !!items);
-      end;
-      pause
-    end
+      present (newit##onkeypress
+               & enter_pressed !!(newit##onkeypress)
+               && newit##.value <> Js.string "")
+        (emit cnt (!!cnt + 1);
+         emit add_item (View.create_item !!cnt delete_item newit##.value))
+    ; pause end
     ||
     loop begin
-      pause
+      present add_item (
+        !(Dom.appendChild !!items_ul !!add_item; newit##.value := Js.string "");
+        emit tasks ((!!cnt, !!add_item) :: !!tasks)
+      ); pause
     end
-    ||
-    loop begin
-      pause
-    end
+
 
   let addifenter render set_add ev =
     if ev##.keyCode = 13 then begin
@@ -86,25 +131,11 @@ module Controller = struct
 
 end
 
-
 let main _ =
-  let _doc = Dom_html.document in
-  let parent = "todomvc" @> CoerceTo.div in
   let items_ul = "todo-list" @> CoerceTo.ul in
-  (* let new_todo = "new-todo" @> CoerceTo.input in *)
-  let dummy_li = View.create_item "" in
+  let new_todo = "new-todo" @> CoerceTo.input in
+  let _m_react = Controller.machine (items_ul, new_todo) in
 
-  let set_ul, set_add_item, set_toggle,
-      set_remove, edit_item, set_toggle_all, m_react =
-    Controller.machine (items_ul, "", dummy_li, dummy_li, dummy_li, ()) in
-
-  let task_entry = View.task_entry (Controller.addifenter m_react set_add_item) in
-  Dom.appendChild parent (Tyxml_js.To_dom.of_header task_entry);
-
-
-  (* task_entry##.onkeypress := Dom_html.handler  *)
-  (* set_ul items_ul; *)
-  (* ignore (m_react ()); *)
 
 
   Js._false

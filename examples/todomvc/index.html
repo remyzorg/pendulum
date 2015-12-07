@@ -8,17 +8,23 @@
     <link rel="stylesheet" href="node_modules/todomvc-app-css/index.css">
   </head>
   <body>
-    <div id="todomvc" class="todoapp">
-      <!-- <header class="header"> -->
-      <!--   <h1>todos</h1> -->
-      <!--   <input id="new-todo" -->
-      <!--          class="new-todo" -->
-      <!--          type="text" -->
-      <!--          placeholder="What needs to be done?" autofocus -->
-      <!--          name="newTodo"/> -->
-      <!-- </header> -->
-      <ul id="todo-list">
-      </ul>
+    <div id="todomvc">
+      <div class="todomvc-wrapper">
+        <section class="todoapp">
+          <header class="header">
+            <h1>todos</h1>
+            <input id="new-todo"
+                   class="new-todo"
+                   type="text"
+                   placeholder="What needs to be done?" autofocus
+                   name="newTodo"/>
+          </header>
+          <section class="main" style="visibility: visible">
+            <ul id="todo-list" class="todo-list">
+            </ul>
+          </section>
+        </section>
+      </div>
     </div>
     <footer class="info">
       <p>Double-click to edit a todo</p>
