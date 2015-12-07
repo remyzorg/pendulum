@@ -22,7 +22,7 @@ module View = struct
     ignore @@ Dom_html.window##requestAnimationFrame
       (Js.wrap_callback @@ fun _ -> ignore @@ f (); ())
 
-  let create_item cnt delete_sig str =
+  let create_item cnt animate delete_sig str =
     let mli = Dom_html.(createLi document) in
     (* mli##.className := Js.string "editing"; *)
     let mdiv = Dom_html.(createDiv document)  in
@@ -38,7 +38,10 @@ module View = struct
     Dom.appendChild mdiv lbl;
     Dom.appendChild mdiv btn;
     Dom.appendChild mli mdiv;
-    Pendulum.Machine.set_present_value delete_sig cnt;
+    btn##.onclick := Dom_html.handler (fun _  ->
+        Pendulum.Machine.set_present_value delete_sig cnt;
+        animate ();
+        Js._true) ;
     mli
 
 
@@ -71,7 +74,7 @@ let enter_pressed ev =
 
 
 module Controller = struct
-  let%sync machine =
+  let%sync machine ~animate =
     input items_ul;
     input newit;
 
@@ -84,7 +87,7 @@ module Controller = struct
                & enter_pressed !!(newit##onkeypress)
                && newit##.value <> Js.string "")
         (emit cnt (!!cnt + 1);
-         emit add_item (View.create_item !!cnt delete_item newit##.value))
+         emit add_item (View.create_item !!cnt animate delete_item newit##.value))
     ; pause end
     ||
     loop begin
@@ -92,6 +95,18 @@ module Controller = struct
         !(Dom.appendChild !!items_ul !!add_item; newit##.value := Js.string "");
         emit tasks ((!!cnt, !!add_item) :: !!tasks)
       ); pause
+    end
+    ||
+    loop begin
+      present delete_item (
+        !(debug "delete item %d" !!delete_item);
+        emit tasks (List.filter (fun (id, elt) ->
+            if id = !!delete_item
+            then (Dom.removeChild !!items_ul elt; false)
+            else true
+          ) !!tasks)
+      );
+      pause
     end
 
 
