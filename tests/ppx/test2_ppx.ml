@@ -135,7 +135,7 @@ let%sync testexpr =
     pause
   end
 
-let%sync reactive_player =
+let%sync reactive_player ~dsource =
   input play_pause;
   input progress_bar;
   input media;
@@ -178,3 +178,5 @@ let%sync reactive_player =
   )
   ||
   loop pause
+
+

@@ -256,53 +256,46 @@ let ast_of_expr atom_mapper e =
     | e -> Error.(syntax_error ~loc:e.pexp_loc Keyword)
   in visit e
 
-let parse_ast atom_mapper ext vb =
-  let e, sigs = pop_signals_decl vb.pvb_expr in
-  let loc = vb.pvb_loc in
-  begin match ext with
-    | "sync_ast" ->
-      [%expr ([%e Pendulum_misc.expr_of_ast @@ ast_of_expr atom_mapper e])]
+let parse_ast atom_mapper vb =
+  let dsource, dot, genast = ref false, ref false, ref false in
+  let rec parse_args_options exp =
+    begin match exp with
+      | [%expr fun ~dsource -> [%e? exp']] ->
+        dsource := true;
+        parse_args_options exp'
+      | [%expr fun ~dot -> [%e? exp']] ->
+        dot := true; parse_args_options exp'
+      | [%expr fun ~ast -> [%e? exp']] ->
+        genast := true; parse_args_options exp'
+      | e -> e
+    end;
+  in
+  let e = parse_args_options vb.pvb_expr in
+  let e, sigs = pop_signals_decl e in
 
-    | "syncdebug" ->
-      let pat =
-        match vb.pvb_pat.ppat_desc with
-        | Ppat_var id -> id.txt
-        | _ -> "unknown"
-      in
-      let ast = ast_of_expr atom_mapper e in
-      let tast, env = Ast.Tagged.of_ast ~sigs ast in
-      let tast = Ast.Analysis.filter_dead_trees tast in
+  if !genast then
+    [%expr ([%e Pendulum_misc.expr_of_ast @@ ast_of_expr atom_mapper e])]
+  else
+    let loc = vb.pvb_loc in
+    let pat =
+      match vb.pvb_pat.ppat_desc with
+      | Ppat_var id -> id.txt
+      | _ -> "unknown"
+    in
+    let ast = ast_of_expr atom_mapper e in
+    let tast, env = Ast.Tagged.of_ast ~sigs ast in
+    let tast = Ast.Analysis.filter_dead_trees tast in
+    if !dot then Pendulum_misc.print_to_dot loc pat tast;
+    let ocaml_expr = Sync2ml.generate env tast in
+    if !dsource then Format.printf "%a@." Pprintast.expression ocaml_expr;
+    [%expr [%e ocaml_expr]]
 
 
-      Pendulum_misc.print_to_dot loc pat tast;
-      let ocaml_expr =
-        Sync2ml.generate env tast
-      in
 
-      Format.printf "%a@." Pprintast.expression ocaml_expr;
-      [%expr [%e ocaml_expr]]
-
-    | "sync" ->
-      let ast = ast_of_expr atom_mapper e in
-      let tast, env = Ast.Tagged.of_ast ~sigs ast in
-      let tast = Ast.Analysis.filter_dead_trees tast in
-      let ocaml_expr =
-        Sync2ml.generate env tast in
-
-
-      [%expr [%e ocaml_expr]]
-
-    | _ -> assert false
-  end
-
-let gen_bindings atom_mapper ext vbl =
+let gen_bindings atom_mapper vbl =
   List.map (fun vb ->
-      {vb with pvb_expr = parse_ast atom_mapper ext vb}
+      {vb with pvb_expr = parse_ast atom_mapper vb}
     ) vbl
-
-let expected_ext = function
-  | "syncdebug" | "sync_ast" | "sync" -> true
-  | _ -> false
 
 
 let try_compile_error f mapper str =
@@ -343,28 +336,27 @@ let pendulum_mapper argv =
   {default_mapper with
    structure_item = try_compile_error (fun mapper stri ->
        match stri with
-       | { pstr_desc = Pstr_extension (({ txt = ext }, PStr [
-           { pstr_desc = Pstr_value (Nonrecursive, vbs) }]), attrs); pstr_loc }
-         when expected_ext ext ->
+       | { pstr_desc = Pstr_extension (({ txt = "sync" }, PStr [
+           { pstr_desc = Pstr_value (Nonrecursive, vbs) }]), attrs); pstr_loc } ->
          Str.value Nonrecursive
-         @@ gen_bindings (tagged_signals_mapper.expr tagged_signals_mapper)  ext vbs
+         @@ gen_bindings (tagged_signals_mapper.expr tagged_signals_mapper) vbs
 
-       | { pstr_desc = Pstr_extension (({ txt = ext }, PStr [
-           { pstr_desc = Pstr_value (Recursive, _) }]), _); pstr_loc }
-         when expected_ext ext ->
+       | { pstr_desc = Pstr_extension (({ txt = "sync" }, PStr [
+           { pstr_desc = Pstr_value (Recursive, _) }]), _); pstr_loc } ->
          Error.(error ~loc:pstr_loc Non_recursive_let)
+
        | x -> default_mapper.structure_item mapper x
      ) ;
 
    expr = try_compile_error (fun mapper exp ->
        match exp with
-       | { pexp_desc = Pexp_extension ({ txt = ext; loc }, e)}
-         when expected_ext ext ->
+       | { pexp_desc = Pexp_extension ({ txt = "sync"; loc }, e)} ->
          begin match e with
            | PStr [{ pstr_desc = Pstr_eval (e, _)}] ->
              begin match e.pexp_desc with
                | Pexp_let (Nonrecursive, vbl, e) ->
-                 Exp.let_ Nonrecursive (gen_bindings (tagged_signals_mapper.expr tagged_signals_mapper) ext vbl)
+                 Exp.let_ Nonrecursive
+                   (gen_bindings (tagged_signals_mapper.expr tagged_signals_mapper) vbl)
                  @@ mapper.expr mapper e
                | Pexp_let (Recursive, vbl, e) ->
                  Error.(error ~loc Non_recursive_let)
