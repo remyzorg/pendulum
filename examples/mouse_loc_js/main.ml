@@ -26,8 +26,10 @@ let%sync mouse_machine =
   input window;
   loop begin
     present window##onmousemove !(
-      iter (update_field !!tarea)
-        !!(window##onmousemove))
+      match !!(window##onmousemove) with
+      | None -> ()
+      | Some ev -> update_field !!tarea ev
+    );
     pause
   end
 
