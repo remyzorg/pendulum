@@ -17,10 +17,47 @@ The core language is completely compatible with vanilla OCaml compiler.
 
 **Please do not use pendulum for now, as it is an early prototype**
 
+
+
+
 # Documentation
 
 see a slight [documentation](https://www.github.com/remyzorg/pendulum/wiki/Documentation) and [examples](examples/)
 
+## Example
+
+A UI for playing video with customs controls: play/pause, seek, display time
+
+```ocaml
+let%sync reactive_player =
+  input play_pause;
+  input progress_bar;
+  input media;
+  input time_a;
+
+  let no_update = () in
+  let state = Js.to_bool media##.paused in
+  loop (
+    present media##onplay
+      !(play_pause##.textContent := Js.some @@ Js.string "Pause"); pause)
+  || loop (present play_pause##onclick (emit state (not !!state)); pause)
+  || loop (present state !(update_state (!!state) media play_pause); pause)
+  || loop (
+    await progress_bar##onmousedown;
+    trap t' (loop (
+        emit no_update ();
+        present progress_bar##onmouseup
+          (!(update_media media progress_bar); exit t');
+        pause)
+      ); pause)
+  || loop (
+    present media##onprogress (
+      present no_update nothing !(update_slider progress_bar media)
+      ||
+      !(update_time_a media (!!time_a))
+    ); pause)
+```
+see [this example](example/player) for the full code
 
 # Install
 
