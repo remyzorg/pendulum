@@ -74,7 +74,7 @@ let%sync reactive_player =
   let state = Js.to_bool media##.paused in
 
   (* when the video starts or restarts playing,
-     switch the display of the buttong*)
+     switch the display of the button *)
   loop (
     present media##onplay
       !(play_pause##.textContent := Js.some @@ Js.string "Pause"); pause)
