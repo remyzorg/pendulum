@@ -84,17 +84,18 @@ let rec expr_of_ast e =
     end  [@metaloc e.loc]
   in visit e
 
-let print_to_dot_one name ext f e =
+let print_to_dot_one todot topdf name ext f e =
   let full_name = (name ^ ext) in
   let c = open_out (full_name ^ ".dot") in
   let fmt = Format.formatter_of_out_channel c in
   f fmt e;
   close_out c;
-  ignore @@ Sys.command (Format.sprintf "dot -Tpdf %s.dot -o %s.pdf" full_name full_name);
-  (Unix.unlink (full_name ^ ".dot"))
+  if topdf then
+    ignore @@ Sys.command (Format.sprintf "dot -Tpdf %s.dot -o %s.pdf" full_name full_name);
+  if not todot then (Unix.unlink (full_name ^ ".dot"))
 
 
-let print_to_dot loc pat =
+let print_to_dot todot topdf loc pat =
   let open Location in
   fun e ->
     let name = Filename.(
@@ -103,12 +104,12 @@ let print_to_dot loc pat =
         |> basename
       ) ^ ("_" ^ pat)
     in
-    print_to_dot_one name "_tagged" Ast.Tagged.print_to_dot e;
+    print_to_dot_one todot topdf name "_tagged" Ast.Tagged.print_to_dot e;
     let sel, fg = Sync2ml.Of_ast.construct e in
-    print_to_dot_one name "_sel" Sync2ml.Selection_tree.print_to_dot sel;
-    print_to_dot_one name "_fg" Sync2ml.Flowgraph.print_to_dot fg;
+    print_to_dot_one todot topdf name "_sel" Sync2ml.Selection_tree.print_to_dot sel;
+    print_to_dot_one todot topdf name "_fg" Sync2ml.Flowgraph.print_to_dot fg;
     let fg = Sync2ml.Schedule.interleave fg in
-    print_to_dot_one name "_interfg"
+    print_to_dot_one todot topdf name "_interfg"
       Sync2ml.Flowgraph.print_to_dot fg
     (* Format.printf "=============================@."; *)
     (* Sync2ml.(pp_ml_sequence 0 Format.std_formatter (grc2ml fg)) *)

@@ -23,7 +23,7 @@ let%sync machine =
     trap t begin (
         await checked;
         await request;
-        atom (print_endline !!request);
+        !(Dom_html.window##alert(Js.string !!request));
         exit t;
       ) || loop (present unchecked (exit t); pause)
     end;
@@ -32,9 +32,9 @@ let%sync machine =
 
 let main _ =
   let open Dom_html in
-  let text_content = "content" @> CoerceTo.input in
-  let checkbox_accept = "accept" @> CoerceTo.input in
-  let request_button = "request" @> CoerceTo.button in
+  let text_content = "checksubmit_content" @> CoerceTo.input in
+  let checkbox_accept = "checksubmit_accept" @> CoerceTo.input in
+  let request_button = "checksubmit_request" @> CoerceTo.button in
   (* let c = "canvas" @> CoerceTo.canvas in *)
   (* let ctx = canvas##getContext (Dom_html._2d_) in *)
 
