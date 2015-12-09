@@ -17,10 +17,61 @@ The core language is completely compatible with vanilla OCaml compiler.
 
 **Please do not use pendulum for now, as it is an early prototype**
 
+
+
+
 # Documentation
 
 see a slight [documentation](https://www.github.com/remyzorg/pendulum/wiki/Documentation) and [examples](examples/)
 
+## Example
+
+A UI for playing video with customs controls: play/pause, seek, display time
+
+```ocaml
+let%sync reactive_player =
+  input play_pause; (* the button *)
+  input progress_bar; (* the progress element *)
+  input media; (* the video element *)
+  input time_a; (* the a elt displaying time*)
+
+  let no_update = () in
+  let state = Js.to_bool media##.paused in
+
+  (* when the video starts or restarts playing,
+     switch the display of the button*)
+  loop (
+    present media##onplay
+      !(play_pause##.textContent := Js.some @@ Js.string "Pause"); pause)
+
+  (* switch state when the button is clicked *)
+  || loop (present play_pause##onclick (emit state (not !!state)); pause)
+
+  (* when the state changes, update the media and the button *)
+  || loop (present state !(update_state (!!state) media play_pause); pause)
+
+  (* when mouse is down on the progress bar, start emit `no_update` every instants
+     until mouse is up to block the following task. When mouse ups,
+     update the media in consequence *)
+  || loop (
+    await progress_bar##onmousedown;
+    trap t' (loop (
+        emit no_update ();
+        present progress_bar##onmouseup
+          (!(update_media media progress_bar); exit t');
+        pause)
+      ); pause)
+
+  (* Each progression steps of the video, update the progress bar
+     with the right value. Except no_update is present. *)
+  || loop (
+    present media##onprogress (
+      present no_update nothing !(update_slider progress_bar media)
+      ||
+      !(update_time_a media (!!time_a))
+    ); pause)
+```
+see [this example](examples/player) for the full code
 
 # Install
 
