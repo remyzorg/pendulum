@@ -71,7 +71,9 @@ let%sync reactive_player =
   input time_a; (* the a elt displaying time*)
 
   let no_update = () in
-  let state = Js.to_bool media##.paused in
+  let state = not @@ Js.to_bool media##.paused
+              (* || Js.to_bool ##media##. *)
+  in
 
   (* when the video starts or restarts playing,
      switch the display of the button *)
@@ -80,10 +82,13 @@ let%sync reactive_player =
       !(play_pause##.textContent := Js.some @@ Js.string "Pause"); pause)
 
   (* switch state when the button is clicked *)
-  || loop (present play_pause##onclick (emit state (not !!state)); pause)
+  || loop (present play_pause##onclick (
+      emit state (not !!state);
+    ); pause)
 
   (* when the state changes, update the media and the button *)
-  || loop (present state !(update_state (!!state) media play_pause); pause)
+  || loop (present state !(update_state (!!state) media play_pause;); pause)
+  || loop (present state !(debug "state : %B" !!state); pause)
 
   (* when mouse is down on the progress bar, start emit `no_update` every instants
      until mouse is up to block the following task. When mouse ups,
@@ -111,10 +116,10 @@ let wrapper react f p = Dom_html.handler (fun _ -> f p;  react (); Js._true)
 
 let main _ =
   let open Dom_html in
-  let play_button = "play" @> Coerce.button in
-  let progress_bar = "progress" @> Coerce.input in
-  let media = "media" @> Coerce.media in
-  let time = "timetxt" @> Coerce.a in
+  let play_button = "reactiveplayer_play" @> Coerce.button in
+  let progress_bar = "reactiveplayer_progress" @> Coerce.input in
+  let media = "reactiveplayer_media" @> Coerce.media in
+  let time = "reactiveplayer_timetxt" @> Coerce.a in
   let _set_time, _react = reactive_player (play_button, progress_bar, media, time) in
   Js._false
 

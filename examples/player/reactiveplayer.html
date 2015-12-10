@@ -1,0 +1,24 @@
+
+<html>
+  <head>
+    <script type="text/javascript" src="./reactiveplayer.js" ></script>
+    <link rel="stylesheet" type="text/css" href="reactiveplayer.css">
+  </head>
+  <body>
+    <div>
+      <video autoplay id="reactiveplayer_media" width="800px">
+        <source src="http://download.blender.org/peach/bigbuckbunny_movies/big_buck_bunny_720p_stereo.ogg" type="video/ogg">
+        <source src="bunny.ogg" type="video/ogg"> 
+      </video>
+    </div>
+    <br>
+    <div>
+      <input type="range" id="reactiveplayer_progress" min="0." max="1000" value="0." />
+    </div>
+    <br>
+    <div>
+      <button id="reactiveplayer_play" width="80px">Play </button>
+      <a id="reactiveplayer_timetxt">0/0</a>
+    </div>
+  </body>
+</html>
