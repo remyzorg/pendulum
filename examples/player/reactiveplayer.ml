@@ -125,10 +125,10 @@ let wrapper react f p = Dom_html.handler (fun _ -> f p;  react (); Js._true)
 
 let main _ =
   let open Dom_html in
-  let play_button = "reactiveplayer_play_fail" @> Coerce.button in
-  let progress_bar = "reactiveplayer_progress_fail" @> Coerce.input in
-  let media = "reactiveplayer_media_fail" @> Coerce.media in
-  let time = "reactiveplayer_timetxt_fail" @> Coerce.a in
+  let play_button = "reactiveplayer_play" @> Coerce.button in
+  let progress_bar = "reactiveplayer_progress" @> Coerce.input in
+  let media = "reactiveplayer_media" @> Coerce.media in
+  let time = "reactiveplayer_timetxt" @> Coerce.a in
   let _set_time, _react = reactive_player (play_button, progress_bar, media, time) in
   Js._false
 
