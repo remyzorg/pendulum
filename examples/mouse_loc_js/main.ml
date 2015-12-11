@@ -12,12 +12,10 @@ let (@>) s coerce =
   Js.Opt.get (coerce @@ Dom_html.getElementById s)
     (fun () -> error "can't find element %s" s)
 
-module Option = struct
 let iter opt f =
   match opt with
   | None -> ()
   | Some o -> f o
-end
 
 let update_field tarea ev =
   tarea##.textContent :=
@@ -28,7 +26,7 @@ let%sync mouse_machine ~png =
   input window;
   loop begin
     present window##onmousemove !(
-      Option.iter !!(window##onmousemove)
+      iter !!(window##onmousemove)
         (update_field !!tarea)
     );
     pause

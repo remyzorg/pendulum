@@ -164,19 +164,19 @@ module Flowgraph = struct
       Format.(fprintf fmt "%s" begin
           match a with
           | Emit vs -> "emit <B>" ^ vs.signal.ident.content ^ "</B>"
-          | Atom e -> asprintf "%a" printexp e.exp
+          | Atom e -> "atom"
           | Enter i -> sprintf "enter %d" i
           | Exit i -> sprintf "exit %d" i
           | Instantiate_run (id, _, _) -> sprintf "instantiate %s" id.content
           | Local_signal vs ->
-            asprintf "signal %s (%a)" vs.signal.ident.content printexp vs.svalue.exp
+            asprintf "signal %s" vs.signal.ident.content
         end)
 
     let pp_action fmt a =
       Format.(fprintf fmt "%s" begin
           match a with
           | Emit vs -> "Emit " ^ vs.signal.ident.content
-          | Atom e -> asprintf "Atom (%a)" printexp e.exp
+          | Atom e -> asprintf "Atom" 
           | Enter i -> sprintf "Enter %d" i
           | Exit i -> sprintf "Exit %d" i
           | Instantiate_run (id, _, _) -> sprintf "Instantiate_run %s" id.content
