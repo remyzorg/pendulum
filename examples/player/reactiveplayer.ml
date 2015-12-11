@@ -88,7 +88,6 @@ let%sync reactive_player =
 
   (* when the state changes, update the media and the button *)
   || loop (present state !(update_state (!!state) media play_pause;); pause)
-  || loop (present state !(debug "state : %B" !!state); pause)
 
   (* when mouse is down on the progress bar, start emit `no_update` every instants
      until mouse is up to block the following task. When mouse ups,
@@ -101,6 +100,10 @@ let%sync reactive_player =
           (!(update_media media progress_bar); exit t');
         pause)
       ); pause)
+  (* || loop ( *)
+  (*   present progress_bar##onmouseup *)
+  (*     !(update_media media progress_bar); *)
+  (*   pause) *)
 
   (* Each progression steps of the video, update the progress bar
      with the right value. Except no_update is present. *)
@@ -110,16 +113,22 @@ let%sync reactive_player =
       ||
       !(update_time_a media (!!time_a))
     ); pause)
+  (* || loop ( *)
+  (*   present media##onprogress ( *)
+  (*     !(update_slider progress_bar media) *)
+  (*     || *)
+  (*     !(update_time_a media !!time_a) *)
+  (*   ); pause) *)
 
 
 let wrapper react f p = Dom_html.handler (fun _ -> f p;  react (); Js._true)
 
 let main _ =
   let open Dom_html in
-  let play_button = "reactiveplayer_play" @> Coerce.button in
-  let progress_bar = "reactiveplayer_progress" @> Coerce.input in
-  let media = "reactiveplayer_media" @> Coerce.media in
-  let time = "reactiveplayer_timetxt" @> Coerce.a in
+  let play_button = "reactiveplayer_play_fail" @> Coerce.button in
+  let progress_bar = "reactiveplayer_progress_fail" @> Coerce.input in
+  let media = "reactiveplayer_media_fail" @> Coerce.media in
+  let time = "reactiveplayer_timetxt_fail" @> Coerce.a in
   let _set_time, _react = reactive_player (play_button, progress_bar, media, time) in
   Js._false
 
