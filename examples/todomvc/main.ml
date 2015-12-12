@@ -22,7 +22,7 @@ module View = struct
     ignore @@ Dom_html.window##requestAnimationFrame
       (Js.wrap_callback @@ fun _ -> ignore @@ f (); ())
 
-  let create_item cnt animate delete_sig str =
+  let create_item cnt animate delete_sig blur_sig dblclick_sig str =
     let mli = Dom_html.(createLi document) in
     (* mli##.className := Js.string "editing"; *)
     let mdiv = Dom_html.(createDiv document)  in
@@ -34,6 +34,18 @@ module View = struct
     lbl##.textContent := Js.some str;
     let btn = Dom_html.(createButton document) in
     btn##.className := Js.string "destroy";
+    let ie = Dom_html.(createInput document) in
+    ie##setAttribute (Js.string "type") (Js.string "text");
+    ie##.className := Js.string "edit";
+    ie##.value := str;
+    ie##.onblur := Dom_html.handler (fun _ ->
+        Pendulum.Machine.set_present_value blur_sig cnt;
+        animate ();
+        Js._true);
+    lbl##.ondblclick := Dom_html.handler (fun _ ->
+        Pendulum.Machine.set_present_value dblclick_sig cnt;
+        animate ();
+        Js._true);
     Dom.appendChild mdiv tgl;
     Dom.appendChild mdiv lbl;
     Dom.appendChild mdiv btn;
@@ -42,10 +54,7 @@ module View = struct
         Pendulum.Machine.set_present_value delete_sig cnt;
         animate ();
         Js._true) ;
-    mli
-
-
-
+    mli, ie
 
 end
 
@@ -54,7 +63,7 @@ let iter f opt =
   | None -> ()
   | Some o -> f o
 
-let default v f opt = 
+let default v f opt =
   match opt with
   | None -> v
   | Some o -> f o
@@ -72,6 +81,23 @@ let enter_pressed ev =
         (fun c -> c = 13)
     ) ev
 
+let get_remove h items_ul elt_id =
+  try
+    let elt, _= Hashtbl.find h elt_id in
+    Hashtbl.remove h elt_id;
+    Dom.removeChild items_ul elt
+  with Not_found -> ()
+
+let add_append h cnt items_ul added_item =
+  Hashtbl.add h cnt added_item;
+  Dom.appendChild items_ul (fst added_item)
+
+let focus_iedit h id =
+  try
+    let (_, edit) = Hashtbl.find h id in
+    edit##focus
+  with Not_found -> ()
+
 
 module Controller = struct
   let%sync machine ~animate =
@@ -79,33 +105,34 @@ module Controller = struct
     input newit;
 
     let delete_item = -1 in
-    let add_item = Dom_html.(createDiv document) in
-    let tasks = [] in
+    let blur_item = -1 in
+    let dblclick_item = -1 in
+    let add_item =
+      Dom_html.(createDiv document, createInput document)
+    in
+    let tasks = Hashtbl.create 19 in
     let cnt = 0 in
+    (* loop (present dbl_click_item ) *)
     loop begin
       present (newit##onkeypress
                & enter_pressed !!(newit##onkeypress)
                && newit##.value <> Js.string "")
         (emit cnt (!!cnt + 1);
-         emit add_item (View.create_item !!cnt animate delete_item newit##.value))
+         emit add_item
+           (View.create_item !!cnt animate
+              delete_item blur_item dblclick_item newit##.value))
     ; pause end
     ||
     loop begin
-      present add_item (
-        !(Dom.appendChild !!items_ul !!add_item; newit##.value := Js.string "");
-        emit tasks ((!!cnt, !!add_item) :: !!tasks)
+      present add_item !(
+        newit##.value := Js.string "";
+        add_append !!tasks !!cnt !!items_ul !!add_item
       ); pause
     end
     ||
     loop begin
-      present delete_item (
-        !(debug "delete item %d" !!delete_item);
-        emit tasks (List.filter (fun (id, elt) ->
-            if id = !!delete_item
-            then (Dom.removeChild !!items_ul elt; false)
-            else true
-          ) !!tasks)
-      );
+      present delete_item
+        !(get_remove !!tasks !!items_ul !!delete_item);
       pause
     end
 
