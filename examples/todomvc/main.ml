@@ -16,6 +16,7 @@ let (@>) s coerce =
 
 
 
+
 module View = struct
 
   let raf f =
@@ -31,28 +32,28 @@ module View = struct
     tgl##.className := Js.string "toggle";
     tgl##setAttribute (Js.string "type")(Js.string "checkbox");
     let lbl = Dom_html.(createLabel document) in
-    lbl##.textContent := Js.some str;
+    lbl##.textContent := Js.some str##trim;
     let btn = Dom_html.(createButton document) in
     btn##.className := Js.string "destroy";
     let ie = Dom_html.(createInput document) in
     ie##setAttribute (Js.string "type") (Js.string "text");
     ie##.className := Js.string "edit";
-    ie##.value := str;
+    ie##.value := str##trim;
+    ie##.id := Js.string @@ Format.sprintf "it-edit-%d" cnt;
     ie##.onblur := Dom_html.handler (fun _ ->
-        Pendulum.Machine.set_present_value blur_sig cnt;
-        animate ();
+        Pendulum.Machine.set_present_value blur_sig cnt; animate ();
+        debug "lost focus";
         Js._true);
     lbl##.ondblclick := Dom_html.handler (fun _ ->
-        Pendulum.Machine.set_present_value dblclick_sig cnt;
-        animate ();
+        Pendulum.Machine.set_present_value dblclick_sig cnt; animate ();
         Js._true);
-    Dom.appendChild mdiv tgl;
-    Dom.appendChild mdiv lbl;
-    Dom.appendChild mdiv btn;
-    Dom.appendChild mli mdiv;
+    Dom.(appendChild mdiv tgl;
+         appendChild mdiv ie;
+         appendChild mdiv lbl;
+         appendChild mdiv btn;
+         appendChild mli mdiv);
     btn##.onclick := Dom_html.handler (fun _  ->
-        Pendulum.Machine.set_present_value delete_sig cnt;
-        animate ();
+        Pendulum.Machine.set_present_value delete_sig cnt; animate ();
         Js._true) ;
     mli, ie
 
@@ -95,7 +96,9 @@ let add_append h cnt items_ul added_item =
 let focus_iedit h id =
   try
     let (_, edit) = Hashtbl.find h id in
-    edit##focus
+    debug "Ok found it : %s" (Js.to_string edit##.id);
+    let node = (Js.to_string edit##.id) @> CoerceTo.input in
+    node##focus
   with Not_found -> ()
 
 
@@ -112,7 +115,9 @@ module Controller = struct
     in
     let tasks = Hashtbl.create 19 in
     let cnt = 0 in
-    (* loop (present dbl_click_item ) *)
+    loop begin
+      present dblclick_item !(focus_iedit !!tasks !!dblclick_item)
+    end ||
     loop begin
       present (newit##onkeypress
                & enter_pressed !!(newit##onkeypress)
