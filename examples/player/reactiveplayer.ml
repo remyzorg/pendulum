@@ -71,9 +71,7 @@ let%sync reactive_player =
   input time_a; (* the a elt displaying time*)
 
   let no_update = () in
-  let state = not @@ Js.to_bool media##.paused
-              (* || Js.to_bool ##media##. *)
-  in
+  let state = Js.to_bool media##.autoplay in
 
   (* when the video starts or restarts playing,
      switch the display of the button *)
@@ -83,11 +81,11 @@ let%sync reactive_player =
 
   (* switch state when the button is clicked *)
   || loop (present play_pause##onclick (
-      emit state (not !!state);
+      emit state (not (pre state));
     ); pause)
 
   (* when the state changes, update the media and the button *)
-  || loop (present state !(update_state (!!state) media play_pause;); pause)
+  || loop (present state !(update_state (pre state) media play_pause;); pause)
 
   (* when mouse is down on the progress bar, start emit `no_update` every instants
      until mouse is up to block the following task. When mouse ups,
@@ -111,7 +109,7 @@ let%sync reactive_player =
     present media##onprogress (
       present no_update nothing !(update_slider progress_bar media)
       ||
-      !(update_time_a media (!!time_a))
+      !(update_time_a media (pre time_a))
     ); pause)
   (* || loop ( *)
   (*   present media##onprogress ( *)
