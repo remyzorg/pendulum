@@ -281,6 +281,7 @@ module Ocaml_gen = struct
   let setter_arg = Ast.mk_loc "set~arg" (* argument name for the returned setter *)
   let stepfun_name = "p~stepfun"
   let animate_name = "animate"
+  let animated_state_var_name = "animated_next_raf"
   let select_env_name = "pendulum~state"
   let select_env_var = Location.(mkloc select_env_name !Ast_helper.default_loc)
   let select_env_ident = mk_ident (Ast.mk_loc select_env_name)
@@ -406,16 +407,22 @@ module Ocaml_gen = struct
           ) acc (List.rev insts)
       ) !(env.Tagged.machine_runs) e
 
-  let construct_callbacks_assigns env e =
+  let construct_callbacks_assigns animate env e =
     let opexpr loc = mk_ident @@ Ast.mk_loc ~loc "##." in
     let construct_lhs s tag =
       [%expr [%e opexpr tag.loc] [%e mk_ident s.ident] [%e mk_ident tag]]
+    in
+    let step_call =
+      if animate then
+        [%expr [%e mk_ident @@ Ast.mk_loc animate_name] ()]
+      else
+        [%expr ignore @@ [%e mk_ident @@ Ast.mk_loc stepfun_name] ()]
     in
     let construct_rhs s tag =
       [%expr Dom_html.handler (
              fun ev ->
                set_present_value [%e mk_ident (append_tag s tag).ident] (Some ev);
-               ignore @@ [%e mk_ident @@ Ast.mk_loc stepfun_name] ();
+               [%e step_call];
                Js._true)]
     in
     let construct_assign s acc tag =
@@ -428,13 +435,21 @@ module Ocaml_gen = struct
     ) e env.Tagged.global_signals
 
   let construct_raf_call stepfun_ident =
-      [%expr fun () ->
+    [%expr fun () ->
+           if ![%e mk_ident @@ Ast.mk_loc animated_state_var_name] then ()
+           else
+             [%e mk_ident @@ Ast.mk_loc animated_state_var_name] := true;
              let _ = Dom_html.window##requestAnimationFrame
                  (Js.wrap_callback (fun _ ->
-                      ignore @@ [%e stepfun_ident] ()))
+                      ignore @@ [%e stepfun_ident] ();
+                      [%e mk_ident @@ Ast.mk_loc animated_state_var_name] := false;
+                    ))
              in ()
-      ]
+    ]
 
+  let construct_animate_mutex animate body =
+    if not animate then body else
+      [%expr let [%p mk_pat_var @@ Ast.mk_loc animated_state_var_name] = ref false in [%e body]]
 
 
   let construct_instanciation_body animate nstmts env sel stepfun_body =
@@ -453,6 +468,11 @@ module Ocaml_gen = struct
     let stepfun_ident_expr = mk_ident @@ Ast.mk_loc stepfun_name in
     let stepfun_pat_var = mk_pat_var @@ Ast.mk_loc stepfun_name in
     let animate_pat_var = mk_pat_var @@ Ast.mk_loc animate_name in
+    let animate_ident_expr = mk_ident @@ Ast.mk_loc animate_name in
+
+    let returned_stepfun_ident =
+      if animate then animate_ident_expr else stepfun_ident_expr
+    in
 
     let stepfun_definition e =
       if animate then
@@ -464,18 +484,19 @@ module Ocaml_gen = struct
         Exp.let_ Asttypes.Nonrecursive [Vb.mk stepfun_pat_var stepfun_lambda_expr] e
     in
     let no_params, input_setters_tuple =
-      construct_input_setters_tuple env stepfun_ident_expr
+      construct_input_setters_tuple env returned_stepfun_ident
     in
     let return_value_expr =
-      if no_params then [%expr [%e stepfun_ident_expr]]
+      if no_params then [%expr [%e returned_stepfun_ident]]
       else [%expr [%e input_setters_tuple]]
     in
     let body_expression =
       construct_global_signals_definitions env
       @@ construct_set_all_absent_definition env
       @@ construct_machine_registers_definitions env
+      @@ construct_animate_mutex animate
       @@ stepfun_definition
-      @@ construct_callbacks_assigns env
+      @@ construct_callbacks_assigns animate env
       @@ return_value_expr
     in
     [%expr

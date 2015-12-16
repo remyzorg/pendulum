@@ -32,26 +32,42 @@ let (@>) s coerce =
 
 
 
-
-
-
 let str s = Js.some @@ Js.string s
-
-let update_slider slider media =
-  slider##.value := Js.string @@ Format.sprintf "%0.f"
-      (if media##.duration = 0. then 0. else media##.currentTime /. media##.duration *. 800.)
-
-let update_media media slider =
-  media##.currentTime := (Js.parseFloat slider##.value) /. 800. *. media##.duration
-
-let update_state state media button =
-  if state then media##play else media##pause
 
 let ftime_to_min_sec t =
   let sec = int_of_float t in
   let min = sec / 60 in
   let sec = sec mod 60 in
   (min, sec)
+
+let max_slide = 1000.
+
+let set_visible b elt =
+  let visibility = if b then "visible" else "hidden"
+  in elt##.style##.visibility := Js.string visibility
+
+let update_slider slider media =
+  slider##.value := Js.string @@ Format.sprintf "%0.f" (
+      if media##.duration = 0. then 0.
+      else media##.currentTime /. media##.duration *. max_slide)
+
+let update_slider_value slider_value media slider =
+  let min, sec = ftime_to_min_sec @@
+    ((Js.parseFloat slider##.value) /. max_slide *. media##.duration)
+  in
+  set_visible true slider_value;
+  let padding =
+    Format.sprintf "%0.fpx" (Js.parseFloat slider##.value /. max_slide *. (float_of_int slider##.scrollWidth))
+  in
+  slider_value##.style##.marginLeft := Js.string padding;
+  slider_value##.textContent := Js.some @@ Js.string @@ Format.sprintf "%2d:%2d" min sec
+
+let update_media media slider =
+  media##.currentTime := (Js.parseFloat slider##.value) /. max_slide *. media##.duration
+
+let update_state state media button =
+  if state then media##play else media##pause
+
 
 let update_time_a media time_a =
   let cmin, csec = ftime_to_min_sec media##.currentTime in
@@ -62,69 +78,53 @@ let update_content elt b =
   elt##.textContent := Js.some @@ Js.string @@ if b then "Pause" else "Play"
 
 
-let%sync reactive_player =
+let%sync reactive_player ~animate =
   input play_pause; (* the button *)
   input progress_bar; (* the progress element *)
   input media; (* the video element *)
   input time_a; (* the a elt displaying time*)
+  input slider_value; (* the a elt displaying time*)
 
   let no_update = () in
   let state = Js.to_bool media##.autoplay in
   !(update_content play_pause (pre state));
 
-  (* when the video (re)starts or stops playing,
-     switch the display of the button *)
   loop (
     present media##onplay !(
-      update_content play_pause (pre state);
-    ); pause)
-  ||
-  loop (
-    present media##onpause !(
-      update_content play_pause (pre state);
-    ); pause)
+      update_content play_pause (pre state))
 
-  (* switch state when the button is clicked *)
-  ||
-  loop (present play_pause##onclick (
-      emit state (not (pre state));
-    ); pause)
+    || present media##onpause !(
+      update_content play_pause (pre state))
 
-  (* when the state changes, update the media and the button *)
-  || loop (present state
-             !(update_state (pre state) media play_pause;); pause)
+    || present play_pause##onclick (
+      emit state (not (pre state)))
 
-  (* when mouse is down on the progress bar, start emit `no_update` every instants
-     until mouse is up to block the following task. When mouse ups,
-     update the media in consequence *)
+    || present state !(
+      update_state (pre state) media play_pause)
+  ; pause)
+
+  || loop (
+    present progress_bar##oninput
+      !(update_slider_value (pre slider_value) media progress_bar);
+    pause
+  )
   || loop (
     await progress_bar##onmousedown;
     trap t' (
       loop (
         emit no_update ();
-        present progress_bar##onmouseup
-          (!(update_media media progress_bar); exit t');
-        pause
-      )); pause)
-  (* || loop ( *)
-  (*   present progress_bar##onmouseup *)
-  (*     !(update_media media progress_bar); *)
-  (*   pause) *)
+        present progress_bar##onmouseup (
+          !(set_visible false (pre slider_value);
+           update_media media progress_bar);
+          exit t'
+          ); pause)); pause)
 
-  (* Each progression steps of the video, update the progress bar
-     with the right value. Except no_update is present. *)
   || loop (
     present media##ontimeupdate (
       present no_update nothing !(update_slider progress_bar media)
       ||
       !(update_time_a media (pre time_a))
     ); pause)
-  (* || loop ( *)
-  (*   present media##onprogress ( *)
-  (*     !(update_slider progress_bar media) *)
-  (*     || *)
-  (*     !(update_time_a media !!time_a) *)
-  (*   ); pause) *)
 
 
 let wrapper react f p = Dom_html.handler (fun _ -> f p;  react (); Js._true)
@@ -135,7 +135,10 @@ let main _ =
   let progress_bar = "reactiveplayer_progress" @> Coerce.input in
   let media = "reactiveplayer_media" @> Coerce.media in
   let time = "reactiveplayer_timetxt" @> Coerce.a in
-  let _set_time, _react = reactive_player (play_button, progress_bar, media, time) in
+  let range_value = "reactiveplayer_range_value" @> Coerce.a in
+  let _set_time, _set_range_value, _react =
+    reactive_player (play_button, progress_bar, media, time, range_value)
+  in
   Js._false
 
 
