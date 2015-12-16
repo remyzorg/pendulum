@@ -60,7 +60,7 @@ let update_slider_value slider_value media slider =
     Format.sprintf "%0.fpx" (Js.parseFloat slider##.value /. max_slide *. (float_of_int slider##.scrollWidth))
   in
   slider_value##.style##.marginLeft := Js.string padding;
-  slider_value##.textContent := Js.some @@ Js.string @@ Format.sprintf "%2d:%2d" min sec
+  slider_value##.textContent := Js.some @@ Js.string @@ Format.sprintf "%2dmin%2ds" min sec
 
 let update_media media slider =
   media##.currentTime := (Js.parseFloat slider##.value) /. max_slide *. media##.duration
@@ -78,7 +78,7 @@ let update_content elt b =
   elt##.textContent := Js.some @@ Js.string @@ if b then "Pause" else "Play"
 
 
-let%sync reactive_player ~animate =
+let%sync reactive_player ~dsource ~animate =
   input play_pause; (* the button *)
   input progress_bar; (* the progress element *)
   input media; (* the video element *)
