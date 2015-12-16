@@ -30,5 +30,6 @@ let make_signal value =
   { value; state = Absent; pre = value}
 
 let pre s = s.pre
-let (!!) s = s.value
+let value s = s.value
+let (!!) s = s.pre
 let (!?) s = s.state = Present

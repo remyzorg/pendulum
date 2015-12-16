@@ -303,7 +303,7 @@ module Ocaml_gen = struct
             content = String.sub s.content 0 ((String.rindex s.content '~'))})
     with Not_found -> s
 
-  let add_ref_local s =
+  let add_deref_local s =
     let open Ast in
     match s.origin with
     | Local -> [%expr ![%e mk_ident s.ident]]
@@ -330,9 +330,9 @@ module Ocaml_gen = struct
     let machine_fun = mk_ident @@ machine_ident in
     let args_init_tuple_exp = match args with
       | [] -> [%expr ()]
-      | [arg] -> [%expr !![%e add_ref_local arg]]
+      | [arg] -> [%expr [%e add_deref_local arg].value]
       | l -> Exp.tuple @@ List.map (fun arg ->
-          [%expr !![%e add_ref_local arg]]
+          [%expr [%e add_deref_local arg].value]
         ) l
     in idents_as_pat, machine_fun, args_init_tuple_exp, idents_as_ref, idents
 
@@ -489,7 +489,7 @@ module Ocaml_gen = struct
 
   let rec construct_test env depl test =
     match test with
-    | MLsig s -> [%expr !?[%e add_ref_local s]]
+    | MLsig s -> [%expr !?[%e add_deref_local s]]
     | MLselect i -> [%expr Bitset.mem [%e select_env_ident] [%e int_const i]]
     | MLor (mlte1, mlte2) ->
       [%expr [%e construct_test env depl mlte1 ] || [%e construct_test env depl mlte2]]
@@ -503,9 +503,9 @@ module Ocaml_gen = struct
       let step_eq_pause = [%expr ![%e mk_ident step_ident] () == Pause] in
       let _, setters = List.fold_left (fun (nth, acc) arg ->
           let exp_if_set = [%expr
-            if !? [%e add_ref_local arg] then
+            if !? [%e add_deref_local arg] then
               ![%e mk_ident @@ mk_set_mach_arg_n nth id.content]
-                !![%e add_ref_local arg]
+                [%e add_deref_local arg].value
           ] in
           nth + 1, [%expr [%e exp_if_set] ; [%e acc]]
         ) (0, step_eq_pause) args
@@ -531,7 +531,7 @@ module Ocaml_gen = struct
     match ast with
     | MLemit vs ->
       let rebinded_expr = rebind_locals_let vs.svalue.locals vs.svalue.exp in
-      [%expr set_present_value [%e add_ref_local vs.signal] [%e rebinded_expr]]
+      [%expr set_present_value [%e add_deref_local vs.signal] [%e rebinded_expr]]
     | MLif (test, mlseq1, mlseq2) ->
       begin match mlseq1, mlseq2 with
         | mlseq1, (Seqlist [] | Seq (Seqlist [], Seqlist [])) ->
@@ -591,8 +591,8 @@ module Ocaml_gen = struct
     | MLpause -> [%expr raise Pause_exc]
     | MLfinish -> [%expr raise Finish_exc]
     | MLcall (ident, sigs, loc) ->
-      let tuple = match sigs with [] -> assert false | [s] -> [%expr !! [%e add_ref_local s]]
-        | l -> Ast_helper.Exp.tuple ~loc @@ List.map (fun s -> [%expr !! [%e add_ref_local s]]) l
+      let tuple = match sigs with [] -> assert false | [s] -> [%expr [%e add_deref_local s].value]
+        | l -> Ast_helper.Exp.tuple ~loc @@ List.map (fun s -> [%expr [%e add_deref_local s].value]) l
       in [%expr [%e mk_ident ident] [%e tuple]]
 
 

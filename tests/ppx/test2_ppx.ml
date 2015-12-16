@@ -196,3 +196,31 @@ let%sync test_animate ~animate =
   end
 
 
+
+let%sync test ~pdf =
+  let s = () in
+  (present s (pause) nothing;
+   !(print_string "42-1"))
+  ||
+  (present s (pause) nothing;
+   !(print_string "42-2"))
+
+
+
+(* let%sync test2 ~pdf = *)
+(*   let a = () in *)
+(*   let b = () in *)
+(*   let c = () in *)
+
+(*   loop ( *)
+(*     present a *)
+(*       (emit b ()) *)
+(*       (await c); *)
+(*     pause *)
+(*   ) || *)
+(*   loop ( *)
+(*     present a *)
+(*       (emit c ()) *)
+(*       (await b); *)
+(*     pause) *)
+

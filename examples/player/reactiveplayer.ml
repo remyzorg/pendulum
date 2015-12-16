@@ -9,6 +9,7 @@ module Dom_html = struct
     method onprogress : (_mediaElement t, mouseEvent t) event_listener writeonly_prop
     method ontimeupdate : (_mediaElement t, mouseEvent t) event_listener writeonly_prop
     method onplay : (_mediaElement t, mouseEvent t) event_listener writeonly_prop
+    method onpause : (_mediaElement t, mouseEvent t) event_listener writeonly_prop
     method onloadeddata : (_mediaElement t, mouseEvent t) event_listener writeonly_prop
   end
   module Coerce = struct
@@ -44,13 +45,7 @@ let update_media media slider =
   media##.currentTime := (Js.parseFloat slider##.value) /. 800. *. media##.duration
 
 let update_state state media button =
-  if state then begin
-    button##.textContent := Js.some @@ Js.string "Pause";
-    media##play
-  end else begin
-    button##.textContent := Js.some @@ Js.string "Play ";
-    media##pause
-  end
+  if state then media##play else media##pause
 
 let ftime_to_min_sec t =
   let sec = int_of_float t in
@@ -63,6 +58,9 @@ let update_time_a media time_a =
   let tmin, tsec = ftime_to_min_sec media##.duration in
   time_a##.textContent := str @@ Format.sprintf "%2d:%0d / %0d:%0d" cmin csec tmin tsec
 
+let update_content elt b =
+  elt##.textContent := Js.some @@ Js.string @@ if b then "Pause" else "Play"
+
 
 let%sync reactive_player =
   input play_pause; (* the button *)
@@ -72,32 +70,42 @@ let%sync reactive_player =
 
   let no_update = () in
   let state = Js.to_bool media##.autoplay in
+  !(update_content play_pause (pre state));
 
-  (* when the video starts or restarts playing,
+  (* when the video (re)starts or stops playing,
      switch the display of the button *)
   loop (
-    present media##onplay
-      !(play_pause##.textContent := Js.some @@ Js.string "Pause"); pause)
+    present media##onplay !(
+      update_content play_pause (pre state);
+    ); pause)
+  ||
+  loop (
+    present media##onpause !(
+      update_content play_pause (pre state);
+    ); pause)
 
   (* switch state when the button is clicked *)
-  || loop (present play_pause##onclick (
+  ||
+  loop (present play_pause##onclick (
       emit state (not (pre state));
     ); pause)
 
   (* when the state changes, update the media and the button *)
-  || loop (present state !(update_state (pre state) media play_pause;); pause)
+  || loop (present state
+             !(update_state (pre state) media play_pause;); pause)
 
   (* when mouse is down on the progress bar, start emit `no_update` every instants
      until mouse is up to block the following task. When mouse ups,
      update the media in consequence *)
   || loop (
     await progress_bar##onmousedown;
-    trap t' (loop (
+    trap t' (
+      loop (
         emit no_update ();
         present progress_bar##onmouseup
           (!(update_media media progress_bar); exit t');
-        pause)
-      ); pause)
+        pause
+      )); pause)
   (* || loop ( *)
   (*   present progress_bar##onmouseup *)
   (*     !(update_media media progress_bar); *)
@@ -106,7 +114,7 @@ let%sync reactive_player =
   (* Each progression steps of the video, update the progress bar
      with the right value. Except no_update is present. *)
   || loop (
-    present media##onprogress (
+    present media##ontimeupdate (
       present no_update nothing !(update_slider progress_bar media)
       ||
       !(update_time_a media (pre time_a))
