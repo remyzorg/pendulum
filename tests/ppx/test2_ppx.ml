@@ -178,7 +178,7 @@ let%sync reactive_player =
   ||
   loop pause
 
-let%sync test_animate ~animate ~dsource =
+let%sync test_animate ~animate =
   input btn;
   let loca = Dom_html.(createDiv document) in
   let localol = 0 in

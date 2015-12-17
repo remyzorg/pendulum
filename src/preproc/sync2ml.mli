@@ -43,6 +43,7 @@ and ml_ast =
   | MLassign_machine of int * (Ast.ident * Ast.signal list * Ast.loc)
   | MLenter of int
   | MLexit of int
+  | MLenters_exits of (Utils.Bitset.t * Utils.Bitset.t)
   | MLexpr of Ast.atom
   | MLunitexpr of Ast.atom
   | MLpause

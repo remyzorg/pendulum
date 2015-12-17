@@ -55,6 +55,7 @@ and ml_ast =
   | MLassign_machine of int * (Ast.ident * Ast.signal list * Ast.loc)
   | MLenter of int
   | MLexit of int
+  | MLenters_exits of (Bitset.t * Bitset.t)
   | MLexpr of Ast.atom
   | MLunitexpr of Ast.atom
   | MLpause
@@ -99,6 +100,7 @@ and pp_type_ml_ast lvl fmt =
       pp_type_ml_ast lvl fmt (MLassign_signal (id, MLcall (id, sigs, loc)))
     | MLenter i -> fprintf fmt "%sEnter %d" indent i
     | MLexit i -> fprintf fmt "%sExit %d" indent i
+    | MLenters_exits _ -> ()
     | MLexpr e -> fprintf fmt "%s%s" indent (asprintf "%a" Ast.printexp e.exp)
     | MLunitexpr e -> fprintf fmt "%s%s" indent (asprintf "%a" Ast.printexp e.exp)
     | MLpause -> fprintf fmt "%sPause" indent
@@ -144,6 +146,7 @@ and pp_ml_ast lvl fmt =
 
     | MLenter i -> fprintf fmt "%senter %d" indent i
     | MLexit i -> fprintf fmt "%sexit %d" indent i
+    | MLenters_exits _ -> ()
     | MLexpr e -> fprintf fmt "%s%s" indent (asprintf "%a" Ast.printexp e.exp)
     | MLunitexpr e -> fprintf fmt "%s%s" indent (asprintf "%a" Ast.printexp e.exp)
     | MLpause -> fprintf fmt "%sPause" indent
@@ -176,6 +179,7 @@ let (<::) sel l =
   let open Selection_tree in
   if sel.tested then sel.label :: l else l
 
+
 let deplist sel =
   let open Selection_tree in
   let env = ref [] in
@@ -203,6 +207,8 @@ let construct_test_expr mr tv =
   | Sync (i1, i2) -> MLor (MLselect i1, MLselect i2)
   | Finished -> MLfinished
   | Is_paused (id, sigs, loc) -> MLis_pause (MLcall (id, sigs, loc))
+
+
 
 let grc2ml dep_array fg =
   let open Flowgraph in
@@ -245,6 +251,69 @@ let grc2ml dep_array fg =
     | _ -> aux stop fg
   in
   construct None fg
+
+
+module OptimizeML = struct
+
+  let mk_enters_exits maxid = (Bitset.make maxid false, Bitset.make maxid true)
+
+  let rec gather_enter_exits acc mlseq maxid =
+    match mlseq with
+    | Seq (Seqlist [], Seqlist []) | Seqlist [] -> None, mlseq
+    | Seq (mlseq, Seqlist []) | Seq (Seqlist [], mlseq) ->
+      gather_enter_exits acc mlseq maxid
+
+    | Seqlist ml_asts ->
+      let entexs, mll = List.fold_left (fun ((entexs, mll) as acc) ml ->
+          match ml with
+          | MLenter cur_i ->
+            begin match entexs with
+              | Some (bs, _) -> Bitset.add bs cur_i; acc
+              | _ ->
+                let (bs_add, _) as bs = mk_enters_exits maxid in
+                Bitset.add bs_add cur_i; Some bs, MLenters_exits bs :: mll
+            end
+          | MLexit cur_i ->
+            begin match entexs with
+              | Some (_, bs) -> Bitset.remove bs cur_i; acc
+              | _ ->
+                let (_, bs_rem) as bs = mk_enters_exits maxid in
+                Bitset.remove bs_rem cur_i; Some bs, MLenters_exits bs :: mll
+            end
+          | _ -> None, ml :: mll
+        ) (acc, []) ml_asts
+      in entexs, Seqlist (List.rev mll)
+
+    | Seq (mlseq1, mlseq2) -> assert false
+
+
+  (* let () = *)
+  (*   let sq = Seqlist [ *)
+  (*       MLenter 1; *)
+  (*       MLenter 2; *)
+  (*       MLexit 7; *)
+  (*       MLexit 3; *)
+  (*       MLexit 6; *)
+  (*       MLenter 3; *)
+  (*       MLenter 4; *)
+  (*       MLexit 8; *)
+  (*       MLenter 5; *)
+  (*     ] *)
+  (*   in *)
+  (*   let _, Seqlist [MLenters_exits (bs, bs')] = gather_enter_exits None sq 10 in *)
+  (*   assert (Bitset.mem bs 1); *)
+  (*   assert (Bitset.mem bs 2); *)
+  (*   assert (Bitset.mem bs 3); *)
+  (*   assert (Bitset.mem bs 4); *)
+  (*   assert (Bitset.mem bs 5); *)
+
+  (*   (\* assert (Bitset.mem bs' 9); *\) *)
+  (*   assert (Bitset.mem bs' 7); *)
+  (*   assert (Bitset.mem bs' 6); *)
+  (*   assert (Bitset.mem bs' 8); *)
+  (*   assert (Bitset.mem bs' 3) *)
+
+end
 
 module Ocaml_gen = struct
 
