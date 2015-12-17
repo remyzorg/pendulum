@@ -85,7 +85,7 @@ module Bitset = struct
 
   let max_value = Sys.word_size - 2
 
-  let make n b = Array.make (n / max_value + 1) @@ if b then 1 else 0
+  let make n b = Array.make (n / max_value + 1) @@ if b then max_value else 0
 
   let add t e =
     let id = e / max_value in
@@ -98,7 +98,19 @@ module Bitset = struct
     let id = e / max_value in
     t.(id) <- (1 lsl (e mod max_value) lxor t.(id))
 
-  let remove_elts t elts = List.iter (remove t) elts
+  let union t1 t2 =
+    for i = 0 to Array.length t1 - 1 do
+      t1.(i) <- t1.(i) lor t2.(i)
+    done
+
+  let intersect t1 t2 =
+    for i = 0 to Array.length t1 - 1 do
+      t1.(i) <- t1.(i) land t2.(i)
+    done
+
+
+
+
 
   let add_elts t elts = List.iter (add t) elts
 

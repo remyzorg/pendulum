@@ -287,31 +287,32 @@ module OptimizeML = struct
     | Seq (mlseq1, mlseq2) -> assert false
 
 
-  (* let () = *)
-  (*   let sq = Seqlist [ *)
-  (*       MLenter 1; *)
-  (*       MLenter 2; *)
-  (*       MLexit 7; *)
-  (*       MLexit 3; *)
-  (*       MLexit 6; *)
-  (*       MLenter 3; *)
-  (*       MLenter 4; *)
-  (*       MLexit 8; *)
-  (*       MLenter 5; *)
-  (*     ] *)
-  (*   in *)
-  (*   let _, Seqlist [MLenters_exits (bs, bs')] = gather_enter_exits None sq 10 in *)
-  (*   assert (Bitset.mem bs 1); *)
-  (*   assert (Bitset.mem bs 2); *)
-  (*   assert (Bitset.mem bs 3); *)
-  (*   assert (Bitset.mem bs 4); *)
-  (*   assert (Bitset.mem bs 5); *)
+  let () =
+    let sq = Seqlist [
+        MLenter 1;
+        MLenter 2;
+        MLexit 7;
+        (* MLexit 3; *)
+        (* MLexit 6; *)
+        MLenter 3;
+        MLenter 4;
+        (* MLexit 8; *)
+        MLenter 5;
+      ]
+    in
+    let Some (bs1, bs2), Seqlist [MLenters_exits (bs1', bs2')] = gather_enter_exits None sq 10 in
+    assert (Bitset.mem bs1 1);
+    assert (Bitset.mem bs1 2);
+    assert (Bitset.mem bs1 3);
+    assert (Bitset.mem bs1 4);
+    assert (Bitset.mem bs1 5);
 
-  (*   (\* assert (Bitset.mem bs' 9); *\) *)
-  (*   assert (Bitset.mem bs' 7); *)
-  (*   assert (Bitset.mem bs' 6); *)
-  (*   assert (Bitset.mem bs' 8); *)
-  (*   assert (Bitset.mem bs' 3) *)
+    (* assert (Bitset.mem bs' 9) *)
+    (* assert (bs1 == bs1' && bs2 == bs2'); *)
+    (* assert ((Bitset.mem bs2 7)) *)
+    (* assert (not @@ Bitset.mem bs' 6); *)
+    (* assert (not @@ Bitset.mem bs' 8); *)
+    (* assert (not @@ Bitset.mem bs' 3) *)
 
 end
 
