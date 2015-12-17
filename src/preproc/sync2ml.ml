@@ -284,35 +284,19 @@ module OptimizeML = struct
         ) (acc, []) ml_asts
       in entexs, Seqlist (List.rev mll)
 
-    | Seq (mlseq1, mlseq2) -> assert false
+    | Seq (mlseq1, mlseq2) ->
+      let entexs', mll1 = gather_enter_exits acc mlseq1 maxid in
+      let entexs', mll2 = gather_enter_exits entexs' mlseq1 maxid in
+      entexs',
+      match mlseq1, mlseq2 with
+      | Seqlist [], Seqlist [] -> mlseq1
+      | Seqlist l, Seqlist [] | Seqlist [], Seqlist l  -> Seqlist l
+      | _ -> Seq(mll1, mll2)
 
 
-  let () =
-    let sq = Seqlist [
-        MLenter 1;
-        MLenter 2;
-        MLexit 7;
-        (* MLexit 3; *)
-        (* MLexit 6; *)
-        MLenter 3;
-        MLenter 4;
-        (* MLexit 8; *)
-        MLenter 5;
-      ]
-    in
-    let Some (bs1, bs2), Seqlist [MLenters_exits (bs1', bs2')] = gather_enter_exits None sq 10 in
-    assert (Bitset.mem bs1 1);
-    assert (Bitset.mem bs1 2);
-    assert (Bitset.mem bs1 3);
-    assert (Bitset.mem bs1 4);
-    assert (Bitset.mem bs1 5);
 
-    (* assert (Bitset.mem bs' 9) *)
-    (* assert (bs1 == bs1' && bs2 == bs2'); *)
-    (* assert ((Bitset.mem bs2 7)) *)
-    (* assert (not @@ Bitset.mem bs' 6); *)
-    (* assert (not @@ Bitset.mem bs' 8); *)
-    (* assert (not @@ Bitset.mem bs' 3) *)
+
+
 
 end
 
@@ -332,6 +316,11 @@ module Ocaml_gen = struct
 
   let mk_value_binding ?(pvb_loc=Location.none) ?(pvb_attributes=[]) pvb_pat pvb_expr =
     { pvb_pat; pvb_expr; pvb_attributes; pvb_loc; }
+
+  let expr_of_bitset bs = bs
+  |> Array.to_list
+  |> List.map int_const
+  |> Exp.array
 
   let deplist sel =
     let open Selection_tree in

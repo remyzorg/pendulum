@@ -85,7 +85,7 @@ module Bitset = struct
 
   let max_value = Sys.word_size - 2
 
-  let make n b = Array.make (n / max_value + 1) @@ if b then max_value else 0
+  let make n b = Array.make (n / max_value + 1) @@ if b then max_int else 0
 
   let add t e =
     let id = e / max_value in
