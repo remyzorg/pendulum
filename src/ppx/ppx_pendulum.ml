@@ -295,7 +295,7 @@ let parse_ast atom_mapper vb =
     let tast, env = Ast.Tagged.of_ast ~sigs ast in
     let tast = Ast.Analysis.filter_dead_trees tast in
     if !dot || !pdf || !png then Pendulum_misc.print_to_dot !dot !pdf !png loc pat tast;
-    let ocaml_expr = Sync2ml.generate ~nooptim:!nooptim ~animate:!animate env tast in
+    let ocaml_expr = Sync2ml.generate !nooptim !animate env tast in
     if !dsource then Format.printf "%a@." Pprintast.expression ocaml_expr;
     [%expr [%e ocaml_expr]]
 

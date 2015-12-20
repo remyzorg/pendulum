@@ -308,30 +308,38 @@ module ML_optimize = struct
     let open Parsetree in
     let open Longident in
     let open Asttypes in
-    let mapper =
+    let mapper lres htbl =
       {default_mapper with
        expr = (fun mapper exp ->
            match exp with
-           | {pexp_desc = Pexp_ident {txt = Lident content; loc}} ->
-             Format.printf "%s\n" content;
+           | {pexp_desc = Pexp_ident {txt = Lident content; loc}}
+             when Hashtbl.mem htbl content ->
+             let s, r = Hashtbl.find htbl content in
+             if r then ()
+             else (
+               Hashtbl.add htbl content (s, true);
+               lres := s :: !lres;
+             );
              default_mapper.expr mapper exp
-           | x ->
-             default_mapper.expr mapper x
+           | x -> default_mapper.expr mapper x
          );
       }
     in fun atom ->
-      let _new_sigs = ref [] in
+      let htbl = Hashtbl.create 19 in
+      let sigs_res = ref [] in
+      List.iter (fun x -> Hashtbl.add htbl x.Ast.ident.content (x, false)) atom.locals;
+      let mapper = mapper sigs_res htbl in
       let _ = mapper.expr mapper atom.exp in
-      atom
+      {atom with locals = !sigs_res}
 
   let rm_useless_let_bindings mlseq =
     let rec aux_rm_test texp = match texp with
-      | MLboolexpr atom -> assert false
+      | MLboolexpr atom -> MLboolexpr (rm_atom_deps atom)
       | MLor (texp1, texp2) -> MLor (aux_rm_test texp1, aux_rm_test texp2)
       | MLand (texp1, texp2) -> MLand (aux_rm_test texp1, aux_rm_test texp2)
       | texp -> texp
     and aux_rm_ml ml = match ml with
-      | MLemit vs -> assert false
+      | MLemit vs -> MLemit {vs with svalue = rm_atom_deps vs.svalue}
       | MLexpr atom -> MLexpr (rm_atom_deps atom)
       | MLunitexpr atom -> MLunitexpr (rm_atom_deps atom)
       | MLif (ml_test_expr, mlseq1, mlseq2) ->
@@ -451,7 +459,8 @@ module Ocaml_gen = struct
 
 
   let construct_local_signals_definitions env e = List.fold_left (fun acc vs ->
-      let rebinds = rebind_locals_let vs.svalue.locals
+      let atom = ML_optimize.rm_atom_deps vs.svalue in
+      let rebinds = rebind_locals_let atom.locals
           [%expr ref (make_signal [%e vs.svalue.exp])]
       in
       [%expr let [%p mk_pat_var vs.signal.ident] = [%e rebinds] in [%e acc]]
@@ -748,7 +757,7 @@ module Ocaml_gen = struct
 end
 
 
-let generate ~nooptim ~animate env tast =
+let generate nooptim animate env tast =
   let selection_tree, flowgraph as grc = Of_ast.construct tast in
   Schedule.tag_tested_stmts selection_tree flowgraph;
   let _deps = Schedule.check_causality_cycles grc in
@@ -759,6 +768,7 @@ let generate ~nooptim ~animate env tast =
   let ml_ast' =
     if not nooptim then
       ML_optimize.gather_enter_exits ml_ast maxid
+      |> ML_optimize.rm_useless_let_bindings
     else ml_ast
   in
   Ocaml_gen.(
