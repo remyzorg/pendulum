@@ -78,7 +78,7 @@ let update_content elt b =
   elt##.textContent := Js.some @@ Js.string @@ if b then "Pause" else "Play"
 
 
-let%sync reactive_player ~animate =
+let%sync reactive_player ~animate ~dsource =
   input play_pause; (* the button *)
   input progress_bar; (* the progress element *)
   input media; (* the video element *)

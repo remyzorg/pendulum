@@ -760,7 +760,7 @@ module Ocaml_gen = struct
 end
 
 
-let generate ~optim ~animate env tast =
+let generate ~nooptim ~animate env tast =
   let selection_tree, flowgraph as grc = Of_ast.construct tast in
   Schedule.tag_tested_stmts selection_tree flowgraph;
   let _deps = Schedule.check_causality_cycles grc in
@@ -769,17 +769,10 @@ let generate ~optim ~animate env tast =
   let dep_array = Array.make (maxid + 1) [] in
   let ml_ast = grc2ml dep_array interleaved_cfg in
   let ml_ast' =
-    if optim then
-      ((* Format.printf "Hello: OPTIM LOL\n\n\n"; *)
-       OptimizeML.gather_enter_exits ml_ast maxid)
+    if not nooptim then
+      (OptimizeML.gather_enter_exits ml_ast maxid)
     else ml_ast
   in
-
-  (* if optim then begin *)
-  (*   Format.printf "ml: ======\n%a\n" (pp_ml_sequence 0) ml_ast; *)
-  (*   Format.printf "ml': ======\n%a\n" (pp_ml_sequence 0) ml_ast'; *)
-  (* end; *)
-
   Ocaml_gen.(
     construct_instanciation_body animate maxid env selection_tree
     @@ construct_sequence env dep_array ml_ast'

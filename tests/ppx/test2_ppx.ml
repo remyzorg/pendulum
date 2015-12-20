@@ -57,6 +57,21 @@ let%sync many_par =
   || loop pause
   || loop pause
   || loop pause
+  || loop pause
+  || loop pause
+  || loop pause
+  || loop pause
+  || loop pause
+  || loop pause
+  || loop pause
+  || loop pause
+  || loop pause
+  || loop pause
+  || loop pause
+  || loop pause
+  || loop pause
+  || loop pause
+  || loop pause
 
 
 
@@ -178,7 +193,7 @@ let%sync reactive_player =
   ||
   loop pause
 
-let%sync test_animate ~animate ~optim ~dsource =
+let%sync test_animate ~animate =
   input btn;
   let loca = Dom_html.(createDiv document) in
   let localol = 0 in
@@ -194,7 +209,6 @@ let%sync test_animate ~animate ~optim ~dsource =
     );
     pause
   end
-
 
 
 let%sync test ~pdf =

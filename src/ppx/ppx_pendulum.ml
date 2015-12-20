@@ -259,7 +259,7 @@ let ast_of_expr atom_mapper e =
 let parse_ast atom_mapper vb =
   let dsource, dot, genast = ref false, ref false, ref false in
   let animate, pdf, png = ref false, ref false, ref false in
-  let optim = ref false in
+  let nooptim = ref false in
   let rec parse_args_options exp =
     begin match exp with
       | [%expr fun ~animate -> [%e? exp']] ->
@@ -275,8 +275,8 @@ let parse_ast atom_mapper vb =
         png := true; parse_args_options exp'
       | [%expr fun ~ast -> [%e? exp']] ->
         genast := true; parse_args_options exp'
-      | [%expr fun ~optim -> [%e? exp']] ->
-        optim := true; parse_args_options exp'
+      | [%expr fun ~nooptim -> [%e? exp']] ->
+        nooptim := true; parse_args_options exp'
       | e -> e
     end;
   in
@@ -296,7 +296,7 @@ let parse_ast atom_mapper vb =
     let tast, env = Ast.Tagged.of_ast ~sigs ast in
     let tast = Ast.Analysis.filter_dead_trees tast in
     if !dot || !pdf || !png then Pendulum_misc.print_to_dot !dot !pdf !png loc pat tast;
-    let ocaml_expr = Sync2ml.generate ~optim:!optim ~animate:!animate env tast in
+    let ocaml_expr = Sync2ml.generate ~nooptim:!nooptim ~animate:!animate env tast in
     if !dsource then Format.printf "%a@." Pprintast.expression ocaml_expr;
     [%expr [%e ocaml_expr]]
 

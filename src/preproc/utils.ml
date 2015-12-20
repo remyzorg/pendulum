@@ -83,7 +83,9 @@ module Bitset = struct
 
   type t = int array
 
-  let max_value = Sys.word_size - 2
+  let max_value = 32 - 2
+
+  let max_int = 2147483647 (* there is no 64 bits literal integers in js*)
 
   let make n b = Array.make (n / max_value + 1) @@ if b then max_int else 0
 
@@ -100,7 +102,6 @@ module Bitset = struct
 
   let min_length t1 t2 =
     min (Array.length t1) (Array.length t2)
-
 
   let simplify (t1, t2) =
     for i = 0 to min_length t1 t2 - 1 do
