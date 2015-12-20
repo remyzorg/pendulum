@@ -100,7 +100,8 @@ and pp_type_ml_ast lvl fmt =
       pp_type_ml_ast lvl fmt (MLassign_signal (id, MLcall (id, sigs, loc)))
     | MLenter i -> fprintf fmt "%sEnter %d" indent i
     | MLexit i -> fprintf fmt "%sExit %d" indent i
-    | MLenters_exits _ -> ()
+    | MLenters_exits (bs_add, bs_rem) ->
+      fprintf fmt "%s Entexs (%a, %a)" indent Bitset.pp bs_add Bitset.pp bs_rem
     | MLexpr e -> fprintf fmt "%s%s" indent (asprintf "%a" Ast.printexp e.exp)
     | MLunitexpr e -> fprintf fmt "%s%s" indent (asprintf "%a" Ast.printexp e.exp)
     | MLpause -> fprintf fmt "%sPause" indent
@@ -126,9 +127,9 @@ and pp_ml_ast lvl fmt =
   Format.(function
     | MLemit vs -> fprintf fmt "%semit %s" indent vs.signal.ident.content
     | MLassign_signal (id, ml) ->
-      fprintf fmt "%s := %a" id.content (pp_ml_ast 0) ml
+      fprintf fmt "%s%s := %a" indent id.content (pp_ml_ast 0) ml
     | MLassign_machine (_, (id, sigs, loc)) ->
-      fprintf fmt "%s := %a" id.content (pp_ml_ast 0) (MLcall (id, sigs, loc))
+      fprintf fmt "%s%s := %a" indent id.content (pp_ml_ast 0) (MLcall (id, sigs, loc))
 
     | MLif (mltest_expr, mlseq1, mlseq2) ->
       fprintf fmt "%sif %a then (\n%a\n%s)" indent pp_ml_test_expr mltest_expr
@@ -146,7 +147,8 @@ and pp_ml_ast lvl fmt =
 
     | MLenter i -> fprintf fmt "%senter %d" indent i
     | MLexit i -> fprintf fmt "%sexit %d" indent i
-    | MLenters_exits _ -> ()
+    | MLenters_exits (bs_add, bs_rem) ->
+      fprintf fmt "%s union %a, inter %a" indent Bitset.pp bs_add Bitset.pp bs_rem
     | MLexpr e -> fprintf fmt "%s%s" indent (asprintf "%a" Ast.printexp e.exp)
     | MLunitexpr e -> fprintf fmt "%s%s" indent (asprintf "%a" Ast.printexp e.exp)
     | MLpause -> fprintf fmt "%sPause" indent
@@ -257,44 +259,107 @@ module OptimizeML = struct
 
   let mk_enters_exits maxid = (Bitset.make maxid false, Bitset.make maxid true)
 
-  let rec gather_enter_exits acc mlseq maxid =
-    match mlseq with
-    | Seq (Seqlist [], Seqlist []) | Seqlist [] -> None, mlseq
-    | Seq (mlseq, Seqlist []) | Seq (Seqlist [], mlseq) ->
-      gather_enter_exits acc mlseq maxid
+  let gather_enter_exits mlseq maxid =
+    let rec aux_gather acc mlseq =
+      match mlseq with
+      | Seq (Seqlist [], Seqlist []) | Seqlist [] -> acc, mlseq
+      | Seq (mlseq, Seqlist []) | Seq (Seqlist [], mlseq) ->
+        aux_gather acc mlseq
+      | Seqlist ml_asts ->
+        let entexs, mll = List.fold_left (fun (entexs, mll as acc) ml ->
+            match ml with
+            | MLenter cur_i ->
+              begin match entexs with
+                | Some (bs_add, _) ->
+                  Bitset.add bs_add cur_i; acc
+                | _ ->
+                  let bs_add, _ as bs = mk_enters_exits maxid in
+                  Bitset.add bs_add cur_i;
+                  Some bs, MLenters_exits bs :: mll
+              end
+            | MLexit cur_i ->
+              begin match entexs with
+                | Some (_, bs_rem) ->
+                  Bitset.remove bs_rem cur_i; acc
+                | _ ->
+                  let _, bs_rem as bs = mk_enters_exits maxid in
+                  Bitset.remove bs_rem cur_i;
+                  Some bs, MLenters_exits bs :: mll
+              end
+            | MLif (mlte, mlseq1, mlseq2) ->
+              None, MLif (mlte, snd @@ aux_gather None mlseq1,
+                          snd @@ aux_gather None mlseq2) :: mll
+            | ml -> None, ml :: mll
+          ) (acc, []) ml_asts
+        in entexs, Seqlist (List.rev mll)
+      | Seq (mlseq1, mlseq2) ->
+        let entexs, mll1 = aux_gather acc mlseq1 in
+        let entexs', mll2 = aux_gather entexs mlseq2 in
+        entexs',
+        match mll1, mll2 with
+        | Seqlist [], Seqlist [] -> Seqlist []
+        | Seqlist l, Seqlist [] | Seqlist [], Seqlist l  -> Seqlist l
+        | mll1, mll2 -> Seq (mll1, mll2)
+    in
+    let _, mlseq = aux_gather None mlseq in
+    mlseq
 
-    | Seqlist ml_asts ->
-      let entexs, mll = List.fold_left (fun ((entexs, mll) as acc) ml ->
-          match ml with
-          | MLenter cur_i ->
-            begin match entexs with
-              | Some (bs, _) -> Bitset.add bs cur_i; acc
-              | _ ->
-                let (bs_add, _) as bs = mk_enters_exits maxid in
-                Bitset.add bs_add cur_i; Some bs, MLenters_exits bs :: mll
-            end
-          | MLexit cur_i ->
-            begin match entexs with
-              | Some (_, bs) -> Bitset.remove bs cur_i; acc
-              | _ ->
-                let (_, bs_rem) as bs = mk_enters_exits maxid in
-                Bitset.remove bs_rem cur_i; Some bs, MLenters_exits bs :: mll
-            end
-          | _ -> None, ml :: mll
-        ) (acc, []) ml_asts
-      in entexs, Seqlist (List.rev mll)
 
-    | Seq (mlseq1, mlseq2) ->
-      let entexs', mll1 = gather_enter_exits acc mlseq1 maxid in
-      let entexs', mll2 = gather_enter_exits entexs' mlseq1 maxid in
-      entexs',
-      match mlseq1, mlseq2 with
-      | Seqlist [], Seqlist [] -> mlseq1
-      | Seqlist l, Seqlist [] | Seqlist [], Seqlist l  -> Seqlist l
-      | _ -> Seq(mll1, mll2)
+let sq = Seqlist [
+    MLenter 1;
+    MLenter 2;
+    MLexit 7;
+    MLexit 3;
+    MLexit 6;
+    MLenter 3;
+    MLenter 4;
+    MLexit 8;
+    MLenter 5;
+  ]
+
+(* let () = *)
+
+(*   let Seqlist [MLenters_exits (bs1, bs2 as bs)] = *)
+(*     gather_enter_exits sq 10 *)
+(*   in *)
+(*   assert (not @@ Bitset.mem bs2 3); *)
+(*   assert (Bitset.mem bs1 3); *)
+(*   Bitset.simplify bs; *)
+(*   assert (Bitset.mem bs1 1); *)
+(*   assert (Bitset.mem bs1 2); *)
+(*   assert (not @@ Bitset.mem bs1 3); *)
+(*   assert (Bitset.mem bs1 4); *)
+(*   assert (Bitset.mem bs1 5); *)
+
+(*   assert (not (Bitset.mem bs2 7)); *)
+(*   assert (not @@ Bitset.mem bs2 6); *)
+(*   assert (not @@ Bitset.mem bs2 8); *)
+(*   assert (Bitset.mem bs2 3) *)
+
+(* let sq2 = *)
+(*     Seq ( *)
+(*       Seqlist [MLexit 4], *)
+(*       Seq ( *)
+(*         Seqlist [MLexit 5], *)
+(*         Seq ( *)
+(*           Seqlist [MLenter 5], *)
+(*           Seq ( *)
+(*             Seqlist [MLenter 3], nop)))) *)
 
 
+(* let () = *)
+(*   let sq = gather_enter_exits sq2 10 in *)
+(*   let Seqlist [MLenters_exits (bs1, bs2 as bs)] = *)
+(*     sq *)
+(*   in *)
 
+(*   assert (Bitset.mem bs1 5); *)
+(*   assert (not @@ Bitset.mem bs2 5); *)
+(*   Bitset.simplify bs; *)
+(*   assert (not @@ Bitset.mem bs2 4); *)
+(*   assert (Bitset.mem bs2 5); *)
+(*   assert (not @@ Bitset.mem bs1 5); *)
+(*   assert (Bitset.mem bs1 3) *)
 
 
 
@@ -664,6 +729,22 @@ module Ocaml_gen = struct
                  [%e select_env_ident]
                  [%e int_const i]]
 
+    | MLenters_exits (bs_union, bs_inter as bs) ->
+      Bitset.simplify bs;
+      if Bitset.is_empty bs_union then
+        if Bitset.is_full bs_inter then
+          [%expr ()]
+        else [%expr Bitset.inter [%e select_env_ident]
+                      [%e expr_of_bitset bs_inter]]
+      else if Bitset.is_full bs_inter then
+        [%expr Bitset.union [%e select_env_ident]
+                 [%e expr_of_bitset bs_union]]
+      else
+        [%expr
+          Bitset.inter_union [%e select_env_ident] [%e expr_of_bitset bs_inter]
+            [%e expr_of_bitset bs_union];
+        ]
+
     | MLunitexpr pexpr ->
       rebind_locals_let pexpr.locals [%expr let () = [%e pexpr.exp] in ()]
     | MLexpr pexpr -> rebind_locals_let pexpr.locals pexpr.exp
@@ -679,7 +760,7 @@ module Ocaml_gen = struct
 end
 
 
-let generate ~animate env tast =
+let generate ~optim ~animate env tast =
   let selection_tree, flowgraph as grc = Of_ast.construct tast in
   Schedule.tag_tested_stmts selection_tree flowgraph;
   let _deps = Schedule.check_causality_cycles grc in
@@ -687,7 +768,19 @@ let generate ~animate env tast =
   let maxid, deps = deplist selection_tree in
   let dep_array = Array.make (maxid + 1) [] in
   let ml_ast = grc2ml dep_array interleaved_cfg in
+  let ml_ast' =
+    if optim then
+      ((* Format.printf "Hello: OPTIM LOL\n\n\n"; *)
+       OptimizeML.gather_enter_exits ml_ast maxid)
+    else ml_ast
+  in
+
+  (* if optim then begin *)
+  (*   Format.printf "ml: ======\n%a\n" (pp_ml_sequence 0) ml_ast; *)
+  (*   Format.printf "ml': ======\n%a\n" (pp_ml_sequence 0) ml_ast'; *)
+  (* end; *)
+
   Ocaml_gen.(
     construct_instanciation_body animate maxid env selection_tree
-    @@ construct_sequence env dep_array ml_ast
+    @@ construct_sequence env dep_array ml_ast'
   )
