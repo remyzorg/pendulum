@@ -261,24 +261,23 @@ let parse_ast atom_mapper vb =
   let animate, pdf, png = ref false, ref false, ref false in
   let nooptim = ref false in
   let rec parse_args_options exp =
-    begin match exp with
-      | [%expr fun ~animate -> [%e? exp']] ->
-        animate := true; parse_args_options exp'
-      | [%expr fun ~dsource -> [%e? exp']] ->
-        dsource := true;
-        parse_args_options exp'
-      | [%expr fun ~dot -> [%e? exp']] ->
-        dot := true; parse_args_options exp'
-      | [%expr fun ~pdf -> [%e? exp']] ->
-        pdf := true; parse_args_options exp'
-      | [%expr fun ~png -> [%e? exp']] ->
-        png := true; parse_args_options exp'
-      | [%expr fun ~ast -> [%e? exp']] ->
-        genast := true; parse_args_options exp'
-      | [%expr fun ~nooptim -> [%e? exp']] ->
-        nooptim := true; parse_args_options exp'
-      | e -> e
-    end;
+    match exp with
+    | [%expr fun ~animate -> [%e? exp']] ->
+      animate := true; parse_args_options exp'
+    | [%expr fun ~dsource -> [%e? exp']] ->
+      dsource := true;
+      parse_args_options exp'
+    | [%expr fun ~dot -> [%e? exp']] ->
+      dot := true; parse_args_options exp'
+    | [%expr fun ~pdf -> [%e? exp']] ->
+      pdf := true; parse_args_options exp'
+    | [%expr fun ~png -> [%e? exp']] ->
+      png := true; parse_args_options exp'
+    | [%expr fun ~ast -> [%e? exp']] ->
+      genast := true; parse_args_options exp'
+    | [%expr fun ~nooptim -> [%e? exp']] ->
+      nooptim := true; parse_args_options exp'
+    | e -> e
   in
   let e = parse_args_options vb.pvb_expr in
   let e, sigs = pop_signals_decl e in

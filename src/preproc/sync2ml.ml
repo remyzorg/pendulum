@@ -255,10 +255,9 @@ let grc2ml dep_array fg =
   construct None fg
 
 
-module OptimizeML = struct
+module ML_optimize = struct
 
   let mk_enters_exits maxid = (Bitset.make maxid false, Bitset.make maxid true)
-
   let gather_enter_exits mlseq maxid =
     let rec aux_gather acc mlseq =
       match mlseq with
@@ -304,64 +303,51 @@ module OptimizeML = struct
     let _, mlseq = aux_gather None mlseq in
     mlseq
 
+  let rm_atom_deps =
+    let open Ast_mapper in
+    let open Parsetree in
+    let open Longident in
+    let open Asttypes in
+    let mapper =
+      {default_mapper with
+       expr = (fun mapper exp ->
+           match exp with
+           | {pexp_desc = Pexp_ident {txt = Lident content; loc}} ->
+             Format.printf "%s\n" content;
+             default_mapper.expr mapper exp
+           | x ->
+             default_mapper.expr mapper x
+         );
+      }
+    in fun atom ->
+      let _new_sigs = ref [] in
+      let _ = mapper.expr mapper atom.exp in
+      atom
 
-let sq = Seqlist [
-    MLenter 1;
-    MLenter 2;
-    MLexit 7;
-    MLexit 3;
-    MLexit 6;
-    MLenter 3;
-    MLenter 4;
-    MLexit 8;
-    MLenter 5;
-  ]
-
-(* let () = *)
-
-(*   let Seqlist [MLenters_exits (bs1, bs2 as bs)] = *)
-(*     gather_enter_exits sq 10 *)
-(*   in *)
-(*   assert (not @@ Bitset.mem bs2 3); *)
-(*   assert (Bitset.mem bs1 3); *)
-(*   Bitset.simplify bs; *)
-(*   assert (Bitset.mem bs1 1); *)
-(*   assert (Bitset.mem bs1 2); *)
-(*   assert (not @@ Bitset.mem bs1 3); *)
-(*   assert (Bitset.mem bs1 4); *)
-(*   assert (Bitset.mem bs1 5); *)
-
-(*   assert (not (Bitset.mem bs2 7)); *)
-(*   assert (not @@ Bitset.mem bs2 6); *)
-(*   assert (not @@ Bitset.mem bs2 8); *)
-(*   assert (Bitset.mem bs2 3) *)
-
-(* let sq2 = *)
-(*     Seq ( *)
-(*       Seqlist [MLexit 4], *)
-(*       Seq ( *)
-(*         Seqlist [MLexit 5], *)
-(*         Seq ( *)
-(*           Seqlist [MLenter 5], *)
-(*           Seq ( *)
-(*             Seqlist [MLenter 3], nop)))) *)
-
-
-(* let () = *)
-(*   let sq = gather_enter_exits sq2 10 in *)
-(*   let Seqlist [MLenters_exits (bs1, bs2 as bs)] = *)
-(*     sq *)
-(*   in *)
-
-(*   assert (Bitset.mem bs1 5); *)
-(*   assert (not @@ Bitset.mem bs2 5); *)
-(*   Bitset.simplify bs; *)
-(*   assert (not @@ Bitset.mem bs2 4); *)
-(*   assert (Bitset.mem bs2 5); *)
-(*   assert (not @@ Bitset.mem bs1 5); *)
-(*   assert (Bitset.mem bs1 3) *)
-
-
+  let rm_useless_let_bindings mlseq =
+    let rec aux_rm_test texp = match texp with
+      | MLboolexpr atom -> assert false
+      | MLor (texp1, texp2) -> MLor (aux_rm_test texp1, aux_rm_test texp2)
+      | MLand (texp1, texp2) -> MLand (aux_rm_test texp1, aux_rm_test texp2)
+      | texp -> texp
+    and aux_rm_ml ml = match ml with
+      | MLemit vs -> assert false
+      | MLexpr atom -> MLexpr (rm_atom_deps atom)
+      | MLunitexpr atom -> MLunitexpr (rm_atom_deps atom)
+      | MLif (ml_test_expr, mlseq1, mlseq2) ->
+        MLif (aux_rm_test ml_test_expr,
+              aux_rm_seq mlseq1, aux_rm_seq mlseq2)
+      | MLassign_signal (id, ml_ast) -> MLassign_signal (id, aux_rm_ml ml_ast)
+      | mlexp -> mlexp
+    and aux_rm_seq mlseq =
+      match mlseq with
+      | Seq (Seqlist [], Seqlist []) | Seqlist [] -> mlseq
+      | Seq (mlseq, Seqlist []) | Seq (Seqlist [], mlseq) ->
+        aux_rm_seq mlseq
+      | Seqlist l -> Seqlist (List.map aux_rm_ml l)
+      | Seq (mlseq1, mlseq2) ->
+        Seq(aux_rm_seq mlseq1, aux_rm_seq mlseq2)
+    in aux_rm_seq mlseq
 
 end
 
@@ -377,9 +363,11 @@ module Ocaml_gen = struct
 
   let mk_pat_var s = Pat.(Asttypes.(var @@ Location.mkloc s.content s.loc))
 
-  let mk_ident s = Exp.ident ~loc:s.loc Location.(mkloc (Longident.Lident s.content) s.loc)
+  let mk_ident s = Exp.ident ~loc:s.loc
+      Location.(mkloc (Longident.Lident s.content) s.loc)
 
-  let mk_value_binding ?(pvb_loc=Location.none) ?(pvb_attributes=[]) pvb_pat pvb_expr =
+  let mk_value_binding ?(pvb_loc=Location.none)
+      ?(pvb_attributes=[]) pvb_pat pvb_expr =
     { pvb_pat; pvb_expr; pvb_attributes; pvb_loc; }
 
   let expr_of_bitset bs = bs
@@ -770,7 +758,7 @@ let generate ~nooptim ~animate env tast =
   let ml_ast = grc2ml dep_array interleaved_cfg in
   let ml_ast' =
     if not nooptim then
-      (OptimizeML.gather_enter_exits ml_ast maxid)
+      ML_optimize.gather_enter_exits ml_ast maxid
     else ml_ast
   in
   Ocaml_gen.(
