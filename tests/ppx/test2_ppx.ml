@@ -193,7 +193,7 @@ let%sync reactive_player =
   ||
   loop pause
 
-let%sync test_animate ~animate =
+let%sync test_animate ~animate ~print:(png, pdf, dot) =
   input btn;
   let loca = Dom_html.(createDiv document) in
   let localol = 0 in
@@ -211,7 +211,7 @@ let%sync test_animate ~animate =
   end
 
 
-let%sync test ~pdf =
+let%sync test =
   let s = () in
   (present s (pause) nothing;
    !(print_string "42-1"))
