@@ -15,8 +15,8 @@
 
 The core language is completely compatible with vanilla OCaml compiler.
 
-**Please do not use pendulum for now, as it is an early prototype**
-
+**We would be grateful for any feedback on this implementation,
+but beware that this prototype is still in active developpement**
 
 
 
