@@ -8,10 +8,36 @@ let debug f = Printf.ksprintf
 let alert f = Printf.ksprintf
     (fun s -> Dom_html.window##alert(Js.string s); failwith s) f
 
-module CoerceTo = Dom_html.CoerceTo
+module CoerceTo = struct
+  include Dom_html.CoerceTo
+end
+
+module Dom = struct
+  include Dom
+
+  module Opt = struct
+    include Js.Opt
+    let mapopt o f =
+      Js.Opt.case o
+        (fun () -> Js.null)
+        (fun o -> f o)
+  end
+
+  let firstChild n = n##.firstChild
+  let firstChildOpt n = Opt.mapopt n firstChild
+  let nextSibling n = n##.nextSibling
+  let nextSiblingOpt n = Opt.mapopt n nextSibling
+end
+
 let (@>) s coerce =
   Js.Opt.get Dom_html.(coerce @@ getElementById s)
     (fun () -> error "can't find element %s" s)
+
+let (@>>) s coerce =
+  Js.Opt.get Dom_html.(Dom.Opt.mapopt s coerce)
+    (fun () -> error "can't find element")
+
+
 
 
 
@@ -25,7 +51,6 @@ module View = struct
 
   let create_item cnt animate delete_sig blur_sig dblclick_sig str =
     let mli = Dom_html.(createLi document) in
-    (* mli##.className := Js.string "editing"; *)
     let mdiv = Dom_html.(createDiv document)  in
     mdiv##.className := Js.string "view";
     let tgl = Dom_html.(createInput document) in
@@ -48,14 +73,14 @@ module View = struct
         Pendulum.Machine.set_present_value dblclick_sig cnt; animate ();
         Js._true);
     Dom.(appendChild mdiv tgl;
-         appendChild mdiv ie;
          appendChild mdiv lbl;
          appendChild mdiv btn;
-         appendChild mli mdiv);
+         appendChild mli mdiv;
+         appendChild mli ie);
     btn##.onclick := Dom_html.handler (fun _  ->
         Pendulum.Machine.set_present_value delete_sig cnt; animate ();
         Js._true) ;
-    mli, ie
+    mli, ie, lbl
 
 end
 
@@ -82,23 +107,32 @@ let enter_pressed ev =
         (fun c -> c = 13)
     ) ev
 
+
 let get_remove h items_ul elt_id =
   try
-    let elt, _= Hashtbl.find h elt_id in
+    let elt, _, _ = Hashtbl.find h elt_id in
     Hashtbl.remove h elt_id;
     Dom.removeChild items_ul elt
   with Not_found -> ()
 
-let add_append h cnt items_ul added_item =
+let add_append h cnt items_ul (mli, _, _ as added_item) =
   Hashtbl.add h cnt added_item;
-  Dom.appendChild items_ul (fst added_item)
+  Dom.appendChild items_ul mli
+
+
+let left_item h id =
+  try
+    let (mli, edit, lbl) = Hashtbl.find h id in
+    mli##.className := Js.string "";
+    lbl##.textContent := Js.some edit##.value
+  with Not_found -> ()
 
 let focus_iedit h id =
   try
-    let (_, edit) = Hashtbl.find h id in
+    let (mli, edit, _) = Hashtbl.find h id in
     debug "Ok found it : %s" (Js.to_string edit##.id);
-    let node = (Js.to_string edit##.id) @> CoerceTo.input in
-    node##focus
+    mli##.className := Js.string "editing";
+    edit##focus
   with Not_found -> ()
 
 
@@ -111,22 +145,21 @@ module Controller = struct
     let blur_item = -1 in
     let dblclick_item = -1 in
     let add_item =
-      Dom_html.(createDiv document, createInput document)
+      Dom_html.(createDiv document, createInput document, createLabel document)
     in
     let tasks = Hashtbl.create 19 in
     let cnt = 0 in
-    loop begin
-      present dblclick_item !(focus_iedit !!tasks !!dblclick_item)
-    end ||
-    loop begin
+    loop (present blur_item !(left_item !!tasks !!blur_item); pause)
+    || loop (present dblclick_item !(focus_iedit !!tasks !!dblclick_item); pause)
+    || loop begin
       present (newit##onkeypress
                & enter_pressed !!(newit##onkeypress)
                && newit##.value <> Js.string "")
         (emit cnt (!!cnt + 1);
          emit add_item
            (View.create_item !!cnt animate
-              delete_item blur_item dblclick_item newit##.value))
-    ; pause end
+              delete_item blur_item dblclick_item newit##.value));
+      pause end
     ||
     loop begin
       present add_item !(
