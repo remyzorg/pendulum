@@ -100,7 +100,8 @@ and pp_type_ml_ast lvl fmt =
       pp_type_ml_ast lvl fmt (MLassign_signal (id, MLcall (id, sigs, loc)))
     | MLenter i -> fprintf fmt "%sEnter %d" indent i
     | MLexit i -> fprintf fmt "%sExit %d" indent i
-    | MLenters_exits _ -> ()
+    | MLenters_exits (bs_add, bs_rem) ->
+      fprintf fmt "%s Entexs (%a, %a)" indent Bitset.pp bs_add Bitset.pp bs_rem
     | MLexpr e -> fprintf fmt "%s%s" indent (asprintf "%a" Ast.printexp e.exp)
     | MLunitexpr e -> fprintf fmt "%s%s" indent (asprintf "%a" Ast.printexp e.exp)
     | MLpause -> fprintf fmt "%sPause" indent
@@ -126,9 +127,9 @@ and pp_ml_ast lvl fmt =
   Format.(function
     | MLemit vs -> fprintf fmt "%semit %s" indent vs.signal.ident.content
     | MLassign_signal (id, ml) ->
-      fprintf fmt "%s := %a" id.content (pp_ml_ast 0) ml
+      fprintf fmt "%s%s := %a" indent id.content (pp_ml_ast 0) ml
     | MLassign_machine (_, (id, sigs, loc)) ->
-      fprintf fmt "%s := %a" id.content (pp_ml_ast 0) (MLcall (id, sigs, loc))
+      fprintf fmt "%s%s := %a" indent id.content (pp_ml_ast 0) (MLcall (id, sigs, loc))
 
     | MLif (mltest_expr, mlseq1, mlseq2) ->
       fprintf fmt "%sif %a then (\n%a\n%s)" indent pp_ml_test_expr mltest_expr
@@ -146,7 +147,8 @@ and pp_ml_ast lvl fmt =
 
     | MLenter i -> fprintf fmt "%senter %d" indent i
     | MLexit i -> fprintf fmt "%sexit %d" indent i
-    | MLenters_exits _ -> ()
+    | MLenters_exits (bs_add, bs_rem) ->
+      fprintf fmt "%s union %a, inter %a" indent Bitset.pp bs_add Bitset.pp bs_rem
     | MLexpr e -> fprintf fmt "%s%s" indent (asprintf "%a" Ast.printexp e.exp)
     | MLunitexpr e -> fprintf fmt "%s%s" indent (asprintf "%a" Ast.printexp e.exp)
     | MLpause -> fprintf fmt "%sPause" indent
@@ -253,50 +255,107 @@ let grc2ml dep_array fg =
   construct None fg
 
 
-module OptimizeML = struct
+module ML_optimize = struct
 
   let mk_enters_exits maxid = (Bitset.make maxid false, Bitset.make maxid true)
+  let gather_enter_exits mlseq maxid =
+    let rec aux_gather acc mlseq =
+      match mlseq with
+      | Seq (Seqlist [], Seqlist []) | Seqlist [] -> acc, mlseq
+      | Seq (mlseq, Seqlist []) | Seq (Seqlist [], mlseq) ->
+        aux_gather acc mlseq
+      | Seqlist ml_asts ->
+        let entexs, mll = List.fold_left (fun (entexs, mll as acc) ml ->
+            match ml with
+            | MLenter cur_i ->
+              begin match entexs with
+                | Some (bs_add, _) ->
+                  Bitset.add bs_add cur_i; acc
+                | _ ->
+                  let bs_add, _ as bs = mk_enters_exits maxid in
+                  Bitset.add bs_add cur_i;
+                  Some bs, MLenters_exits bs :: mll
+              end
+            | MLexit cur_i ->
+              begin match entexs with
+                | Some (_, bs_rem) ->
+                  Bitset.remove bs_rem cur_i; acc
+                | _ ->
+                  let _, bs_rem as bs = mk_enters_exits maxid in
+                  Bitset.remove bs_rem cur_i;
+                  Some bs, MLenters_exits bs :: mll
+              end
+            | MLif (mlte, mlseq1, mlseq2) ->
+              None, MLif (mlte, snd @@ aux_gather None mlseq1,
+                          snd @@ aux_gather None mlseq2) :: mll
+            | ml -> None, ml :: mll
+          ) (acc, []) ml_asts
+        in entexs, Seqlist (List.rev mll)
+      | Seq (mlseq1, mlseq2) ->
+        let entexs, mll1 = aux_gather acc mlseq1 in
+        let entexs', mll2 = aux_gather entexs mlseq2 in
+        entexs',
+        match mll1, mll2 with
+        | Seqlist [], Seqlist [] -> Seqlist []
+        | Seqlist l, Seqlist [] | Seqlist [], Seqlist l  -> Seqlist l
+        | mll1, mll2 -> Seq (mll1, mll2)
+    in
+    let _, mlseq = aux_gather None mlseq in
+    mlseq
 
-  let rec gather_enter_exits acc mlseq maxid =
-    match mlseq with
-    | Seq (Seqlist [], Seqlist []) | Seqlist [] -> None, mlseq
-    | Seq (mlseq, Seqlist []) | Seq (Seqlist [], mlseq) ->
-      gather_enter_exits acc mlseq maxid
+  let rm_atom_deps =
+    let open Ast_mapper in
+    let open Parsetree in
+    let open Longident in
+    let open Asttypes in
+    let mapper lres htbl =
+      {default_mapper with
+       expr = (fun mapper exp ->
+           match exp with
+           | {pexp_desc = Pexp_ident {txt = Lident content; loc}}
+             when Hashtbl.mem htbl content ->
+             let s, r = Hashtbl.find htbl content in
+             if r then ()
+             else (
+               Hashtbl.add htbl content (s, true);
+               lres := s :: !lres;
+             );
+             default_mapper.expr mapper exp
+           | x -> default_mapper.expr mapper x
+         );
+      }
+    in fun atom ->
+      let htbl = Hashtbl.create 19 in
+      let sigs_res = ref [] in
+      List.iter (fun x -> Hashtbl.add htbl x.Ast.ident.content (x, false)) atom.locals;
+      let mapper = mapper sigs_res htbl in
+      let _ = mapper.expr mapper atom.exp in
+      {atom with locals = !sigs_res}
 
-    | Seqlist ml_asts ->
-      let entexs, mll = List.fold_left (fun ((entexs, mll) as acc) ml ->
-          match ml with
-          | MLenter cur_i ->
-            begin match entexs with
-              | Some (bs, _) -> Bitset.add bs cur_i; acc
-              | _ ->
-                let (bs_add, _) as bs = mk_enters_exits maxid in
-                Bitset.add bs_add cur_i; Some bs, MLenters_exits bs :: mll
-            end
-          | MLexit cur_i ->
-            begin match entexs with
-              | Some (_, bs) -> Bitset.remove bs cur_i; acc
-              | _ ->
-                let (_, bs_rem) as bs = mk_enters_exits maxid in
-                Bitset.remove bs_rem cur_i; Some bs, MLenters_exits bs :: mll
-            end
-          | _ -> None, ml :: mll
-        ) (acc, []) ml_asts
-      in entexs, Seqlist (List.rev mll)
-
-    | Seq (mlseq1, mlseq2) ->
-      let entexs', mll1 = gather_enter_exits acc mlseq1 maxid in
-      let entexs', mll2 = gather_enter_exits entexs' mlseq1 maxid in
-      entexs',
-      match mlseq1, mlseq2 with
-      | Seqlist [], Seqlist [] -> mlseq1
-      | Seqlist l, Seqlist [] | Seqlist [], Seqlist l  -> Seqlist l
-      | _ -> Seq(mll1, mll2)
-
-
-
-
-
+  let rm_useless_let_bindings mlseq =
+    let rec aux_rm_test texp = match texp with
+      | MLboolexpr atom -> MLboolexpr (rm_atom_deps atom)
+      | MLor (texp1, texp2) -> MLor (aux_rm_test texp1, aux_rm_test texp2)
+      | MLand (texp1, texp2) -> MLand (aux_rm_test texp1, aux_rm_test texp2)
+      | texp -> texp
+    and aux_rm_ml ml = match ml with
+      | MLemit vs -> MLemit {vs with svalue = rm_atom_deps vs.svalue}
+      | MLexpr atom -> MLexpr (rm_atom_deps atom)
+      | MLunitexpr atom -> MLunitexpr (rm_atom_deps atom)
+      | MLif (ml_test_expr, mlseq1, mlseq2) ->
+        MLif (aux_rm_test ml_test_expr,
+              aux_rm_seq mlseq1, aux_rm_seq mlseq2)
+      | MLassign_signal (id, ml_ast) -> MLassign_signal (id, aux_rm_ml ml_ast)
+      | mlexp -> mlexp
+    and aux_rm_seq mlseq =
+      match mlseq with
+      | Seq (Seqlist [], Seqlist []) | Seqlist [] -> mlseq
+      | Seq (mlseq, Seqlist []) | Seq (Seqlist [], mlseq) ->
+        aux_rm_seq mlseq
+      | Seqlist l -> Seqlist (List.map aux_rm_ml l)
+      | Seq (mlseq1, mlseq2) ->
+        Seq(aux_rm_seq mlseq1, aux_rm_seq mlseq2)
+    in aux_rm_seq mlseq
 
 end
 
@@ -312,9 +371,11 @@ module Ocaml_gen = struct
 
   let mk_pat_var s = Pat.(Asttypes.(var @@ Location.mkloc s.content s.loc))
 
-  let mk_ident s = Exp.ident ~loc:s.loc Location.(mkloc (Longident.Lident s.content) s.loc)
+  let mk_ident s = Exp.ident ~loc:s.loc
+      Location.(mkloc (Longident.Lident s.content) s.loc)
 
-  let mk_value_binding ?(pvb_loc=Location.none) ?(pvb_attributes=[]) pvb_pat pvb_expr =
+  let mk_value_binding ?(pvb_loc=Location.none)
+      ?(pvb_attributes=[]) pvb_pat pvb_expr =
     { pvb_pat; pvb_expr; pvb_attributes; pvb_loc; }
 
   let expr_of_bitset bs = bs
@@ -398,7 +459,8 @@ module Ocaml_gen = struct
 
 
   let construct_local_signals_definitions env e = List.fold_left (fun acc vs ->
-      let rebinds = rebind_locals_let vs.svalue.locals
+      let atom = ML_optimize.rm_atom_deps vs.svalue in
+      let rebinds = rebind_locals_let atom.locals
           [%expr ref (make_signal [%e vs.svalue.exp])]
       in
       [%expr let [%p mk_pat_var vs.signal.ident] = [%e rebinds] in [%e acc]]
@@ -664,6 +726,22 @@ module Ocaml_gen = struct
                  [%e select_env_ident]
                  [%e int_const i]]
 
+    | MLenters_exits (bs_union, bs_inter as bs) ->
+      Bitset.simplify bs;
+      if Bitset.is_empty bs_union then
+        if Bitset.is_full bs_inter then
+          [%expr ()]
+        else [%expr Bitset.inter [%e select_env_ident]
+                      [%e expr_of_bitset bs_inter]]
+      else if Bitset.is_full bs_inter then
+        [%expr Bitset.union [%e select_env_ident]
+                 [%e expr_of_bitset bs_union]]
+      else
+        [%expr
+          Bitset.inter_union [%e select_env_ident] [%e expr_of_bitset bs_inter]
+            [%e expr_of_bitset bs_union];
+        ]
+
     | MLunitexpr pexpr ->
       rebind_locals_let pexpr.locals [%expr let () = [%e pexpr.exp] in ()]
     | MLexpr pexpr -> rebind_locals_let pexpr.locals pexpr.exp
@@ -679,7 +757,7 @@ module Ocaml_gen = struct
 end
 
 
-let generate ~animate env tast =
+let generate nooptim animate env tast =
   let selection_tree, flowgraph as grc = Of_ast.construct tast in
   Schedule.tag_tested_stmts selection_tree flowgraph;
   let _deps = Schedule.check_causality_cycles grc in
@@ -687,7 +765,13 @@ let generate ~animate env tast =
   let maxid, deps = deplist selection_tree in
   let dep_array = Array.make (maxid + 1) [] in
   let ml_ast = grc2ml dep_array interleaved_cfg in
+  let ml_ast' =
+    if not nooptim then
+      ML_optimize.gather_enter_exits ml_ast maxid
+      |> ML_optimize.rm_useless_let_bindings
+    else ml_ast
+  in
   Ocaml_gen.(
     construct_instanciation_body animate maxid env selection_tree
-    @@ construct_sequence env dep_array ml_ast
+    @@ construct_sequence env dep_array ml_ast'
   )

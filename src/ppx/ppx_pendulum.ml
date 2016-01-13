@@ -13,7 +13,7 @@ module Ast = Sync2ml.Ast
 
 module Error = struct
 
-    type syntax = | Forgot_sem | Keyword | Signal_name | Signal_test | Signal_test_expression
+  type syntax = | Forgot_sem | Keyword | Signal_name | Signal_test | Signal_test_expression
                 | Signal_tuple | Signal_decl_at_start | Event_name
 
   type 'a t =
@@ -21,6 +21,7 @@ module Error = struct
     | Syntax of syntax
     | Non_recursive_let
     | Only_on_let
+    | Wrong_argument_values
     | Other_err of 'a * (Format.formatter -> 'a -> unit)
 
 
@@ -46,6 +47,7 @@ module Error = struct
     | Non_recursive_let -> fprintf fmt "recursive `let` not allowed"
     | Only_on_let -> fprintf fmt "only allowed on let"
     | Other_err (e, f) -> fprintf fmt "%a" f e
+    | Wrong_argument_values -> fprintf fmt "unexpected value for this argument"
 
   let error ~loc rsn =
     raise (Location.Error (
@@ -259,23 +261,47 @@ let ast_of_expr atom_mapper e =
 let parse_ast atom_mapper vb =
   let dsource, dot, genast = ref false, ref false, ref false in
   let animate, pdf, png = ref false, ref false, ref false in
+  let nooptim = ref false in
   let rec parse_args_options exp =
-    begin match exp with
-      | [%expr fun ~animate -> [%e? exp']] ->
-        animate := true; parse_args_options exp'
-      | [%expr fun ~dsource -> [%e? exp']] ->
-        dsource := true;
-        parse_args_options exp'
-      | [%expr fun ~dot -> [%e? exp']] ->
-        dot := true; parse_args_options exp'
-      | [%expr fun ~pdf -> [%e? exp']] ->
-        pdf := true; parse_args_options exp'
-      | [%expr fun ~png -> [%e? exp']] ->
-        png := true; parse_args_options exp'
-      | [%expr fun ~ast -> [%e? exp']] ->
-        genast := true; parse_args_options exp'
-      | e -> e
-    end;
+    match exp with
+    | [%expr fun ~animate -> [%e? exp']] ->
+      animate := true; parse_args_options exp'
+    | [%expr fun ~dsource -> [%e? exp']] ->
+      dsource := true;
+      parse_args_options exp'
+    (* | [%expr fun ~dot -> [%e? exp']] -> *)
+    (*   dot := true; parse_args_options exp' *)
+    (* | [%expr fun ~pdf -> [%e? exp']] -> *)
+    (*   pdf := true; parse_args_options exp' *)
+    (* | [%expr fun ~png -> [%e? exp']] -> *)
+    (*   png := true; parse_args_options exp' *)
+    | [%expr fun ~ast -> [%e? exp']] ->
+      genast := true; parse_args_options exp'
+
+    | [%expr fun ~print -> [%e? exp']] ->
+      pdf := true; parse_args_options exp'
+
+    | [%expr fun ~print:[%p? pp_params] -> [%e? exp']] as prt_param ->
+      let check_param p = match p with
+        | {ppat_desc = Ppat_var {txt = content; loc}} ->
+          begin match content with
+            | "pdf" -> pdf := true
+            | "png" -> png := true
+            | "dot" -> dot := true
+            | _ -> Error.(error ~loc:prt_param.pexp_loc Wrong_argument_values)
+          end
+        | _ -> Error.(error ~loc:prt_param.pexp_loc Wrong_argument_values)
+      in
+      begin match pp_params with
+      | {ppat_desc = Ppat_var _} -> check_param pp_params
+      | {ppat_desc = Ppat_tuple l} -> List.iter check_param l
+      | _ -> Error.(error ~loc:prt_param.pexp_loc Wrong_argument_values)
+      end;
+      parse_args_options exp'
+
+    | [%expr fun ~nooptim -> [%e? exp']] ->
+      nooptim := true; parse_args_options exp'
+    | e -> e
   in
   let e = parse_args_options vb.pvb_expr in
   let e, sigs = pop_signals_decl e in
@@ -293,7 +319,7 @@ let parse_ast atom_mapper vb =
     let tast, env = Ast.Tagged.of_ast ~sigs ast in
     let tast = Ast.Analysis.filter_dead_trees tast in
     if !dot || !pdf || !png then Pendulum_misc.print_to_dot !dot !pdf !png loc pat tast;
-    let ocaml_expr = Sync2ml.generate ~animate:!animate env tast in
+    let ocaml_expr = Sync2ml.generate !nooptim !animate env tast in
     if !dsource then Format.printf "%a@." Pprintast.expression ocaml_expr;
     [%expr [%e ocaml_expr]]
 

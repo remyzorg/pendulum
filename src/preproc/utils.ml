@@ -83,7 +83,9 @@ module Bitset = struct
 
   type t = int array
 
-  let max_value = Sys.word_size - 2
+  let max_value = 32 - 2
+
+  let max_int = 2147483647 (* there is no 64 bits literal integers in js*)
 
   let make n b = Array.make (n / max_value + 1) @@ if b then max_int else 0
 
@@ -98,23 +100,45 @@ module Bitset = struct
     let id = e / max_value in
     t.(id) <- (1 lsl (e mod max_value) lxor t.(id))
 
-  let union t1 t2 =
-    for i = 0 to Array.length t1 - 1 do
-      t1.(i) <- t1.(i) lor t2.(i)
+  let min_length t1 t2 =
+    min (Array.length t1) (Array.length t2)
+
+  let simplify (t1, t2) =
+    for i = 0 to min_length t1 t2 - 1 do
+      let t1i, t2i = t1.(i), t2.(i) in
+      t1.(i) <- t1i land t2i;
+      t2.(i) <- t1i lor t2i
     done
 
-  let intersect t1 t2 =
-    for i = 0 to Array.length t1 - 1 do
-      t1.(i) <- t1.(i) land t2.(i)
-    done
+  let count_set_bits i =
+    let rec loop c n =
+      if n = 0 then c
+      else loop (succ c) (n land (n - 1))
+    in loop 0 i
+
+  type content = Empty | Singleton of int | Set
+
+  let is_empty t =
+    try
+      Array.iter (fun x -> if x <> 0 then raise Exit)  t; true
+    with Exit -> false
+
+  let is_full t =
+    try
+      Array.iter (fun x -> if x <> max_int then raise Exit)  t; true
+    with Exit -> false
+
+  let pp fmt t =
+    Format.fprintf fmt "[|";
+    Array.iteri (fun i x ->
+        Format.fprintf fmt "%d" x;
+        if i <> Array.length t - 1 then
+          Format.fprintf fmt "; "
+      ) t;
+    Format.fprintf fmt "|]"
 
 
 
-
-
-  let add_elts t elts = List.iter (add t) elts
-
-  let fold_ints f t = Array.fold_left f t
 
 
 

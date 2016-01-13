@@ -21,7 +21,7 @@ let update_field tarea ev =
   tarea##.textContent :=
     Js.some (Js.string @@ Format.sprintf "%dx%d" (ev##.clientX) (ev##.clientY))
 
-let%sync mouse_machine ~png =
+let%sync mouse_machine =
   input tarea;
   input window;
   loop begin
