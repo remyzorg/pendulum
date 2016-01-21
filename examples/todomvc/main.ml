@@ -90,63 +90,64 @@ module View = struct
     let mli = li [mdiv; input_edit_item] in
     To_dom.(of_li mli, of_input input_edit_item, of_label lbl_content, false)
 
-  (* let footer_html () = *)
-  (*   let open Html5 in *)
-  (*   footer ~a:[a_class ["footer"]] [ *)
-  (*     span ~a:[a_class ["todo-count"]] [ *)
-  (*       strong ~a:[] [R.Html5.pcdata ] ; *)
-  (*       R.Html5.pcdata (React.S.map item_left react_tasks) *)
-  (*     ]; *)
-  (*     R.Html5.ul ~a:[a_class ["filters"]] *)
-  (*       (ReactList.list (React.S.map vswap r)) ; *)
-  (*     button ~a:((R.filter_attrib (a_hidden `Hidden) (React.S.map button_hidden react_tasks)) :: a_button) [ *)
-  (*       pcdata "Clear completed" *)
-  (*     ]; *)
-  (*   ] *)
+  let jstr s = Js.some @@ Js.string ""
+
+  let is_eq_char k q = Js.Optdef.case k
+      (fun _ -> false)
+      (fun x -> x = Char.code q)
+
+  let get_remove h items_ul elt_id =
+    try
+      let elt, _, _, _ = Hashtbl.find h elt_id in
+      Hashtbl.remove h elt_id;
+      Dom.removeChild items_ul elt
+    with Not_found -> ()
+
+  let add_append h cnt items_ul (mli, _, _, _ as added_item) =
+    Hashtbl.add h cnt added_item;
+    Dom.appendChild items_ul mli
+
+  let edited_item h id =
+    try
+      let (mli, edit, lbl, completed) = Hashtbl.find h id in
+      if edit##.value##.length = 0 then begin
+        Js.Opt.iter mli##.parentNode (fun p -> Dom.removeChild p mli);
+        Hashtbl.remove h id
+      end else begin
+        lbl##.textContent := Js.some edit##.value;
+        mli##.className := Js.string (if completed then "completed" else "");
+      end
+    with Not_found -> ()
+
+  let focus_iedit h id =
+    try
+      let (mli, edit, _, _) = Hashtbl.find h id in
+      mli##.className := Js.string "editing";
+      edit##focus
+    with Not_found -> ()
+
+  let selected_item h id =
+    try
+      let (mli, edit, lbl, completed) = Hashtbl.find h id in
+      mli##.className := Js.string (if completed then "" else "completed");
+      Hashtbl.replace h id (mli, edit, lbl, not completed);
+      if completed then 1 else -1
+    with Not_found -> 0
+
+  let items_left footer left_cnt =
+    let sp =
+      let open Html5 in
+      span ~a:[a_class ["todo-count"]] [
+        strong ~a:[] [pcdata @@ Format.sprintf "%d" left_cnt];
+        pcdata (Format.sprintf " item%s left" (if left_cnt > 1 then "s" else ""))
+      ]
+    in
+    footer##.style##.display := Js.string @@ if left_cnt = 0 then "none" else "block";
+    Js.Opt.case (footer##.firstChild)
+      (fun () -> debug "wtf bbq ?")
+      (Dom.replaceChild footer (To_dom.of_element sp))
 
 
-let jstr s = Js.some @@ Js.string ""
-
-let is_eq_char k q = Js.Optdef.case k
-    (fun _ -> false)
-    (fun x -> x = Char.code q)
-
-let get_remove h items_ul elt_id =
-  try
-    let elt, _, _, _ = Hashtbl.find h elt_id in
-    Hashtbl.remove h elt_id;
-    Dom.removeChild items_ul elt
-  with Not_found -> ()
-
-let add_append h cnt items_ul (mli, _, _, _ as added_item) =
-  Hashtbl.add h cnt added_item;
-  Dom.appendChild items_ul mli
-
-let edited_item h id =
-  try
-    let (mli, edit, lbl, completed) = Hashtbl.find h id in
-    if edit##.value##.length = 0 then begin
-      Js.Opt.iter mli##.parentNode (fun p -> Dom.removeChild p mli);
-      Hashtbl.remove h id
-    end else begin
-      lbl##.textContent := Js.some edit##.value;
-      mli##.className := Js.string (if completed then "completed" else "");
-    end
-  with Not_found -> ()
-
-let focus_iedit h id =
-  try
-    let (mli, edit, _, _) = Hashtbl.find h id in
-    mli##.className := Js.string "editing";
-    edit##focus
-  with Not_found -> ()
-
-let selected_item h id =
-  try
-    let (mli, edit, lbl, completed) = Hashtbl.find h id in
-    mli##.className := Js.string (if completed then "" else "completed");
-    Hashtbl.replace h id (mli, edit, lbl, not completed);
-  with Not_found -> ()
 
 end
 
@@ -161,6 +162,7 @@ module Controller = struct
   let%sync machine ~animate =
     input items_ul;
     input newit;
+    input itemcnt;
 
     let delete_item = 0 in let blur_item = 0 in
     let keydown_item = 0, 0 in let dblclick_item = 0 in
@@ -174,7 +176,8 @@ module Controller = struct
       present (keydown_item & (snd !!keydown_item = 13 || snd !!keydown_item = 27))
         !(View.edited_item !!tasks (fst !!keydown_item))
 
-      || present select_item !(View.selected_item !!tasks !!select_item)
+      || present select_item
+        (emit cntleft (!!cnt + View.selected_item !!tasks !!select_item))
 
       || present blur_item !(View.edited_item !!tasks !!blur_item)
 
@@ -182,8 +185,10 @@ module Controller = struct
         newit##.value := Js.string "";
         View.add_append !!tasks !!cnt !!items_ul !!add_item)
 
-      || present delete_item
+      || present delete_item (
+        emit cntleft (!!cntleft - 1);
         !(View.get_remove !!tasks !!items_ul !!delete_item)
+      )
 
       || present dblclick_item !(View.focus_iedit !!tasks !!dblclick_item)
 
@@ -191,12 +196,18 @@ module Controller = struct
                   & enter_pressed !!(newit##onkeydown)
                   && newit##.value##.length > 0)
         (emit cnt (!!cnt + 1);
+         emit cntleft (!!cntleft + 1);
          emit add_item
            (View.create_item !!cnt animate
               delete_item blur_item dblclick_item keydown_item select_item newit##.value))
       ;
       emit write ();
       pause;
+    )
+    ||
+    loop (
+      present cntleft !(View.items_left !!itemcnt !!cntleft);
+      pause
     )
 
 
@@ -205,7 +216,8 @@ end
 let main _ =
   let items_ul = "todo-list" @> CoerceTo.ul in
   let new_todo = "new-todo" @> CoerceTo.input in
-  let _m_react = Controller.machine (items_ul, new_todo) in
+  let filter_footer = "filter_footer" @> CoerceTo.element in
+  let _m_react = Controller.machine (items_ul, new_todo, filter_footer) in
   Js._false
 
 
