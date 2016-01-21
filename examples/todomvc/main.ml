@@ -56,51 +56,53 @@ let enter_pressed ev =
 
 module View = struct
 
+  open Tyxml_js
+
   let create_item cnt animate delete_sig blur_sig dblclick_sig keydown_sig select_sig str =
-    let mli = Dom_html.(createLi document) in
-    let mdiv = Dom_html.(createDiv document)  in
-    mdiv##.className := Js.string "view";
-    let tgl = Dom_html.(createInput document) in
-    tgl##.className := Js.string "toggle";
-    tgl##setAttribute (Js.string "type")(Js.string "checkbox");
-    let lbl = Dom_html.(createLabel document) in
-    lbl##.textContent := Js.some str##trim;
-    let btn = Dom_html.(createButton document) in
-    btn##.className := Js.string "destroy";
-    let ie = Dom_html.(createInput document) in
-    ie##setAttribute (Js.string "type") (Js.string "text");
-    ie##.className := Js.string "edit";
-    ie##.value := str##trim;
-    ie##.id := Js.string @@ Format.sprintf "it-edit-%d" cnt;
-    ie##.onblur := Dom_html.handler (fun _ ->
-        Pendulum.Machine.set_present_value blur_sig cnt; animate ();
-        Js._true);
-
-    let keyhandler = Dom_html.handler (fun ev ->
-        (* if ev##.keyCode = 13 || ev##.keyCode = 27 then begin *)
-          Pendulum.Machine.set_present_value keydown_sig (cnt, ev##.keyCode); animate ();
-        (* end; *)
-        Js._true)
+    let open Html5 in
+    let open Pendulum in
+    let lbl_content = label ~a:[a_ondblclick (fun evt ->
+        Machine.set_present_value dblclick_sig cnt; animate (); true)]
+        [pcdata @@ Js.to_string (str##trim)]
     in
-    ie##.onkeydown := keyhandler;
-    ie##.onkeypress := keyhandler;
-    tgl##.onclick := Dom_html.handler (fun _ ->
-        Pendulum.Machine.set_present_value select_sig cnt; animate ();
-        Js._true);
-    lbl##.ondblclick := Dom_html.handler (fun _ ->
-        Pendulum.Machine.set_present_value dblclick_sig cnt; animate ();
-        Js._true);
-    Dom.(appendChild mdiv tgl;
-         appendChild mdiv lbl;
-         appendChild mdiv btn;
-         appendChild mli mdiv;
-         appendChild mli ie);
-    btn##.onclick := Dom_html.handler (fun _ ->
-        Pendulum.Machine.set_present_value delete_sig cnt; animate ();
-        Js._true) ;
-    mli, ie, lbl, false
+    let btn_rm = button ~a:[a_class ["destroy"]; a_onclick (fun evt ->
+        Machine.set_present_value delete_sig cnt; animate (); true)] []
+    in
+    let keyhandler ev =
+      Machine.set_present_value keydown_sig (cnt, ev##.keyCode);
+      animate (); true
+    in
+    let input_edit_item = input ~a:[
+        a_input_type `Text; a_class ["edit"];
+        a_value (Js.to_string @@ str##trim);
+        a_id (Format.sprintf "it-edit-%d" cnt);
+        a_onblur (fun _ -> Machine.set_present_value blur_sig cnt; animate (); true);
+        a_onkeydown keyhandler; a_onkeypress keyhandler
+      ] ()
+    in
+    let tgl_done = input ~a:[
+        a_input_type `Checkbox; a_class ["toggle"];
+        a_onclick (fun _ ->
+            Pendulum.Machine.set_present_value select_sig cnt; animate (); true)
+      ] ()
+    in
+    let mdiv = div ~a:[a_class ["view"]] [tgl_done; lbl_content; btn_rm] in
+    let mli = li [mdiv; input_edit_item] in
+    To_dom.(of_li mli, of_input input_edit_item, of_label lbl_content, false)
 
-end
+  (* let footer_html () = *)
+  (*   let open Html5 in *)
+  (*   footer ~a:[a_class ["footer"]] [ *)
+  (*     span ~a:[a_class ["todo-count"]] [ *)
+  (*       strong ~a:[] [R.Html5.pcdata ] ; *)
+  (*       R.Html5.pcdata (React.S.map item_left react_tasks) *)
+  (*     ]; *)
+  (*     R.Html5.ul ~a:[a_class ["filters"]] *)
+  (*       (ReactList.list (React.S.map vswap r)) ; *)
+  (*     button ~a:((R.filter_attrib (a_hidden `Hidden) (React.S.map button_hidden react_tasks)) :: a_button) [ *)
+  (*       pcdata "Clear completed" *)
+  (*     ]; *)
+  (*   ] *)
 
 
 let jstr s = Js.some @@ Js.string ""
@@ -146,6 +148,9 @@ let selected_item h id =
     Hashtbl.replace h id (mli, edit, lbl, not completed);
   with Not_found -> ()
 
+end
+
+
 
 
 let add_item_default =
@@ -156,41 +161,44 @@ module Controller = struct
   let%sync machine ~animate =
     input items_ul;
     input newit;
-    let delete_item = -1 in
-    let blur_item = -1 in
-    let keydown_item = -1, 0 in
-    let dblclick_item = -1 in
-    let select_item = -1 in
+
+    let delete_item = 0 in let blur_item = 0 in
+    let keydown_item = 0, 0 in let dblclick_item = 0 in
+    let select_item = 0 in
     let add_item = add_item_default in
     let tasks = Hashtbl.create 19 in
     let cnt = 0 in
+    let cntleft = 0 in
+    let write = () in
     loop (
-      present keydown_item & (snd !!keydown_item = 13 || snd !!keydown_item = 27)
-                             !(edited_item !!task (fst !!keydown_item)
-      ||
-      present select_item !(selected_item !!tasks !!select_item)
-      ||
-      present blur_item !(edited_item !!tasks !!blur_item)
-      ||
-      present add_item !(
+      present (keydown_item & (snd !!keydown_item = 13 || snd !!keydown_item = 27))
+        !(View.edited_item !!tasks (fst !!keydown_item))
+
+      || present select_item !(View.selected_item !!tasks !!select_item)
+
+      || present blur_item !(View.edited_item !!tasks !!blur_item)
+
+      || present add_item !(
         newit##.value := Js.string "";
-        add_append !!tasks !!cnt !!items_ul !!add_item)
-      ||
-      present delete_item
-        !(get_remove !!tasks !!items_ul !!delete_item)
-    ; pause)
-    ||
-    loop (present dblclick_item !(focus_iedit !!tasks !!dblclick_item); pause)
-    ||
-    loop begin
-      present (newit##onkeydown
-               & enter_pressed !!(newit##onkeydown)
-               && newit##.value##.length > 0)
+        View.add_append !!tasks !!cnt !!items_ul !!add_item)
+
+      || present delete_item
+        !(View.get_remove !!tasks !!items_ul !!delete_item)
+
+      || present dblclick_item !(View.focus_iedit !!tasks !!dblclick_item)
+
+      || present (newit##onkeydown
+                  & enter_pressed !!(newit##onkeydown)
+                  && newit##.value##.length > 0)
         (emit cnt (!!cnt + 1);
          emit add_item
            (View.create_item !!cnt animate
-              delete_item blur_item dblclick_item keydown_item select_item newit##.value));
-      pause end
+              delete_item blur_item dblclick_item keydown_item select_item newit##.value))
+      ;
+      emit write ();
+      pause;
+    )
+
 
 end
 
