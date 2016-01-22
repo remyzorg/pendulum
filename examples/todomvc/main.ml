@@ -98,10 +98,11 @@ module View = struct
 
   let get_remove h items_ul elt_id =
     try
-      let elt, _, _, _ = Hashtbl.find h elt_id in
+      let elt, _, _, complete = Hashtbl.find h elt_id in
       Hashtbl.remove h elt_id;
-      Dom.removeChild items_ul elt
-    with Not_found -> ()
+      Dom.removeChild items_ul elt;
+      if complete then 0 else 1
+    with Not_found -> 0
 
   let add_append h cnt items_ul (mli, _, _, _ as added_item) =
     Hashtbl.add h cnt added_item;
@@ -134,20 +135,41 @@ module View = struct
       if completed then 1 else -1
     with Not_found -> 0
 
-  let items_left footer left_cnt =
+  let items_left h footer left_cnt clear_complete select_all =
     let sp =
-      let open Html5 in
-      span ~a:[a_class ["todo-count"]] [
+      Html5.(span ~a:[a_class ["todo-count"]] [
         strong ~a:[] [pcdata @@ Format.sprintf "%d" left_cnt];
-        pcdata (Format.sprintf " item%s left" (if left_cnt > 1 then "s" else ""))
-      ]
+        pcdata (Format.sprintf " item%s left" (if left_cnt > 1 then "s" else ""))])
     in
-    footer##.style##.display := Js.string @@ if left_cnt = 0 then "none" else "block";
-    Js.Opt.case (footer##.firstChild)
-      (fun () -> debug "wtf bbq ?")
+    let size = Hashtbl.length h in
+    footer##.style##.display := Js.string @@ if size = 0 then "none" else "block";
+    clear_complete##.style##.display :=
+      Js.string @@ if size = left_cnt then "none" else "block";
+    select_all##.checked := Js.bool (size > 0 && left_cnt = 0);
+    select_all##.style##.display :=
+      Js.string @@ if size > 0 then "block" else "none";
+    Js.Opt.iter (footer##.firstChild)
       (Dom.replaceChild footer (To_dom.of_element sp))
 
 
+  let clear_complete items_ul h =
+    Hashtbl.iter (fun k (mli, _, _, completed) ->
+        if completed then begin
+          Dom.removeChild items_ul mli;
+          Hashtbl.remove h k
+        end) h
+
+  let select_all cnt_left h =
+    let select = cnt_left > 0 in
+    Hashtbl.iter (fun k (mli, edit, lbl, _) ->
+        Hashtbl.replace h k (mli, edit, lbl, select);
+        let toggler = Dom.Opt.mapopt (Dom.firstChildOpt (Dom.firstChild mli))
+            CoerceTo.element @>> CoerceTo.input
+        in
+        toggler##.checked := Js.bool select;
+        mli##.className := Js.string @@ if select then "completed" else ""
+      ) h;
+    if cnt_left = 0 then Hashtbl.length h else 0
 
 end
 
@@ -163,6 +185,8 @@ module Controller = struct
     input items_ul;
     input newit;
     input itemcnt;
+    input clear_complete;
+    input select_all;
 
     let delete_item = 0 in let blur_item = 0 in
     let keydown_item = 0, 0 in let dblclick_item = 0 in
@@ -177,7 +201,7 @@ module Controller = struct
         !(View.edited_item !!tasks (fst !!keydown_item))
 
       || present select_item
-        (emit cntleft (!!cnt + View.selected_item !!tasks !!select_item))
+        (emit cntleft (!!cntleft + View.selected_item !!tasks !!select_item))
 
       || present blur_item !(View.edited_item !!tasks !!blur_item)
 
@@ -186,11 +210,20 @@ module Controller = struct
         View.add_append !!tasks !!cnt !!items_ul !!add_item)
 
       || present delete_item (
-        emit cntleft (!!cntleft - 1);
-        !(View.get_remove !!tasks !!items_ul !!delete_item)
+        emit cntleft (!!cntleft - View.get_remove !!tasks !!items_ul !!delete_item);
       )
 
       || present dblclick_item !(View.focus_iedit !!tasks !!dblclick_item)
+
+
+      || present select_all##onclick (
+        emit cntleft (View.select_all !!cntleft !!tasks)
+      )
+
+      || present clear_complete##onclick (
+        !(View.clear_complete !!items_ul !!tasks);
+        emit cntleft (!!cntleft)
+      )
 
       || present (newit##onkeydown
                   & enter_pressed !!(newit##onkeydown)
@@ -200,15 +233,13 @@ module Controller = struct
          emit add_item
            (View.create_item !!cnt animate
               delete_item blur_item dblclick_item keydown_item select_item newit##.value))
-      ;
-      emit write ();
-      pause;
+      ; pause
     )
     ||
-    loop (
-      present cntleft !(View.items_left !!itemcnt !!cntleft);
-      pause
-    )
+    loop (present cntleft
+            !(View.items_left !!tasks
+                !!itemcnt !!cntleft clear_complete select_all)
+         ; pause)
 
 
 end
@@ -217,8 +248,12 @@ let main _ =
   let items_ul = "todo-list" @> CoerceTo.ul in
   let new_todo = "new-todo" @> CoerceTo.input in
   let filter_footer = "filter_footer" @> CoerceTo.element in
-  let _m_react = Controller.machine (items_ul, new_todo, filter_footer) in
-  Js._false
+  let clear_complete = "clear_complete" @> CoerceTo.button in
+  let select_all = "select_all" @> CoerceTo.input in
+  let _m_react = Controller.machine
+      (items_ul, new_todo, filter_footer,
+       clear_complete, select_all)
+  in Js._false
 
 
 let () = Dom_html.(window##.onload := handler main)

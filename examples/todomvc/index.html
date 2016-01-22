@@ -20,10 +20,12 @@
                    name="newTodo"/>
           </header>
           <section class="main" style="visibility: visible">
+            <input id="select_all" type="checkbox" style="display: none" class="toggle-all">
+            <label for="toggle-all">Mark all as complete</label>
             <ul id="todo-list" class="todo-list">
             </ul>
           </section>
-          <footer id="filter_footer" class="footer">
+          <footer id="filter_footer" class="footer" style="display: none">
             <span class="todo-count">
             </span>
             <ul class="filters">
@@ -31,7 +33,8 @@
               <li><a href="#/active" class="">Active</a></li>
               <li><a href="#/completed" class="">Completed</a></li>
             </ul>
-            <button class="clear-completed">Clear completed</button>
+            <button id="clear_complete" class="clear-completed" style="display: none">
+              Clear completed</button>
           </footer>
         </section>
       </div>
