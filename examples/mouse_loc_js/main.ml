@@ -21,7 +21,7 @@ let update_field tarea ev =
   tarea##.textContent :=
     Js.some (Js.string @@ Format.sprintf "%dx%d" (ev##.clientX) (ev##.clientY))
 
-let%sync mouse_machine =
+let%sync mouse ~dot =
   input tarea;
   input window;
   loop begin
@@ -36,7 +36,7 @@ let _ =
   let open Dom_html in
   window##.onload := handler (fun _ ->
       let area = "tarea" @> CoerceTo.a in
-      let _set_tarea, _step = mouse_machine (area, window) in
+      let _set_tarea, _step = mouse (area, window) in
       Js._false
     )
 
