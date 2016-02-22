@@ -18,5 +18,14 @@ let%sync basic =
 
 
 
+let%sync emit_basic =
+  input elt;
+  input elt2;
+
+  loop begin
+    present elt2##onmouseover
+      (emit elt2##.value##.textcontent (Js.string "lol"));
+    pause
+  end
 
 

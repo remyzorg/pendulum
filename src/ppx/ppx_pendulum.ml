@@ -102,6 +102,23 @@ let rec check_signal_presence_expr atom_mapper e =
      elt_ident, Some event_ident, None
   | _ -> Error.(syntax_error ~loc:e.pexp_loc Signal_test)
 
+let rec check_signal_emit_expr acc atom_mapper e =
+  let open Ast in
+  let rec aux acc e =
+    match e with
+    | { pexp_desc = Pexp_ident {txt = Lident content; loc} } -> [{loc; content}]
+    | [%expr [%e? elt] ##. [%e? field]] ->
+      let elt_list = aux acc elt in
+      let event_ident =
+        match field with
+        | {pexp_desc = Pexp_ident {txt = Lident content; loc}} -> {loc; content}
+        | _ -> Error.(syntax_error ~loc:field.pexp_loc Event_name)
+      in
+      event_ident :: elt_list
+    | _ -> Error.(syntax_error ~loc:e.pexp_loc Signal_name)
+  in
+  List.rev @@ aux [] e
+
 
 let pop_signals_decl e =
   let cont origin e =
@@ -155,10 +172,15 @@ let ast_of_expr atom_mapper e =
       Pause
 
     | [%expr emit [%e? signal] [%e? e_value]] ->
+      let fields = check_signal_emit_expr [] atom_mapper signal in
+      Format.printf "%s\n" (String.concat "##." @@
+                          List.map (fun x -> x.content) fields);
+
       Emit (Ast.mk_vid (check_expr_ident signal) @@ atom_mapper e_value)
 
     | [%expr emit [%e? signal]] ->
-      Error.signal_value_missing e (check_expr_ident signal).content
+      Emit (Ast.mk_vid (check_expr_ident signal) [%expr ()])
+      (* Error.signal_value_missing e (check_expr_ident signal).content *)
 
     | [%expr exit [%e? label]] ->
       Exit (Label(check_expr_ident label))
@@ -235,17 +257,6 @@ let ast_of_expr atom_mapper e =
       Every (check_signal_presence_expr atom_mapper signal, visit e)
 
     | [%expr nothing [%e? e_err]]
-    (* | [%expr pause [%e? e_err]] *)
-    (* | [%expr emit [%e? _] [%e? _] [%e? e_err]] *)
-    (* | [%expr exit [%e? _] [%e? e_err]] *)
-    (* | [%expr atom [%e? _] [%e? e_err]] *)
-    (* | [%expr loop [%e? _] [%e? e_err]] *)
-    (* | [%expr present [%e? _] [%e? _] [%e? _] [%e? e_err]] *)
-    (* | [%expr signal [%e? _] [%e? _] [%e? e_err]] *)
-    (* | [%expr suspend [%e? _] [%e? _][%e? e_err]] *)
-    (* | [%expr trap [%e? _] [%e? _][%e? e_err]] *)
-    (* | [%expr halt [%e? e_err]] *)
-    (* | [%expr sustain [%e? _] [%e? _] [%e? e_err]] *)
     | [%expr present [%e? _] [%e? _] [%e? e_err]]
     | [%expr await [%e? _][%e? e_err]]
     | [%expr abort [%e? _] [%e? _] [%e? e_err]]

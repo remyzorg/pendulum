@@ -32,13 +32,12 @@ module type S = sig
 
   type test = ident * ident option * exp option
 
-  type valued_signal = {signal : signal ; svalue : atom}
-  type valued_ident = {sname : ident ; ivalue : exp}
+  type valued_signal = {signal : signal ; fields  : ident list; svalue : atom}
+  type valued_ident = {sname : ident ; fields : ident list; ivalue : exp}
   val mk_signal : ?origin:signal_origin -> ident -> signal
 
-  val mk_vsig : signal -> signal list -> exp -> valued_signal
-
-  val mk_vid : ident -> exp -> valued_ident
+  val mk_vsig : ?fields:ident list -> signal -> signal list -> exp -> valued_signal
+  val mk_vid : ?fields:ident list -> ident -> exp -> valued_ident
 
   val mk_atom : ?locals:signal list -> exp -> atom
 
