@@ -4,3 +4,7 @@ _build
 *.byte
 setup.log
 setup.data
+*.mldylib
+*.mllib
+*.mlpack
+src/runtime/META
