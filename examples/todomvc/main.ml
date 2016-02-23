@@ -171,6 +171,20 @@ module View = struct
       ) h;
     if cnt_left = 0 then Hashtbl.length h else 0
 
+  let change_visiblity h b (b1, b2) v =
+    b##.className := Js.string "selected";
+    b1##.className := Js.string "";
+    b2##.className := Js.string "";
+    Hashtbl.iter (fun _ (mli, edit, lbl, completed) ->
+        let visibility = match v with
+        | None -> "block"
+        | Some false -> if completed then "none" else "block"
+        | Some true -> if completed then "block" else "none"
+        in
+        mli##.style##.display := Js.string visibility
+      ) h;
+
+
 end
 
 
@@ -187,6 +201,9 @@ module Controller = struct
     input itemcnt;
     input clear_complete;
     input select_all;
+    input all;
+    input completed;
+    input active;
 
     let delete_item = 0 in let blur_item = 0 in
     let keydown_item = 0, 0 in let dblclick_item = 0 in
@@ -225,6 +242,13 @@ module Controller = struct
         emit cntleft (!!cntleft)
       )
 
+      || present all##onclick
+        !(View.change_visiblity !!tasks all (completed,active) None)
+      || present completed##onclick !()
+        !(View.change_visiblity !!tasks completed (all,active) (Some true))
+      || present active##onclick !()
+        !(View.change_visiblity !!tasks active (all,completed) (Some false))
+
       || present (newit##onkeydown
                   & enter_pressed !!(newit##onkeydown)
                   && newit##.value##.length > 0)
@@ -235,6 +259,7 @@ module Controller = struct
               delete_item blur_item dblclick_item keydown_item select_item newit##.value))
       ; pause
     )
+
     ||
     loop (present cntleft
             !(View.items_left !!tasks
@@ -250,9 +275,14 @@ let main _ =
   let filter_footer = "filter_footer" @> CoerceTo.element in
   let clear_complete = "clear_complete" @> CoerceTo.button in
   let select_all = "select_all" @> CoerceTo.input in
+  let visibility_active = "visibility_active" @> CoerceTo.a in
+  let visibility_all = "visibility_all" @> CoerceTo.a in
+  let visibility_completed = "visibility_completed" @> CoerceTo.a in
+
   let _m_react = Controller.machine
       (items_ul, new_todo, filter_footer,
-       clear_complete, select_all)
+       clear_complete, select_all, visibility_all,
+       visibility_completed, visibility_active)
   in Js._false
 
 
