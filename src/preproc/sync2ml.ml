@@ -467,9 +467,13 @@ module Ocaml_gen = struct
     ) e !(env.Tagged.all_local_signals)
 
   let append_tag s tag =
-    { s with ident = {s.ident with
-          content = Format.sprintf "%s##%s" s.ident.content tag.content;
-        }}
+    {s with ident =
+              {s.ident with content = Format.sprintf "%s##%s" s.ident.content tag.content;
+                     }}
+
+  let has_tobe_defined s = match s with
+    | Normal | Event _ -> true
+    | Access _ -> false
 
   let construct_global_signals_definitions env e = Tagged.(List.fold_left (fun acc s ->
       let signal_to_definition init_val next_def s =
@@ -478,7 +482,7 @@ module Ocaml_gen = struct
       in
       try
         Hashtbl.find env.signals_tags s.ident.content
-        |> List.map (append_tag s)
+        |> MList.map_filter has_tobe_defined (function Event e -> append_tag s e | _ -> s)
         |> List.fold_left (signal_to_definition [%expr None]) acc
       with Not_found -> signal_to_definition (mk_ident s.ident) acc s
     ) (construct_local_signals_definitions env e) env.global_signals)
@@ -490,9 +494,11 @@ module Ocaml_gen = struct
            [%expr set_absent ![%e mk_ident vs.signal.ident]; [%e acc]]
          ) [%expr ()] !(env.all_local_signals))
     in
-    let globals_setters =
-      let cons_setabs s acc tag =
-        [%expr set_absent [%e mk_ident @@ (append_tag s tag).ident]; [%e acc]]
+    let globals_absent_setters =
+      let cons_setabs s acc typ =
+        match typ with
+        | Event e -> [%expr set_absent [%e mk_ident @@ (append_tag s e).ident]; [%e acc]]
+        | _ -> acc
       in List.fold_left (
         fun acc s -> try
             Hashtbl.find env.Tagged.signals_tags s.ident.content
@@ -500,7 +506,7 @@ module Ocaml_gen = struct
           with Not_found -> [%expr set_absent [%e mk_ident s.ident]; [%e acc]]
       ) locals_setters env.global_signals
     in
-    [%expr let set_absent () = [%e globals_setters] in [%e e]]
+    [%expr let set_absent () = [%e globals_absent_setters] in [%e e]]
 
   let construct_input_setters_tuple env stepfun =
     let open Tagged in
@@ -546,7 +552,9 @@ module Ocaml_gen = struct
                [%e step_call];
                Js._true)]
     in
-    let construct_assign s acc tag =
+    let construct_assign s acc typ =
+      match typ with | Normal -> acc | Access _ -> acc
+      | Event tag ->
       [%expr [%e construct_lhs s tag] := [%e construct_rhs s tag]; [%e acc]]
     in List.fold_left (
       fun acc s -> try
@@ -673,7 +681,16 @@ module Ocaml_gen = struct
     match ast with
     | MLemit vs ->
       let rebinded_expr = rebind_locals_let vs.svalue.locals vs.svalue.exp in
-      [%expr set_present_value [%e add_deref_local vs.signal] [%e rebinded_expr]]
+      begin match vs.signal.typ with
+        | Normal | Event _ ->
+          [%expr set_present_value [%e add_deref_local vs.signal] [%e rebinded_expr]]
+        | Access (elt, fields) ->
+          let lhs = List.fold_left (fun acc field ->
+              [%expr [%e acc] ##. [%e mk_ident field]]
+            ) (mk_ident elt) fields
+          in
+          [%expr [%e lhs] := [%e rebinded_expr]]
+      end
     | MLif (test, mlseq1, mlseq2) ->
       begin match mlseq1, mlseq2 with
         | mlseq1, (Seqlist [] | Seq (Seqlist [], Seqlist [])) ->

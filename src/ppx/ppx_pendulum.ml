@@ -172,11 +172,13 @@ let ast_of_expr atom_mapper e =
       Pause
 
     | [%expr emit [%e? signal] [%e? e_value]] ->
-      let fields = check_signal_emit_expr [] atom_mapper signal in
-      Format.printf "%s\n" (String.concat "##." @@
-                          List.map (fun x -> x.content) fields);
-
-      Emit (Ast.mk_vid (check_expr_ident signal) @@ atom_mapper e_value)
+      let signal, fields =
+        match check_signal_emit_expr [] atom_mapper signal
+        with | [] -> assert false | hd :: tl -> hd, tl
+      in
+      (* Format.printf "%s\n" (String.concat "##." @@ *)
+      (*                     List.map (fun x -> x.content) fields); *)
+      Emit (Ast.mk_vid ~fields signal @@ atom_mapper e_value)
 
     | [%expr emit [%e? signal]] ->
       Emit (Ast.mk_vid (check_expr_ident signal) [%expr ()])
