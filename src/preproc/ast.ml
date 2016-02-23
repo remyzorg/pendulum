@@ -33,12 +33,12 @@ module type S = sig
 
   type test = ident * ident option * exp option
 
-  type valued_signal = {signal : signal ; svalue : atom}
-  type valued_ident = {sname : ident ; ivalue : exp}
+  type valued_signal = {signal : signal ; fields  : ident list; svalue : atom}
+  type valued_ident = {sname : ident ; fields : ident list; ivalue : exp}
   val mk_signal : ?origin:signal_origin -> ident -> signal
 
-  val mk_vsig : signal -> signal list -> exp -> valued_signal
-  val mk_vid : ident -> exp -> valued_ident
+  val mk_vsig : ?fields:ident list -> signal -> signal list -> exp -> valued_signal
+  val mk_vid : ?fields:ident list -> ident -> exp -> valued_ident
 
   val mk_atom : ?locals:signal list -> exp -> atom
 
@@ -155,8 +155,9 @@ module Make (E : Exp) = struct
 
   type test = ident * ident option * exp option
 
-  type valued_signal = {signal : signal ; svalue : atom}
-  type valued_ident = {sname : ident ; ivalue : exp}
+  type valued_signal = {signal : signal ; fields  : ident list; svalue : atom}
+  type valued_ident = {sname : ident ; fields : ident list; ivalue : exp}
+
   type label = Label of ident
 
   
@@ -164,8 +165,8 @@ module Make (E : Exp) = struct
   let mk_loc ?(loc=dummy_loc) content = {loc; content}
   let mk_signal ?(origin=Local) ident = {ident; origin; tag = None}
 
-  let mk_vid sname ivalue = {sname; ivalue}
-  let mk_vsig signal locals exp = {signal; svalue = {locals; exp}}
+  let mk_vid ?(fields=[]) sname ivalue = {sname; fields; ivalue}
+  let mk_vsig ?(fields=[]) signal locals exp = {signal; fields; svalue = {locals; exp}}
 
   let mk_atom ?(locals = []) exp = {locals; exp}
 
@@ -293,7 +294,7 @@ module Make (E : Exp) = struct
           SignalMap.add (mk_signal vi.sname) (succ i, Local, s.tag) env.signals,
           {s with ident = {s.ident with content = Format.sprintf "%s~%d" s.ident.content (succ i)}}
       in
-      let vs = {signal = s'; svalue = mk_atom ~locals vi.ivalue} in
+      let vs = {signal = s'; fields = []; svalue = mk_atom ~locals vi.ivalue} in
       env.all_local_signals := vs :: !(env.all_local_signals);
       {env with signals; local_signals_scope = vs :: env.local_signals_scope}, vs
 
@@ -374,7 +375,7 @@ module Make (E : Exp) = struct
         | Derived.Emit s ->
           let locals = (List.map (fun x -> x.signal) env.local_signals_scope) in
           let s' = rename ~loc env None s.sname in
-          mk_tagged (Emit {signal = s'; svalue = mk_atom ~locals s.ivalue}) !+id
+          mk_tagged (Emit {signal = s'; fields = assert false; svalue = mk_atom ~locals s.ivalue}) !+id
 
         | Derived.Nothing -> mk_tagged Nothing !+id
         | Derived.Pause -> mk_tagged Pause !+id

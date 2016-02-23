@@ -26,6 +26,11 @@ module MList = struct
     | h :: t -> Format.fprintf fmt "%a%s@;%a" pp_element h sep (pp_iter ~sep pp_element) t
     | [] -> ()
 
+  let rec pp_iter_nobreak ?(sep="") pp_element fmt = function
+    | [h] -> Format.fprintf fmt "%a" pp_element h
+    | h :: t -> Format.fprintf fmt "%a%s%a" pp_element h sep (pp_iter ~sep pp_element) t
+    | [] -> ()
+
 end
 
 module StringMap = Map.Make(struct

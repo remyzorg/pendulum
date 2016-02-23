@@ -257,15 +257,17 @@ module Controller = struct
          emit add_item
            (View.create_item !!cnt animate
               delete_item blur_item dblclick_item keydown_item select_item newit##.value))
+      ||
+      loop (present cntleft
+              !(View.items_left !!tasks
+                  !!itemcnt !!cntleft clear_complete select_all))
       ; pause
     )
-
     ||
     loop (present cntleft
             !(View.items_left !!tasks
                 !!itemcnt !!cntleft clear_complete select_all)
          ; pause)
-
 
 end
 

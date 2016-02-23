@@ -48,13 +48,6 @@ Executable "test_ppx"
  # BuildDepends: oUnit, pendulum
  BuildDepends: js_of_ocaml.ppx, oUnit, js_of_ocaml, pendulum
 
-# Executable "test_ppx_js"
-#  Path: tests/ppx_js
-#  Build$: flag(tests) || flag(ppx)
-#  Install: false
-#  CompiledObject: byte
-#  MainIs: js_events_test.ml
-#  BuildTools: ppx_pendulum
-#  BuildDepends: js_of_ocaml.ppx, oUnit, js_of_ocaml, pendulum
+
 
     
