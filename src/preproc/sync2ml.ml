@@ -3,6 +3,7 @@
 
 module Expression = struct
   type t = Parsetree.expression
+  type core_type = Parsetree.core_type
   let print = Pprintast.expression
   module Location = Location
 end
@@ -370,6 +371,9 @@ module Ocaml_gen = struct
   let string_const s = Exp.constant (Asttypes.Const_string(s, None))
 
   let mk_pat_var s = Pat.(Asttypes.(var @@ Location.mkloc s.content s.loc))
+  let mk_typed_pat_var ct s =
+    let pvar = mk_pat_var s in
+    Pat.(Asttypes.(constraint_ ~loc:s.loc pvar ct))
 
   let mk_ident s = Exp.ident ~loc:s.loc
       Location.(mkloc (Longident.Lident s.content) s.loc)
@@ -472,20 +476,21 @@ module Ocaml_gen = struct
                      }}
 
   let has_tobe_defined s = match s with
-    | Normal | Event _ -> true
+    | No_binding | Event _ -> true
     | Access _ -> false
 
-  let construct_global_signals_definitions env e = Tagged.(List.fold_left (fun acc s ->
-      let signal_to_definition init_val next_def s =
-        [%expr let [%p mk_pat_var s.ident] =
-                 make_signal [%e init_val] in [%e next_def]]
-      in
-      try
-        Hashtbl.find env.signals_tags s.ident.content
-        |> MList.map_filter has_tobe_defined (function Event e -> append_tag s e | _ -> s)
-        |> List.fold_left (signal_to_definition [%expr None]) acc
-      with Not_found -> signal_to_definition (mk_ident s.ident) acc s
-    ) (construct_local_signals_definitions env e) env.global_signals)
+  let construct_global_signals_definitions env e = Tagged.(
+      List.fold_left (fun acc (s, topt) ->
+          let signal_to_definition init_val next_def s =
+            [%expr let [%p mk_pat_var s.ident] =
+                     make_signal [%e init_val] in [%e next_def]]
+          in
+          try
+            Hashtbl.find env.signals_tags s.ident.content
+            |> MList.map_filter has_tobe_defined (function Event e -> append_tag s e | _ -> s)
+            |> List.fold_left (signal_to_definition [%expr None]) acc
+          with Not_found -> signal_to_definition (mk_ident s.ident) acc s
+        ) (construct_local_signals_definitions env e) env.args_signals)
 
   let construct_set_all_absent_definition env e =
     let open Tagged in
@@ -495,29 +500,29 @@ module Ocaml_gen = struct
          ) [%expr ()] !(env.all_local_signals))
     in
     let globals_absent_setters =
-      let cons_setabs s acc typ =
-        match typ with
+      let cons_setabs s acc bind =
+        match bind with
         | Event e -> [%expr set_absent [%e mk_ident @@ (append_tag s e).ident]; [%e acc]]
         | _ -> acc
       in List.fold_left (
-        fun acc s -> try
+        fun acc (s, topt) -> try
             Hashtbl.find env.Tagged.signals_tags s.ident.content
             |> List.fold_left (cons_setabs s) acc
           with Not_found -> [%expr set_absent [%e mk_ident s.ident]; [%e acc]]
-      ) locals_setters env.global_signals
+      ) locals_setters env.args_signals
     in
     [%expr let set_absent () = [%e globals_absent_setters] in [%e e]]
 
   let construct_input_setters_tuple env stepfun =
     let open Tagged in
     let globals =
-      List.filter (fun s -> not @@ Hashtbl.mem env.Tagged.signals_tags s.ident.content)
-        env.global_signals
+      List.filter (fun (s, _) -> not @@ Hashtbl.mem env.Tagged.signals_tags s.ident.content)
+        env.args_signals
     in
     match globals with
     | [] -> true, [%expr stepfun]
-    | [s] -> false, [%expr set_present_value [%e mk_ident s.ident], [%e stepfun]]
-    | l -> false, Exp.tuple @@ List.fold_left (fun acc s ->
+    | [(s, _)] -> false, [%expr set_present_value [%e mk_ident s.ident], [%e stepfun]]
+    | l -> false, Exp.tuple @@ List.fold_left (fun acc (s, _) ->
         [%expr set_present_value [%e mk_ident s.ident]] :: acc
       ) [stepfun] l
 
@@ -553,15 +558,15 @@ module Ocaml_gen = struct
                Js._true)]
     in
     let construct_assign s acc typ =
-      match typ with | Normal -> acc | Access _ -> acc
+      match typ with | No_binding -> acc | Access _ -> acc
       | Event tag ->
       [%expr [%e construct_lhs s tag] := [%e construct_rhs s tag]; [%e acc]]
     in List.fold_left (
-      fun acc s -> try
+      fun acc (s, _) -> try
           Hashtbl.find env.Tagged.signals_tags s.ident.content
           |> List.fold_left (construct_assign s) acc
         with Not_found -> acc
-    ) e env.Tagged.global_signals
+    ) e env.Tagged.args_signals
 
   let construct_raf_call stepfun_ident =
     [%expr fun () ->
@@ -584,10 +589,15 @@ module Ocaml_gen = struct
   let construct_instanciation_body animate nstmts env sel stepfun_body =
     let open Selection_tree in
     let sigs_step_arg =
-      match env.Tagged.global_signals with
+      match env.Tagged.args_signals with
       | [] -> [%pat? ()]
-      | [s] -> mk_pat_var s.ident
-      | l -> Pat.tuple @@ List.rev_map (fun s -> mk_pat_var s.ident) l
+      | [s, Some t] -> mk_typed_pat_var t s.ident
+      | [s, none] -> mk_pat_var s.ident
+      | l -> Pat.tuple @@ List.rev_map (
+          fun (s, topt) -> match topt with
+            | None -> mk_pat_var s.ident
+            | Some t -> mk_typed_pat_var t s.ident
+        ) l
     in
     let stepfun_lambda_expr =
       [%expr fun () -> try [%e stepfun_body] with
@@ -681,8 +691,8 @@ module Ocaml_gen = struct
     match ast with
     | MLemit vs ->
       let rebinded_expr = rebind_locals_let vs.svalue.locals vs.svalue.exp in
-      begin match vs.signal.typ with
-        | Normal | Event _ ->
+      begin match vs.signal.bind with
+        | No_binding | Event _ ->
           [%expr set_present_value [%e add_deref_local vs.signal] [%e rebinded_expr]]
         | Access (elt, fields) ->
           let lhs = List.fold_left (fun acc field ->

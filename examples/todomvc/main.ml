@@ -195,15 +195,16 @@ let add_item_default =
 
 module Controller = struct
 
-  let%sync machine ~animate =
-    input items_ul;
-    input newit;
-    input itemcnt;
-    input clear_complete;
-    input select_all;
-    input all;
-    input completed;
-    input active;
+  let%sync machine ~animate
+      items_ul
+      newit
+      itemcnt
+      clear_complete
+      select_all
+      all
+      completed
+      active
+    =
 
     let delete_item = 0 in let blur_item = 0 in
     let keydown_item = 0, 0 in let dblclick_item = 0 in

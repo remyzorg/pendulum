@@ -8,6 +8,7 @@ end
 module Ast : Ast.S
   with type exp = Parsetree.expression
    and type loc = Location.t
+   and type core_type = Parsetree.core_type
 
 module Flowgraph : Grc.Flowgraph.S with module Ast = Ast
 module Selection_tree : Grc.Selection_tree.S with module Ast = Ast

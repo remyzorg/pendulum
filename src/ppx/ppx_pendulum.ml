@@ -13,8 +13,17 @@ module Ast = Sync2ml.Ast
 
 module Error = struct
 
-  type syntax = | Forgot_sem | Keyword | Signal_name | Signal_test | Signal_test_expression
-                | Signal_tuple | Signal_decl_at_start | Event_name
+  type syntax =
+    | Forgot_sem
+    | Keyword
+    | Signal_name
+    | Signal_test
+    | Signal_test_expression
+    | Signal_tuple
+    | Signal_decl_at_start
+    | Event_name
+    | Unknown_arg_option of string
+    | Argument_syntax_error
 
   type 'a t =
     | Value_missing of string
@@ -36,6 +45,8 @@ module Error = struct
     | Signal_test_expression -> fprintf fmt "signal test expression expected"
     | Signal_tuple -> fprintf fmt "signal tuple expected"
     | Signal_decl_at_start -> fprintf fmt "signal declarations must be on the top"
+    | Unknown_arg_option s -> fprintf fmt "unknown option %s" s
+    | Argument_syntax_error -> fprintf fmt "argument expected"
 
 
   let print_error fmt e =
@@ -176,13 +187,10 @@ let ast_of_expr atom_mapper e =
         match check_signal_emit_expr [] atom_mapper signal
         with | [] -> assert false | hd :: tl -> hd, tl
       in
-      (* Format.printf "%s\n" (String.concat "##." @@ *)
-      (*                     List.map (fun x -> x.content) fields); *)
       Emit (Ast.mk_vid ~fields signal @@ atom_mapper e_value)
 
     | [%expr emit [%e? signal]] ->
       Emit (Ast.mk_vid (check_expr_ident signal) [%expr ()])
-      (* Error.signal_value_missing e (check_expr_ident signal).content *)
 
     | [%expr exit [%e? label]] ->
       Exit (Label(check_expr_ident label))
@@ -275,24 +283,18 @@ let parse_ast atom_mapper vb =
   let dsource, dot, genast = ref false, ref false, ref false in
   let animate, pdf, png = ref false, ref false, ref false in
   let nooptim = ref false in
-  let rec parse_args_options exp =
+  let rec parse_args inputs exp =
     match exp with
     | [%expr fun ~animate -> [%e? exp']] ->
-      animate := true; parse_args_options exp'
+      animate := true; parse_args inputs exp'
     | [%expr fun ~dsource -> [%e? exp']] ->
       dsource := true;
-      parse_args_options exp'
-    (* | [%expr fun ~dot -> [%e? exp']] -> *)
-    (*   dot := true; parse_args_options exp' *)
-    (* | [%expr fun ~pdf -> [%e? exp']] -> *)
-    (*   pdf := true; parse_args_options exp' *)
-    (* | [%expr fun ~png -> [%e? exp']] -> *)
-    (*   png := true; parse_args_options exp' *)
+      parse_args inputs exp'
     | [%expr fun ~ast -> [%e? exp']] ->
-      genast := true; parse_args_options exp'
+      genast := true; parse_args inputs exp'
 
     | [%expr fun ~print -> [%e? exp']] ->
-      pdf := true; parse_args_options exp'
+      pdf := true; parse_args inputs exp'
 
     | [%expr fun ~print:[%p? pp_params] -> [%e? exp']] as prt_param ->
       let check_param p = match p with
@@ -310,15 +312,33 @@ let parse_ast atom_mapper vb =
       | {ppat_desc = Ppat_tuple l} -> List.iter check_param l
       | _ -> Error.(error ~loc:prt_param.pexp_loc Wrong_argument_values)
       end;
-      parse_args_options exp'
+      parse_args inputs exp'
 
     | [%expr fun ~nooptim -> [%e? exp']] ->
-      nooptim := true; parse_args_options exp'
-    | e -> e
-  in
-  let e = parse_args_options vb.pvb_expr in
-  let e, sigs = pop_signals_decl e in
+      nooptim := true; parse_args inputs exp'
 
+    | [%expr fun [%p? {ppat_desc = Ppat_var ident} ] -> [%e? exp']] ->
+      parse_args (Ast.({content = ident.txt; loc = ident.loc}, None) :: inputs) exp'
+
+    | [%expr fun [%p? {ppat_desc =
+        Ppat_constraint ({ppat_desc = Ppat_var ident}, typ)}] -> [%e? exp']] ->
+      parse_args (Ast.({content = ident.txt; loc = ident.loc}, Some typ) :: inputs) exp'
+
+    | { pexp_desc = Pexp_fun (s, _, _, _) } when s <> "" ->
+      Error.(syntax_error ~loc:exp.pexp_loc (Unknown_arg_option s))
+
+    | { pexp_desc = Pexp_fun _ } ->
+      Error.(syntax_error ~loc:exp.pexp_loc Argument_syntax_error)
+
+    | e -> e, inputs
+  in
+  let e, inputs = parse_args [] vb.pvb_expr in
+  let e, sigs = pop_signals_decl e in
+  let sigs = List.(
+      (fold_left (fun acc x -> (x, None) :: acc)
+        @@ rev_map Ast.(fun (s, t) -> mk_signal ~origin:Input s, t) inputs)
+      @@ sigs)
+  in
   if !genast then
     [%expr ([%e Pendulum_misc.expr_of_ast @@ ast_of_expr atom_mapper e])]
   else

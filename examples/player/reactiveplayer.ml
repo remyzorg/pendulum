@@ -78,12 +78,13 @@ let update_content elt b =
   elt##.textContent := Js.some @@ Js.string @@ if b then "Pause" else "Play"
 
 
-let%sync reactive_player ~animate =
-  input play_pause; (* the button *)
-  input progress_bar; (* the progress element *)
-  input media; (* the video element *)
-  input time_a; (* the a elt displaying time*)
-  input slider_value; (* the a elt displaying time*)
+let%sync reactive_player ~animate
+    play_pause (* the button *)
+    progress_bar (* the progress element *)
+    media (* the video element *)
+    time_a (* the a elt displaying time*)
+    slider_value (* the a elt displaying time*)
+  =
 
   let no_update = () in
   let state = Js.to_bool media##.autoplay in

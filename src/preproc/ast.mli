@@ -6,6 +6,7 @@ end
 
 module type Exp = sig
   type t
+  type core_type
   val print : Format.formatter -> t -> unit
   module Location : Location
 end
@@ -14,6 +15,7 @@ module type S = sig
 
   type loc
   type exp
+  type core_type
 
   val printexp : Format.formatter -> exp -> unit
 
@@ -26,12 +28,12 @@ module type S = sig
 
   type signal_origin = Local | Input | Output
 
-  type signal_type =
+  type signal_binder =
     | Access of ident * ident list
     | Event of ident
-    | Normal
+    | No_binding
 
-  type signal = { ident : ident; origin : signal_origin; typ : signal_type}
+  type signal = { ident : ident; origin : signal_origin; bind : signal_binder}
   type label = Label of ident
   type atom = { locals : signal list; exp : exp}
 
@@ -39,7 +41,7 @@ module type S = sig
 
   type valued_signal = {signal : signal ; svalue : atom}
   type valued_ident = {sname : ident ; fields : ident list; ivalue : exp}
-  val mk_signal : ?origin:signal_origin -> ?typ:signal_type -> ident -> signal
+  val mk_signal : ?origin:signal_origin -> ?bind:signal_binder -> ident -> signal
 
   val mk_vsig : signal -> signal list -> exp -> valued_signal
   val mk_vid : ?fields:ident list -> ident -> exp -> valued_ident
@@ -113,11 +115,11 @@ module type S = sig
 
 
     type env = {
-      global_signals : signal list;
+      args_signals : (signal * core_type option) list;
       labels : int IdentMap.t;
       global_occurences : int IdentMap.t ref;
-      signals : (int * signal_origin * signal_type) SignalMap.t;
-      signals_tags : (string, signal_type list) Hashtbl.t;
+      signals : (int * signal_origin * signal_binder) SignalMap.t;
+      signals_tags : (string, signal_binder list) Hashtbl.t;
       all_local_signals : (valued_signal) list ref;
       local_signals_scope : valued_signal list;
       machine_runs : (int * (int * signal list) list) IdentMap.t ref;
@@ -125,7 +127,7 @@ module type S = sig
 
     val print_env : Format.formatter -> env -> unit
 
-    val of_ast : ?sigs:(signal list) -> Derived.statement -> t * env
+    val of_ast : ?sigs:((signal * core_type option) list) -> Derived.statement -> t * env
 
     val print_to_dot : Format.formatter -> t -> unit
   end
@@ -140,3 +142,4 @@ end
 module Make (E : Exp) : S
   with type loc = E.Location.t
    and type exp = E.t
+   and type core_type = E.core_type
