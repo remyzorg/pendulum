@@ -78,12 +78,13 @@ let update_content elt b =
   elt##.textContent := Js.some @@ Js.string @@ if b then "Pause" else "Play"
 
 
+open Dom_html
 let%sync reactive_player ~animate
-    (play_pause : buttonElement Js.t)(* the button *)
-    progress_bar (* the progress element *)
-    media (* the video element *)
-    time_a (* the a elt displaying time*)
-    slider_value (* the a elt displaying time*)
+    (play_pause : buttonElement Js.t)
+    (progress_bar : inputElement Js.t)
+    (media : _mediaElement Js.t)
+    (time_a : anchorElement Js.t)
+    (slider_value : anchorElement Js.t)(* the a elt displaying time*)
   =
 
   let no_update = () in
@@ -92,28 +93,27 @@ let%sync reactive_player ~animate
 
   loop (
     present media##onplay !(
-      update_content play_pause (pre state))
+      update_content play_pause !!state)
 
     || present media##onpause !(
-      update_content play_pause (pre state))
+      update_content play_pause !!state)
 
-    || present play_pause##onclick (
-      emit state (not (pre state)))
+    || present play_pause##onclick (emit state (not !!state))
 
     || present state !(
-      update_state (pre state) media play_pause)
+      update_state !!state media play_pause)
   ; pause)
 
   || loop (
     present progress_bar##oninput
-      !(update_slider_value (pre slider_value) media progress_bar);
+      !(update_slider_value !!slider_value media progress_bar);
     pause
   )
   || loop (
     await progress_bar##onmousedown;
     trap t' (
       loop (
-        emit no_update ();
+        emit no_update;
         present progress_bar##onmouseup (
           !(set_visible false (pre slider_value);
            update_media media progress_bar);
