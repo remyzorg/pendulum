@@ -79,7 +79,7 @@ let update_content elt b =
 
 
 let%sync reactive_player ~animate
-    play_pause (* the button *)
+    (play_pause : buttonElement Js.t)(* the button *)
     progress_bar (* the progress element *)
     media (* the video element *)
     time_a (* the a elt displaying time*)

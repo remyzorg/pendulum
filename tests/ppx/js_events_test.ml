@@ -18,10 +18,7 @@ let%sync basic =
 
 
 
-let%sync emit_basic
-    (elt : Dom_html.element Js.t)
-    elt2
-  =
+let%sync emit_basic elt elt2 =
   loop begin
     present elt##onmouseover
       (emit elt2##.textContent (Js.string "lol"));

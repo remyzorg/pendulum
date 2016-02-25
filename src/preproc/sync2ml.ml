@@ -480,7 +480,7 @@ module Ocaml_gen = struct
     | Access _ -> false
 
   let construct_global_signals_definitions env e = Tagged.(
-      List.fold_left (fun acc (s, topt) ->
+      List.fold_left (fun acc (s, _) ->
           let signal_to_definition init_val next_def s =
             [%expr let [%p mk_pat_var s.ident] =
                      make_signal [%e init_val] in [%e next_def]]
@@ -505,7 +505,7 @@ module Ocaml_gen = struct
         | Event e -> [%expr set_absent [%e mk_ident @@ (append_tag s e).ident]; [%e acc]]
         | _ -> acc
       in List.fold_left (
-        fun acc (s, topt) -> try
+        fun acc (s, _) -> try
             Hashtbl.find env.Tagged.signals_tags s.ident.content
             |> List.fold_left (cons_setabs s) acc
           with Not_found -> [%expr set_absent [%e mk_ident s.ident]; [%e acc]]
@@ -593,7 +593,7 @@ module Ocaml_gen = struct
       | [] -> [%pat? ()]
       | [s, Some t] -> mk_typed_pat_var t s.ident
       | [s, none] -> mk_pat_var s.ident
-      | l -> Pat.tuple @@ List.rev_map (
+      | l -> Pat.tuple @@ List.map (
           fun (s, topt) -> match topt with
             | None -> mk_pat_var s.ident
             | Some t -> mk_typed_pat_var t s.ident

@@ -332,12 +332,12 @@ let parse_ast atom_mapper vb =
 
     | e -> e, inputs
   in
-  let e, inputs = parse_args [] vb.pvb_expr in
-  let e, sigs = pop_signals_decl e in
+  let e, args = parse_args [] vb.pvb_expr in
+  let e, inputs = pop_signals_decl e in
   let sigs = List.(
       (fold_left (fun acc x -> (x, None) :: acc)
-        @@ rev_map Ast.(fun (s, t) -> mk_signal ~origin:Input s, t) inputs)
-      @@ sigs)
+        @@ rev_map Ast.(fun (s, t) -> mk_signal ~origin:Input s, t) args)
+      @@ inputs)
   in
   if !genast then
     [%expr ([%e Pendulum_misc.expr_of_ast @@ ast_of_expr atom_mapper e])]
