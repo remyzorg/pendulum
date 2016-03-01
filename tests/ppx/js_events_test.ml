@@ -17,8 +17,13 @@ let%sync basic =
   end
 
 
-
-let%sync emit_basic elt elt2 =
+let%sync emit_basic elt elt2 ~dsource =
+  loop begin
+    present elt##onmouseover
+      (emit elt2##.textContent (Js.string "lol"));
+    pause
+  end
+  ||
   loop begin
     present elt##onmouseover
       (emit elt2##.textContent (Js.string "lol"));
