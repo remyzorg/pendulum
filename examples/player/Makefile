@@ -2,7 +2,10 @@
 all: reactiveplayer.ml
 	ocamlbuild -use-ocamlfind \
 		-package pendulum -cflags "-ppx ppx_pendulum" \
-		-package js_of_ocaml -package js_of_ocaml.ppx reactiveplayer.byte
+		-pkgs js_of_ocaml,js_of_ocaml.ppx \
+    -pkgs ppx_deriving,js_of_ocaml.deriving.ppx,js_of_ocaml.deriving \
+    -pkgs lwt,lwt.ppx \
+     reactiveplayer.byte
 	js_of_ocaml reactiveplayer.byte
 
 clean:

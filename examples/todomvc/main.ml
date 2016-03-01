@@ -54,11 +54,40 @@ let enter_pressed ev =
   Opt.default false (fun ev -> ev##.keyCode = 13) ev
 
 
+module Model = struct
+
+  open Dom_html
+  type item = {
+    mutable txt : string;
+    item_li : divElement Js.t;
+    edit : inputElement Js.t;
+    lbl : labelElement Js.t;
+    mutable selected : bool;
+  }
+
+
+  let add_item_default =
+    Dom_html.({
+        txt = "";
+        item_li = createDiv document;
+        edit = createInput document;
+        lbl = createLabel document;
+        selected = false;
+      })
+
+end
+
 module View = struct
 
   open Tyxml_js
+  open Model
 
-  let create_item cnt animate delete_sig blur_sig dblclick_sig keydown_sig select_sig str =
+  let style_of_visibility state = function
+    | None -> "block"
+    | Some false -> if state then "none" else "block"
+    | Some true -> if state then "block" else "none"
+
+  let create_item cnt animate delete_sig blur_sig dblclick_sig keydown_sig select_sig visibility str =
     let open Html5 in
     let open Pendulum in
     let lbl_content = label ~a:[a_ondblclick (fun evt ->
@@ -72,9 +101,10 @@ module View = struct
       Machine.set_present_value keydown_sig (cnt, ev##.keyCode);
       animate (); true
     in
+    let txt = Js.to_string @@ str##trim in
     let input_edit_item = input ~a:[
         a_input_type `Text; a_class ["edit"];
-        a_value (Js.to_string @@ str##trim);
+        a_value txt;
         a_id (Format.sprintf "it-edit-%d" cnt);
         a_onblur (fun _ -> Machine.set_present_value blur_sig cnt; animate (); true);
         a_onkeydown keyhandler; a_onkeypress keyhandler
@@ -87,8 +117,10 @@ module View = struct
       ] ()
     in
     let mdiv = div ~a:[a_class ["view"]] [tgl_done; lbl_content; btn_rm] in
-    let mli = li [mdiv; input_edit_item] in
-    To_dom.(of_li mli, of_input input_edit_item, of_label lbl_content, false)
+    let item_li = To_dom.of_li @@ li [mdiv; input_edit_item] in
+    item_li##.style##.display := Js.string @@ style_of_visibility false visibility;
+    To_dom.({txt; item_li; edit = of_input input_edit_item;
+                            lbl = of_label lbl_content; selected = false})
 
   let jstr s = Js.some @@ Js.string ""
 
@@ -98,41 +130,42 @@ module View = struct
 
   let get_remove h items_ul elt_id =
     try
-      let elt, _, _, complete = Hashtbl.find h elt_id in
+      let it = Hashtbl.find h elt_id in
       Hashtbl.remove h elt_id;
-      Dom.removeChild items_ul elt;
-      if complete then 0 else 1
+      Dom.removeChild items_ul it.item_li;
+      if it.selected then 0 else 1
     with Not_found -> 0
 
-  let add_append h cnt items_ul (mli, _, _, _ as added_item) =
-    Hashtbl.add h cnt added_item;
-    Dom.appendChild items_ul mli
+  let add_append h cnt items_ul it =
+    Hashtbl.add h cnt it;
+    Dom.appendChild items_ul it.item_li
 
   let edited_item h id =
     try
-      let (mli, edit, lbl, completed) = Hashtbl.find h id in
-      if edit##.value##.length = 0 then begin
-        Js.Opt.iter mli##.parentNode (fun p -> Dom.removeChild p mli);
+      let it = Hashtbl.find h id in
+      if it.edit##.value##.length = 0 then begin
+        Js.Opt.iter it.item_li##.parentNode (fun p -> Dom.removeChild p it.item_li);
         Hashtbl.remove h id
       end else begin
-        lbl##.textContent := Js.some edit##.value;
-        mli##.className := Js.string (if completed then "completed" else "");
+        it.lbl##.textContent := Js.some it.edit##.value;
+        it.item_li##.className := Js.string (if it.selected then "completed" else "");
+        it.txt <- Js.to_string it.edit##.value;
       end
     with Not_found -> ()
 
   let focus_iedit h id =
     try
-      let (mli, edit, _, _) = Hashtbl.find h id in
-      mli##.className := Js.string "editing";
-      edit##focus
+      let it = Hashtbl.find h id in
+      it.item_li##.className := Js.string "editing";
+      it.edit##focus
     with Not_found -> ()
 
   let selected_item h id =
     try
-      let (mli, edit, lbl, completed) = Hashtbl.find h id in
-      mli##.className := Js.string (if completed then "" else "completed");
-      Hashtbl.replace h id (mli, edit, lbl, not completed);
-      if completed then 1 else -1
+      let it = Hashtbl.find h id in
+      it.item_li##.className := Js.string (if it.selected then "" else "completed");
+      it.selected <- not it.selected;
+      if not it.selected then 1 else -1
     with Not_found -> 0
 
   let items_left h footer left_cnt clear_complete select_all =
@@ -151,69 +184,62 @@ module View = struct
     Js.Opt.iter (footer##.firstChild)
       (Dom.replaceChild footer (To_dom.of_element sp))
 
-
   let clear_complete items_ul h =
-    Hashtbl.iter (fun k (mli, _, _, completed) ->
-        if completed then begin
-          Dom.removeChild items_ul mli;
+    Hashtbl.iter (fun k it ->
+        if it.selected then begin
+          Dom.removeChild items_ul it.item_li;
           Hashtbl.remove h k
         end) h
 
   let select_all cnt_left h =
-    let select = cnt_left > 0 in
-    Hashtbl.iter (fun k (mli, edit, lbl, _) ->
-        Hashtbl.replace h k (mli, edit, lbl, select);
-        let toggler = Dom.Opt.mapopt (Dom.firstChildOpt (Dom.firstChild mli))
+    let selected = cnt_left > 0 in
+    Hashtbl.iter (fun k it ->
+        it.selected <- selected;
+        let toggler = Dom.Opt.mapopt (Dom.firstChildOpt (Dom.firstChild it.item_li))
             CoerceTo.element @>> CoerceTo.input
         in
-        toggler##.checked := Js.bool select;
-        mli##.className := Js.string @@ if select then "completed" else ""
+        toggler##.checked := Js.bool selected;
+        it.item_li##.className := Js.string @@ if selected then "completed" else ""
       ) h;
     if cnt_left = 0 then Hashtbl.length h else 0
 
-  let change_visiblity h b (b1, b2) v =
-    b##.className := Js.string "selected";
-    b1##.className := Js.string "";
-    b2##.className := Js.string "";
-    Hashtbl.iter (fun _ (mli, edit, lbl, completed) ->
-        let visibility = match v with
-        | None -> "block"
-        | Some false -> if completed then "none" else "block"
-        | Some true -> if completed then "block" else "none"
-        in
-        mli##.style##.display := Js.string visibility
-      ) h;
-
+  let change_visiblity h (all, completed, active) v =
+    debug "when";
+    let set (s1, s2, s3) =
+      all##.className := Js.string s1;
+      completed##.className := Js.string s2;
+      active##.className := Js.string s3;
+    in
+    begin match v with
+    | None -> set ("selected", "", "")
+    | Some true -> set ("", "selected", "")
+    | Some false -> set ("", "", "selected")
+    end;
+    Hashtbl.iter (fun _ it ->
+        it.item_li##.style##.display := Js.string @@ style_of_visibility it.selected v
+      ) h
 
 end
 
-
-
-
-let add_item_default =
-  Dom_html.(createDiv document, createInput document, createLabel document, false)
-
 module Controller = struct
+  open Dom_html
 
   let%sync machine ~animate
-      items_ul
-      newit
-      itemcnt
-      clear_complete
-      select_all
-      all
-      completed
-      active
+      (items_ul : element Js.t)
+      (newit : inputElement Js.t)
+      (itemcnt : element Js.t)
+      clear_complete select_all
+      all completed active
     =
-
     let delete_item = 0 in let blur_item = 0 in
     let keydown_item = 0, 0 in let dblclick_item = 0 in
     let select_item = 0 in
-    let add_item = add_item_default in
+    let add_item = Model.add_item_default in
     let tasks = Hashtbl.create 19 in
     let cnt = 0 in
     let cntleft = 0 in
     let write = () in
+    let visibility = None in
     loop (
       present (keydown_item & (snd !!keydown_item = 13 || snd !!keydown_item = 27))
         !(View.edited_item !!tasks (fst !!keydown_item))
@@ -243,12 +269,12 @@ module Controller = struct
         emit cntleft (!!cntleft)
       )
 
-      || present all##onclick
-        !(View.change_visiblity !!tasks all (completed,active) None)
-      || present completed##onclick !()
-        !(View.change_visiblity !!tasks completed (all,active) (Some true))
-      || present active##onclick !()
-        !(View.change_visiblity !!tasks active (all,completed) (Some false))
+      || present all##onclick (emit visibility None)
+      || present completed##onclick (emit visibility (Some true))
+      || present active##onclick (emit visibility (Some false))
+
+      || present visibility !(View.change_visiblity !!tasks
+                                (all, completed, active) !!visibility)
 
       || present (newit##onkeydown
                   & enter_pressed !!(newit##onkeydown)
@@ -257,18 +283,12 @@ module Controller = struct
          emit cntleft (!!cntleft + 1);
          emit add_item
            (View.create_item !!cnt animate
-              delete_item blur_item dblclick_item keydown_item select_item newit##.value))
-      ||
-      loop (present cntleft
+              delete_item blur_item dblclick_item keydown_item select_item !!visibility newit##.value))
+
+      || present cntleft
               !(View.items_left !!tasks
-                  !!itemcnt !!cntleft clear_complete select_all))
-      ; pause
-    )
-    ||
-    loop (present cntleft
-            !(View.items_left !!tasks
-                !!itemcnt !!cntleft clear_complete select_all)
-         ; pause)
+                  !!itemcnt !!cntleft clear_complete select_all)
+    ; pause)
 
 end
 
