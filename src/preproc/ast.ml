@@ -336,11 +336,6 @@ module Make (E : Exp) = struct
            | No_binding -> {ident = s; origin; bind=No_binding}
            | Event eident ->
              let tags = try Hashtbl.find env.signals_tags s.content with Not_found -> [] in
-             Format.printf "[%a] <- " (
-               MList.pp_iter ~sep:"; " Format.(fun fmt bn ->
-                   match bn with Event id -> fprintf fmt "Event %s" id.content | _ -> ())
-             ) tags;
-             Format.printf "%s\n" eident.content;
              let is_binded = List.exists (function
                  | Event id -> id.content = eident.content
                  | _ -> false) tags
