@@ -125,7 +125,7 @@ module Model = struct
           if not sel then incr cntleft;
           cntmax := max !cntmax k;
           add_item k @@ create_item k (Js.string str) sel
-        ) @@ List.rev l;
+        ) @@ List.sort (fun (k1, _, _) (k2, _, _) -> compare k1 k2) l;
       Pendulum.Machine.setval cnt !cntmax;
       !cntleft
 
@@ -302,7 +302,7 @@ end
 module Controller = struct
   open Dom_html
 
-  let%sync machine ~animate
+  let%sync machine ~animate ~print:pdf
       (items_ul : element Js.t)
       (newit : inputElement Js.t)
       (itemcnt : element Js.t)
