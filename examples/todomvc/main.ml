@@ -53,18 +53,56 @@ end
 let enter_pressed ev =
   Opt.default false (fun ev -> ev##.keyCode = 13) ev
 
+module Storage = struct
+
+  open Js
+
+  let storage =
+    Optdef.case Dom_html.window##.localStorage
+      (fun () -> failwith "Storage is not supported by this browser")
+      (fun v -> v)
+
+  let key = string "jsoo-todo-state"
+
+  let clean_all () = storage##removeItem key
+
+  let find () =
+    let r = storage##getItem key in
+    Opt.to_option @@ Opt.map r to_string
+
+  let set v = storage##setItem key (string v)
+
+  let init default = match find () with
+    | None -> set default ; default
+    | Some v -> v
+
+end
 
 module Model = struct
 
   open Dom_html
+
+
+
   type item = {
     mutable txt : string;
-    item_li : divElement Js.t;
-    edit : inputElement Js.t;
-    lbl : labelElement Js.t;
+    mutable item_li : divElement Js.t;
+    mutable edit : inputElement Js.t;
+    mutable lbl : labelElement Js.t;
     mutable selected : bool;
   }
 
+  let rec item_to_json k buf { txt; selected } =
+    ((let open! Ppx_deriving_runtime in
+       Buffer.add_string buf "[0,";
+       Deriving_Json.Json_int.write buf k;
+       ((Buffer.add_string buf ",";
+         Deriving_Json.Json_string.write buf txt);
+        Buffer.add_string buf ",";
+        Deriving_Json.Json_bool.write buf selected);
+       Buffer.add_string buf "]")[@ocaml.warning "-A"])
+
+  type extracted_item = (int * string * bool) list [@@deriving json]
 
   let add_item_default =
     Dom_html.({
@@ -74,6 +112,39 @@ module Model = struct
         lbl = createLabel document;
         selected = false;
       })
+
+  let read h cnt add_item create_item =
+    match Storage.find () with
+    | None -> 0
+    | Some v ->
+      let cntleft = ref 0 in
+      let cntmax = ref 0 in
+      debug "%s" v;
+      let l = Deriving_Json.from_string [%derive.json: extracted_item] v in
+      List.iter (fun ((k, str, sel) : int * string * bool) ->
+          if not sel then incr cntleft;
+          cntmax := max !cntmax k;
+          add_item k @@ create_item k (Js.string str) sel
+        ) @@ List.rev l;
+      Pendulum.Machine.setval cnt !cntmax;
+      !cntleft
+
+
+  let write h =
+    let b = Buffer.create 100 in
+    let size = Hashtbl.length h in
+    if size > 0 then begin
+      Hashtbl.iter (fun k i -> Printf.bprintf b "[0,%a," (item_to_json k) i;) h;
+      Buffer.add_char b '0';
+      for _i = size downto 1 do
+        Buffer.add_char b ']'
+      done;
+    end else
+      Buffer.add_char b '0';
+    let s = Buffer.contents b in
+    debug "%s" s;
+    Storage.set s
+
 
 end
 
@@ -87,7 +158,10 @@ module View = struct
     | Some false -> if state then "none" else "block"
     | Some true -> if state then "block" else "none"
 
-  let create_item cnt animate delete_sig blur_sig dblclick_sig keydown_sig select_sig visibility str =
+  let create_item
+      animate delete_sig blur_sig dblclick_sig
+      keydown_sig select_sig visibility cnt str selected
+    =
     let open Html5 in
     let open Pendulum in
     let lbl_content = label ~a:[a_ondblclick (fun evt ->
@@ -110,17 +184,21 @@ module View = struct
         a_onkeydown keyhandler; a_onkeypress keyhandler
       ] ()
     in
-    let tgl_done = input ~a:[
+    let tgl_done =
+      let a = [
         a_input_type `Checkbox; a_class ["toggle"];
         a_onclick (fun _ ->
             Pendulum.Machine.set_present_value select_sig cnt; animate (); true)
-      ] ()
+      ] in
+      let a = if selected then (a_checked `Checked) :: a else a
+      in input ~a ()
     in
     let mdiv = div ~a:[a_class ["view"]] [tgl_done; lbl_content; btn_rm] in
     let item_li = To_dom.of_li @@ li [mdiv; input_edit_item] in
+    item_li##.className := Js.string (if selected then "completed" else "");
     item_li##.style##.display := Js.string @@ style_of_visibility false visibility;
     To_dom.({txt; item_li; edit = of_input input_edit_item;
-                            lbl = of_label lbl_content; selected = false})
+                            lbl = of_label lbl_content; selected})
 
   let jstr s = Js.some @@ Js.string ""
 
@@ -136,7 +214,7 @@ module View = struct
       if it.selected then 0 else 1
     with Not_found -> 0
 
-  let add_append h cnt items_ul it =
+  let add_append h items_ul cnt it =
     Hashtbl.add h cnt it;
     Dom.appendChild items_ul it.item_li
 
@@ -229,44 +307,64 @@ module Controller = struct
       (newit : inputElement Js.t)
       (itemcnt : element Js.t)
       clear_complete select_all
-      all completed active
+      all completed active removestorage
     =
     let delete_item = 0 in let blur_item = 0 in
     let keydown_item = 0, 0 in let dblclick_item = 0 in
     let select_item = 0 in
     let add_item = Model.add_item_default in
-    let tasks = Hashtbl.create 19 in
     let cnt = 0 in
     let cntleft = 0 in
     let write = () in
     let visibility = None in
-    loop (
-      present (keydown_item & (snd !!keydown_item = 13 || snd !!keydown_item = 27))
-        !(View.edited_item !!tasks (fst !!keydown_item))
+    let tasks = Hashtbl.create 19 in
 
-      || present select_item
-        (emit cntleft (!!cntleft + View.selected_item !!tasks !!select_item))
+    emit cntleft (Model.read !!tasks cnt
+        (View.add_append !!tasks !!items_ul)
+        (View.create_item animate
+           delete_item blur_item dblclick_item keydown_item
+           select_item !!visibility));
+
+    loop (
+
+      present removestorage##onclick !(Storage.clean_all ());
+
+      present (keydown_item & (snd !!keydown_item = 13 || snd !!keydown_item = 27)) (
+        !(View.edited_item !!tasks (fst !!keydown_item));
+        emit write;
+      )
+
+      || present select_item (
+        emit cntleft (!!cntleft + View.selected_item !!tasks !!select_item);
+        emit write
+      )
 
       || present blur_item !(View.edited_item !!tasks !!blur_item)
 
-      || present add_item !(
-        newit##.value := Js.string "";
-        View.add_append !!tasks !!cnt !!items_ul !!add_item)
+      || present add_item (
+        !(newit##.value := Js.string "";
+          View.add_append !!tasks !!items_ul !!cnt !!add_item
+         );
+        emit write
+      )
 
       || present delete_item (
         emit cntleft (!!cntleft - View.get_remove !!tasks !!items_ul !!delete_item);
+        emit write
       )
 
       || present dblclick_item !(View.focus_iedit !!tasks !!dblclick_item)
 
 
       || present select_all##onclick (
-        emit cntleft (View.select_all !!cntleft !!tasks)
+        emit cntleft (View.select_all !!cntleft !!tasks);
+        emit write;
       )
 
       || present clear_complete##onclick (
         !(View.clear_complete !!items_ul !!tasks);
-        emit cntleft (!!cntleft)
+        emit cntleft (!!cntleft);
+        emit write;
       )
 
       || present all##onclick (emit visibility None)
@@ -282,12 +380,16 @@ module Controller = struct
         (emit cnt (!!cnt + 1);
          emit cntleft (!!cntleft + 1);
          emit add_item
-           (View.create_item !!cnt animate
-              delete_item blur_item dblclick_item keydown_item select_item !!visibility newit##.value))
+           (View.create_item animate
+              delete_item blur_item dblclick_item keydown_item
+              select_item !!visibility !!cnt newit##.value false);
+        )
 
       || present cntleft
               !(View.items_left !!tasks
                   !!itemcnt !!cntleft clear_complete select_all)
+
+      || present write !(Model.write !!tasks)
     ; pause)
 
 end
@@ -301,12 +403,15 @@ let main _ =
   let visibility_active = "visibility_active" @> CoerceTo.a in
   let visibility_all = "visibility_all" @> CoerceTo.a in
   let visibility_completed = "visibility_completed" @> CoerceTo.a in
+  let remove_storage = "remove_storage" @> CoerceTo.a in
 
-  let _m_react = Controller.machine
+  let _, _, m_react = Controller.machine
       (items_ul, new_todo, filter_footer,
        clear_complete, select_all, visibility_all,
-       visibility_completed, visibility_active)
-  in Js._false
+       visibility_completed, visibility_active, remove_storage)
+  in
+  m_react ();
+  Js._false
 
 
 let () = Dom_html.(window##.onload := handler main)
