@@ -132,40 +132,36 @@ let rec check_signal_emit_expr acc atom_mapper e =
 
 
 let pop_signals_decl e =
-  let cont origin e =
-    match e with
-    | [%expr [%e? e_var] [%e? _]] ->
-      Error.(syntax_error ~loc:e_var.pexp_loc Forgot_sem)
-    | [%expr [%e? e_var]] -> Ast.(mk_signal ~origin @@ check_expr_ident e_var)
+  let open Ast in
+  let mk orig var = mk_signal ~origin:orig (check_expr_ident var) in
+  let get_orig = function
+    | [%expr output] -> Output | [%expr input] -> Input | _ -> Input
   in
-  let rec aux sigs p =
+  let get_sig orig = function
+    | [%expr ([%e? e_var] : [%t? t])] -> mk (get_orig orig) e_var, Some t
+    | e_var -> mk (get_orig orig) e_var, None
+  in
+  let rec aux p sigs =
     match p with
     | [%expr [%e? params], [%e? e2]] ->
       Error.(syntax_error ~loc:e2.pexp_loc Forgot_sem)
-    | [%expr [%e? params]; [%e? e2] ] ->
-      begin match params.pexp_desc with
-        | Pexp_tuple ([%expr input [%e? e_var]] :: ids) ->
-          aux
-            Ast.(List.rev @@ (mk_signal ~origin:Input @@ check_expr_ident e_var)
-             :: ((List.map (cont Input) ids) @ sigs)) e2
-        | Pexp_tuple ([%expr output [%e? e_var]] :: ids)->
-          aux
-            Ast.(List.rev @@ (mk_signal ~origin:Output @@ check_expr_ident e_var)
-             :: ((List.map (cont Output) ids) @ sigs)) e2
-        | _ ->
-          begin match params with
-            | [%expr input [%e? e_var]] ->
-              aux Ast.(mk_signal ~origin:Input (check_expr_ident e_var) :: sigs) e2
-            | [%expr output [%e? e_var]] ->
-              aux Ast.(mk_signal ~origin:Output (check_expr_ident e_var) :: sigs) e2
-            | [%expr input [%e? e_var] [%e? _]]
-            | [%expr output [%e? e_var] [%e? _]] ->
-              Error.(syntax_error ~loc:e_var.pexp_loc Forgot_sem)
-            | _ -> p, sigs
-          end
-      end
+
+    | [%expr [%e? {pexp_desc = Pexp_tuple (
+                    [%expr [%e? ([%expr input] | [%expr output]) as orig]
+                             [%e? e_var]] :: e_vars)}]; [%e? e2]] ->
+      aux e2 @@ List.fold_left (fun acc e_var' ->
+          get_sig orig e_var' :: acc
+        ) (get_sig orig e_var :: sigs) e_vars
+
+    | [%expr [%e? ([%expr input] | [%expr output]) as orig] [%e? e_var]; [%e? e2] ] ->
+      aux e2 @@ get_sig orig e_var :: sigs
+
+    | [%expr input [%e? e_var] [%e? _]; [%e? e2] ]
+    | [%expr output [%e? e_var] [%e? _]; [%e? e2] ] ->
+      Error.(syntax_error ~loc:e_var.pexp_loc Forgot_sem)
+
     | e -> e, sigs
-  in aux [] e
+  in aux e []
 
 let ast_of_expr atom_mapper e =
   let rec visit e =
@@ -317,11 +313,10 @@ let parse_ast atom_mapper vb =
     | [%expr fun ~nooptim -> [%e? exp']] ->
       nooptim := true; parse_args inputs exp'
 
-    | [%expr fun [%p? {ppat_desc = Ppat_var ident} ] -> [%e? exp']] ->
+    | [%expr fun [%p? {ppat_desc = Ppat_var ident}] -> [%e? exp']] ->
       parse_args (Ast.({content = ident.txt; loc = ident.loc}, None) :: inputs) exp'
 
-    | [%expr fun [%p? {ppat_desc =
-        Ppat_constraint ({ppat_desc = Ppat_var ident}, typ)}] -> [%e? exp']] ->
+    | [%expr fun ([%p? {ppat_desc = Ppat_var ident}] : [%t? typ]) -> [%e? exp']] ->
       parse_args (Ast.({content = ident.txt; loc = ident.loc}, Some typ) :: inputs) exp'
 
     | { pexp_desc = Pexp_fun (s, _, _, _) } when s <> "" ->
@@ -335,9 +330,8 @@ let parse_ast atom_mapper vb =
   let e, args = parse_args [] vb.pvb_expr in
   let e, inputs = pop_signals_decl e in
   let sigs = List.(
-      (fold_left (fun acc x -> (x, None) :: acc)
-        @@ rev_map Ast.(fun (s, t) -> mk_signal ~origin:Input s, t) args)
-      @@ inputs)
+      inputs @ map Ast.(fun (s, t) -> mk_signal ~origin:Input s, t) args
+    )
   in
   if !genast then
     [%expr ([%e Pendulum_misc.expr_of_ast @@ ast_of_expr atom_mapper e])]

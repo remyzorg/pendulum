@@ -370,10 +370,10 @@ module Ocaml_gen = struct
   let int_const i = Exp.constant (Asttypes.Const_int i)
   let string_const s = Exp.constant (Asttypes.Const_string(s, None))
 
-  let mk_pat_var s = Pat.(Asttypes.(var @@ Location.mkloc s.content s.loc))
-  let mk_typed_pat_var ct s =
-    let pvar = mk_pat_var s in
-    Pat.(Asttypes.(constraint_ ~loc:s.loc pvar ct))
+  let mk_pat_var ?t s =
+    let pvar = Pat.(Asttypes.(var @@ Location.mkloc s.content s.loc)) in
+    match t with None -> pvar | Some t ->
+      Pat.(Asttypes.(constraint_ ~loc:s.loc pvar t))
 
   let mk_ident s = Exp.ident ~loc:s.loc
       Location.(mkloc (Longident.Lident s.content) s.loc)
@@ -490,7 +490,7 @@ module Ocaml_gen = struct
             |> MList.map_filter has_tobe_defined (function Event e -> append_tag s e | _ -> s)
             |> List.fold_left (signal_to_definition [%expr None]) acc
           with Not_found -> signal_to_definition (mk_ident s.ident) acc s
-        ) (construct_local_signals_definitions env e) env.args_signals)
+        ) (construct_local_signals_definitions env e) @@ env.args_signals)
 
   let construct_set_all_absent_definition env e =
     let open Tagged in
@@ -591,13 +591,8 @@ module Ocaml_gen = struct
     let sigs_step_arg =
       match env.Tagged.args_signals with
       | [] -> [%pat? ()]
-      | [s, Some t] -> mk_typed_pat_var t s.ident
-      | [s, none] -> mk_pat_var s.ident
-      | l -> Pat.tuple @@ List.map (
-          fun (s, topt) -> match topt with
-            | None -> mk_pat_var s.ident
-            | Some t -> mk_typed_pat_var t s.ident
-        ) l
+      | [s, t] -> mk_pat_var ?t s.ident
+      | l -> Pat.tuple @@ List.rev_map (fun (s, t) -> mk_pat_var ?t s.ident) l
     in
     let stepfun_lambda_expr =
       [%expr fun () -> try [%e stepfun_body] with
