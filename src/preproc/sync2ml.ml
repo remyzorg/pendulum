@@ -486,21 +486,13 @@ module Ocaml_gen = struct
 
   let construct_global_signals_definitions env e = Tagged.(
       let signal_to_definition init_val next_def s =
-        let next_def = match s.gatherer with
-          | G_id ->
-            next_def
-          | G_fun f ->
-            [%expr let [%p mk_pat_var @@ ident_app_str s.ident "~" gather_str] =
-                     fun [%p mk_pat_var gather_val_arg_name] ->
-                       set_present_value [%e mk_ident s.ident]
-                         ([%e f] [%e mk_ident s.ident].value
-                            [%e mk_ident gather_val_arg_name])
-
-                   in [%e next_def]]
+        let mk_expr = match s.gatherer with
+          | G_id -> [%expr make_signal]
+          | G_fun f -> [%expr make_signal_gather [%e f]]
         in
         [%expr
           let [%p mk_pat_var s.ident] =
-            make_signal [%e init_val] in [%e next_def]]
+            [%e mk_expr] [%e init_val] in [%e next_def]]
       in
       List.fold_left (fun acc (s, _) ->
           try
@@ -707,14 +699,8 @@ module Ocaml_gen = struct
       let rebinded_expr = rebind_locals_let vs.svalue.locals vs.svalue.exp in
       begin match vs.signal.bind with
         | No_binding | Event _ ->
-          begin match vs.signal.gatherer with
-            | G_id ->
-              [%expr set_present_value [%e add_deref_local vs.signal]
-                       [%e rebinded_expr]]
-            | G_fun f -> [%expr [%e mk_ident @@
-                                    ident_app_str vs.signal.ident "~" gather_str]
-                                  [%e rebinded_expr]]
-          end
+          [%expr set_present_value [%e add_deref_local vs.signal]
+                   [%e rebinded_expr]]
         | Access (elt, fields) ->
           let lhs = List.fold_left (fun acc field ->
               [%expr [%e acc] ##. [%e mk_ident field]]

@@ -166,13 +166,23 @@ let%sync emit_basic0 elt0 elt1 elt2 =
 
 let%sync gatherer_0 ~dsource =
   input s (fun acc s -> s + acc);
-  input s2 (+);
+  input s2 (fun acc s -> s :: acc) ;
   loop begin
     emit s 1;
     emit s2 1;
     pause
   end
+  ||
+  loop begin
+    present s !(print_int !!s);
+    pause
+  end
 
+let () =
+  let set_s, set_s2, r = gatherer_0 (0, []) in
+  set_s 1;
+  set_s 1;
+  ignore @@ r ()
 
 
 
