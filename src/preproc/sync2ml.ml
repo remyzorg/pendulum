@@ -405,10 +405,12 @@ module Ocaml_gen = struct
   let setter_arg = Ast.mk_loc "set~arg" (* argument name for the returned setter *)
   let stepfun_name = "p~stepfun"
   let animate_name = "animate"
+  let gather_str = "gather"
   let animated_state_var_name = "animated_next_raf"
   let select_env_name = "pendulum~state"
   let select_env_var = Location.(mkloc select_env_name !Ast_helper.default_loc)
   let select_env_ident = mk_ident (Ast.mk_loc select_env_name)
+  let gather_val_arg_name = Ast.mk_loc "arg~~"
 
   let mk_mach_inst_step mch =
     {mch with content = Format.sprintf "%s~step" mch.content}
@@ -421,6 +423,9 @@ module Ocaml_gen = struct
   let mk_set_mach_arg_n n mch = Ast.mk_loc ~loc:Ast.dummy_loc
       (Format.sprintf "%s~set~arg~%d" mch n)
 
+  let ident_app_str ident sep str =
+    Ast.mk_loc ~loc:ident.loc
+      (Format.sprintf "%s%s%s" ident.content sep str)
 
   let remove_signal_renaming s =
     try
@@ -480,16 +485,30 @@ module Ocaml_gen = struct
     | Access _ -> false
 
   let construct_global_signals_definitions env e = Tagged.(
+      let signal_to_definition init_val next_def s =
+        let next_def = match s.gatherer with
+          | G_id ->
+            next_def
+          | G_fun f ->
+            [%expr let [%p mk_pat_var @@ ident_app_str s.ident "~" gather_str] =
+                     fun [%p mk_pat_var gather_val_arg_name] ->
+                       set_present_value [%e mk_ident s.ident]
+                         ([%e f] [%e mk_ident s.ident].value
+                            [%e mk_ident gather_val_arg_name])
+
+                   in [%e next_def]]
+        in
+        [%expr
+          let [%p mk_pat_var s.ident] =
+            make_signal [%e init_val] in [%e next_def]]
+      in
       List.fold_left (fun acc (s, _) ->
-          let signal_to_definition init_val next_def s =
-            [%expr let [%p mk_pat_var s.ident] =
-                     make_signal [%e init_val] in [%e next_def]]
-          in
           try
             Hashtbl.find env.binders_env s.ident.content
             |> MList.map_filter has_tobe_defined (function Event e -> append_tag s e | _ -> s)
             |> List.fold_left (signal_to_definition [%expr None]) acc
-          with Not_found -> signal_to_definition (mk_ident s.ident) acc s
+          with Not_found ->
+            signal_to_definition (mk_ident s.ident) acc s
         ) (construct_local_signals_definitions env e) @@ env.args_signals)
 
   let construct_set_all_absent_definition env e =
@@ -688,7 +707,14 @@ module Ocaml_gen = struct
       let rebinded_expr = rebind_locals_let vs.svalue.locals vs.svalue.exp in
       begin match vs.signal.bind with
         | No_binding | Event _ ->
-          [%expr set_present_value [%e add_deref_local vs.signal] [%e rebinded_expr]]
+          begin match vs.signal.gatherer with
+            | G_id ->
+              [%expr set_present_value [%e add_deref_local vs.signal]
+                       [%e rebinded_expr]]
+            | G_fun f -> [%expr [%e mk_ident @@
+                                    ident_app_str vs.signal.ident "~" gather_str]
+                                  [%e rebinded_expr]]
+          end
         | Access (elt, fields) ->
           let lhs = List.fold_left (fun acc field ->
               [%expr [%e acc] ##. [%e mk_ident field]]

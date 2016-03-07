@@ -150,68 +150,7 @@ let%sync testexpr =
     pause
   end
 
-let%sync reactive_player =
-  input play_pause;
-  input progress_bar;
-  input media;
-  input time_a;
-
-  let no_update = () in
-  let state = Js.to_bool media##.paused in
-  loop (
-    present media##onplay !(dummyatom ()); pause)
-  || loop (present play_pause##onclick (emit state (not !!state)); pause)
-  || loop (present state !(dummyatom ()); pause)
-  || loop (
-    await progress_bar##onmousedown;
-    trap t' (loop (
-        emit no_update ();
-        present progress_bar##onmouseup
-          (!(dummyatom ()); exit t');
-        pause)
-      ); pause)
-  || loop (
-    present media##onprogress (
-      present no_update nothing !(dummyatom ())
-      ||
-      !(dummyatom ())
-    ); pause)
-
-
-let%sync reactive_player =
-  input a;
-  input b;
-  loop (
-    present a !(dummyatom ());
-    pause
-  )
-  ||
-  loop (
-    present b (emit a (not !!a));
-    pause
-  )
-  ||
-  loop pause
-
-let%sync test_animate ~animate ~print:(png, pdf, dot) =
-  input btn;
-  let loca = Dom_html.(createDiv document) in
-  let localol = 0 in
-  loop begin
-    present btn##onclick !(
-      let newitem = Dom_html.(createButton document) in
-      (newitem##.onclick) :=
-        (Dom_html.handler
-           (fun ev  ->
-              set_present_value localol (!!localol + 1);
-              animate ();
-              Js._true));
-    );
-    pause
-  end
-
-
-let%sync test =
+let%sync parall_present_pause =
   let s = () in
   (present s (pause) nothing;
    !(print_string "42-1"))
@@ -223,4 +162,19 @@ let%sync emit_basic0 elt0 elt1 elt2 =
   input (elt3 : int), (elt4 : int), elt5;
   input (elt6 : int), (elt7 : int), elt8;
   loop pause
+
+
+let%sync gatherer_0 ~dsource =
+  input s (fun acc s -> s + acc);
+  input s2 (+);
+  loop begin
+    emit s 1;
+    emit s2 1;
+    pause
+  end
+
+
+
+
+
 

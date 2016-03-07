@@ -72,32 +72,30 @@ let rec check_signal_emit_expr acc atom_mapper e =
 
 let pop_signals_decl e =
   let open Ast in
-  let mk orig var = mk_signal ~origin:orig (check_expr_ident var) in
+  let mk ?gatherer origin var = mk_signal ~origin ?gatherer (check_expr_ident var) in
   let get_orig = function
     | [%expr output] -> Output | [%expr input] -> Input | _ -> Input
   in
-  let get_sig orig = function
+  let sig_of_expr ?gatherer orig = function
     | [%expr ([%e? e_var] : [%t? t])] -> mk (get_orig orig) e_var, Some t
-    | e_var -> mk (get_orig orig) e_var, None
+    | e_var -> mk ?gatherer (get_orig orig) e_var, None
   in
   let rec aux p sigs =
     match p with
-    | [%expr [%e? params], [%e? e2]] ->
-      Error.(syntax_error ~loc:e2.pexp_loc Forgot_sem)
-
     | [%expr [%e? {pexp_desc = Pexp_tuple (
                     [%expr [%e? ([%expr input] | [%expr output]) as orig]
                              [%e? e_var]] :: e_vars)}]; [%e? e2]] ->
       aux e2 @@ List.fold_left (fun acc e_var' ->
-          get_sig orig e_var' :: acc
-        ) (get_sig orig e_var :: sigs) e_vars
+          sig_of_expr orig e_var' :: acc
+        ) (sig_of_expr orig e_var :: sigs) e_vars
 
     | [%expr [%e? ([%expr input] | [%expr output]) as orig] [%e? e_var]; [%e? e2] ] ->
-      aux e2 @@ get_sig orig e_var :: sigs
+      aux e2 @@ sig_of_expr orig e_var :: sigs
 
-    | [%expr input [%e? e_var] [%e? _]; [%e? e2] ]
-    | [%expr output [%e? e_var] [%e? _]; [%e? e2] ] ->
-      Error.(syntax_error ~loc:e_var.pexp_loc Forgot_sem)
+    | [%expr [%e? ([%expr input] | [%expr output]) as orig] [%e? e_var] [%e? g];
+             [%e? e2] ] ->
+      let st = sig_of_expr ~gatherer:(G_fun g) orig e_var in
+      aux e2 @@ st :: sigs
 
     | e -> e, sigs
   in aux e []
