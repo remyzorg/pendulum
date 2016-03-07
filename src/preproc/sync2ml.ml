@@ -468,7 +468,7 @@ module Ocaml_gen = struct
           [%expr ref (make_signal [%e vs.svalue.exp])]
       in
       [%expr let [%p mk_pat_var vs.signal.ident] = [%e rebinds] in [%e acc]]
-    ) e !(env.Tagged.all_local_signals)
+    ) e !(env.Tagged.local_only_env)
 
   let append_tag s tag =
     {s with ident =
@@ -486,7 +486,7 @@ module Ocaml_gen = struct
                      make_signal [%e init_val] in [%e next_def]]
           in
           try
-            Hashtbl.find env.signals_tags s.ident.content
+            Hashtbl.find env.binders_env s.ident.content
             |> MList.map_filter has_tobe_defined (function Event e -> append_tag s e | _ -> s)
             |> List.fold_left (signal_to_definition [%expr None]) acc
           with Not_found -> signal_to_definition (mk_ident s.ident) acc s
@@ -497,7 +497,7 @@ module Ocaml_gen = struct
     let locals_setters =
       (List.fold_left (fun acc vs ->
            [%expr set_absent ![%e mk_ident vs.signal.ident]; [%e acc]]
-         ) [%expr ()] !(env.all_local_signals))
+         ) [%expr ()] !(env.local_only_env))
     in
     let globals_absent_setters =
       let cons_setabs s acc bind =
@@ -506,7 +506,7 @@ module Ocaml_gen = struct
         | _ -> acc
       in List.fold_left (
         fun acc (s, _) -> try
-            Hashtbl.find env.Tagged.signals_tags s.ident.content
+            Hashtbl.find env.Tagged.binders_env s.ident.content
             |> List.fold_left (cons_setabs s) acc
           with Not_found -> [%expr set_absent [%e mk_ident s.ident]; [%e acc]]
       ) locals_setters env.args_signals
@@ -516,7 +516,7 @@ module Ocaml_gen = struct
   let construct_input_setters_tuple env stepfun =
     let open Tagged in
     let globals =
-      List.filter (fun (s, _) -> not @@ Hashtbl.mem env.Tagged.signals_tags s.ident.content)
+      List.filter (fun (s, _) -> not @@ Hashtbl.mem env.Tagged.binders_env s.ident.content)
         env.args_signals
     in
     match globals with
@@ -563,7 +563,7 @@ module Ocaml_gen = struct
       [%expr [%e construct_lhs s tag] := [%e construct_rhs s tag]; [%e acc]]
     in List.fold_left (
       fun acc (s, _) -> try
-          Hashtbl.find env.Tagged.signals_tags s.ident.content
+          Hashtbl.find env.Tagged.binders_env s.ident.content
           |> List.fold_left (construct_assign s) acc
         with Not_found -> acc
     ) e env.Tagged.args_signals

@@ -28,12 +28,14 @@ module type S = sig
 
   type signal_origin = Local | Input | Output
 
+  type gatherer = G_id | G_fun of exp
+
   type signal_binder =
     | Access of ident * ident list
     | Event of ident
     | No_binding
 
-  type signal = { ident : ident; origin : signal_origin; bind : signal_binder}
+  type signal = { ident : ident; origin : signal_origin; bind : signal_binder; gatherer : gatherer}
   type label = Label of ident
   type atom = { locals : signal list; exp : exp}
 
@@ -41,7 +43,7 @@ module type S = sig
 
   type valued_signal = {signal : signal ; svalue : atom}
   type valued_ident = {sname : ident ; fields : ident list; ivalue : exp}
-  val mk_signal : ?origin:signal_origin -> ?bind:signal_binder -> ident -> signal
+  val mk_signal : ?origin:signal_origin -> ?bind:signal_binder -> ?gatherer:gatherer -> ident -> signal
 
   val mk_vsig : signal -> signal list -> exp -> valued_signal
   val mk_vid : ?fields:ident list -> ident -> exp -> valued_ident
@@ -118,10 +120,10 @@ module type S = sig
       args_signals : (signal * core_type option) list;
       labels : int IdentMap.t;
       global_occurences : int IdentMap.t ref;
-      signals : (int * signal_origin * signal_binder) SignalMap.t;
-      signals_tags : (string, signal_binder list) Hashtbl.t;
-      all_local_signals : (valued_signal) list ref;
-      local_signals_scope : valued_signal list;
+      scope : (int * signal_origin * signal_binder * gatherer) SignalMap.t;
+      binders_env : (string, signal_binder list) Hashtbl.t;
+      local_only_env : (valued_signal) list ref;
+      local_only_scope : valued_signal list;
       machine_runs : (int * (int * signal list) list) IdentMap.t ref;
     }
 

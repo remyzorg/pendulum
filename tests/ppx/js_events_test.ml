@@ -29,10 +29,3 @@ let%sync emit_basic elt elt2 =
       (emit elt2##.textContent (Js.string "lol"));
     pause
   end
-
-
-let%sync emit_basic0 elt0 elt1 elt2 ~dsource =
-  input (elt3 : int), (elt4 : int), elt5;
-  input (elt6 : int), (elt7 : int), elt8;
-
-  loop pause

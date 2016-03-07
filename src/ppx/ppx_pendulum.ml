@@ -276,48 +276,46 @@ let ast_of_expr atom_mapper e =
   in visit e
 
 let parse_ast atom_mapper vb =
-  let dsource, dot, genast = ref false, ref false, ref false in
-  let animate, pdf, png = ref false, ref false, ref false in
-  let nooptim = ref false in
-  let rec parse_args inputs exp =
+  (* let dsource, dot, genast = ref false, ref false, ref false in *)
+  (* let animate, pdf, png = ref false, ref false, ref false in *)
+  (* let nooptim = ref false in *)
+  let rec parse_args options inputs exp =
+    let addopt opt = StringSet.add opt options in
     match exp with
     | [%expr fun ~animate -> [%e? exp']] ->
-      animate := true; parse_args inputs exp'
+      parse_args (addopt "animate") inputs exp'
     | [%expr fun ~dsource -> [%e? exp']] ->
-      dsource := true;
-      parse_args inputs exp'
+      parse_args (addopt "dsource") inputs exp'
     | [%expr fun ~ast -> [%e? exp']] ->
-      genast := true; parse_args inputs exp'
+      parse_args (addopt "ast") inputs exp'
 
     | [%expr fun ~print -> [%e? exp']] ->
-      pdf := true; parse_args inputs exp'
+      parse_args (addopt "print") inputs exp'
 
     | [%expr fun ~print:[%p? pp_params] -> [%e? exp']] as prt_param ->
-      let check_param p = match p with
+      let check_param opts = function
         | {ppat_desc = Ppat_var {txt = content; loc}} ->
-          begin match content with
-            | "pdf" -> pdf := true
-            | "png" -> png := true
-            | "dot" -> dot := true
-            | _ -> Error.(error ~loc:prt_param.pexp_loc Wrong_argument_values)
-          end
+          StringSet.add (match content with
+              | "pdf" | "png" | "dot" -> content
+              | _ -> Error.(error ~loc:prt_param.pexp_loc Wrong_argument_values)
+            ) opts
         | _ -> Error.(error ~loc:prt_param.pexp_loc Wrong_argument_values)
       in
-      begin match pp_params with
-      | {ppat_desc = Ppat_var _} -> check_param pp_params
-      | {ppat_desc = Ppat_tuple l} -> List.iter check_param l
+      let opts = match pp_params with
+      | {ppat_desc = Ppat_var _} -> check_param options pp_params
+      | {ppat_desc = Ppat_tuple l} -> List.fold_left check_param options l
       | _ -> Error.(error ~loc:prt_param.pexp_loc Wrong_argument_values)
-      end;
-      parse_args inputs exp'
+      in
+      parse_args opts inputs exp'
 
     | [%expr fun ~nooptim -> [%e? exp']] ->
-      nooptim := true; parse_args inputs exp'
+      parse_args (addopt "nooptim") inputs exp'
 
     | [%expr fun [%p? {ppat_desc = Ppat_var ident}] -> [%e? exp']] ->
-      parse_args (Ast.({content = ident.txt; loc = ident.loc}, None) :: inputs) exp'
+      parse_args options (Ast.({content = ident.txt; loc = ident.loc}, None) :: inputs) exp'
 
     | [%expr fun ([%p? {ppat_desc = Ppat_var ident}] : [%t? typ]) -> [%e? exp']] ->
-      parse_args (Ast.({content = ident.txt; loc = ident.loc}, Some typ) :: inputs) exp'
+      parse_args options (Ast.({content = ident.txt; loc = ident.loc}, Some typ) :: inputs) exp'
 
     | { pexp_desc = Pexp_fun (s, _, _, _) } when s <> "" ->
       Error.(syntax_error ~loc:exp.pexp_loc (Unknown_arg_option s))
@@ -325,15 +323,16 @@ let parse_ast atom_mapper vb =
     | { pexp_desc = Pexp_fun _ } ->
       Error.(syntax_error ~loc:exp.pexp_loc Argument_syntax_error)
 
-    | e -> e, inputs
+    | e -> e, options,inputs
   in
-  let e, args = parse_args [] vb.pvb_expr in
+  let e, options, args = parse_args (StringSet.empty) [] vb.pvb_expr in
+  let has_opt s = StringSet.mem s options in
   let e, inputs = pop_signals_decl e in
   let sigs = List.(
       inputs @ map Ast.(fun (s, t) -> mk_signal ~origin:Input s, t) args
     )
   in
-  if !genast then
+  if has_opt "ast" then
     [%expr ([%e Pendulum_misc.expr_of_ast @@ ast_of_expr atom_mapper e])]
   else
     let loc = vb.pvb_loc in
@@ -345,9 +344,9 @@ let parse_ast atom_mapper vb =
     let ast = ast_of_expr atom_mapper e in
     let tast, env = Ast.Tagged.of_ast ~sigs ast in
     let tast = Ast.Analysis.filter_dead_trees tast in
-    if !dot || !pdf || !png then Pendulum_misc.print_to_dot !dot !pdf !png loc pat tast;
-    let ocaml_expr = Sync2ml.generate !nooptim !animate env tast in
-    if !dsource then Format.printf "%a@." Pprintast.expression ocaml_expr;
+    Pendulum_misc.print_to_dot (has_opt "dot") (has_opt "pdf") (has_opt "png") loc pat tast;
+    let ocaml_expr = Sync2ml.generate (has_opt "noooptim") (has_opt "animate") env tast in
+    if has_opt "dsource" then Format.printf "%a@." Pprintast.expression ocaml_expr;
     [%expr [%e ocaml_expr]]
 
 

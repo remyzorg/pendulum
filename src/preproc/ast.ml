@@ -29,12 +29,14 @@ module type S = sig
 
   type signal_origin = Local | Input | Output
 
+  type gatherer = G_id | G_fun of exp
+
   type signal_binder =
     | Access of ident * ident list
     | Event of ident
     | No_binding
 
-  type signal = { ident : ident; origin : signal_origin; bind: signal_binder}
+  type signal = { ident : ident; origin : signal_origin; bind : signal_binder; gatherer : gatherer}
   type label = Label of ident
   type atom = { locals : signal list; exp : exp}
 
@@ -42,7 +44,7 @@ module type S = sig
 
   type valued_signal = {signal : signal ; svalue : atom}
   type valued_ident = {sname : ident ; fields : ident list; ivalue : exp}
-  val mk_signal : ?origin:signal_origin -> ?bind:signal_binder -> ident -> signal
+  val mk_signal : ?origin:signal_origin -> ?bind:signal_binder -> ?gatherer:gatherer -> ident -> signal
 
   val mk_vsig : signal -> signal list -> exp -> valued_signal
   val mk_vid : ?fields:ident list -> ident -> exp -> valued_ident
@@ -117,10 +119,10 @@ module type S = sig
       args_signals : (signal * core_type option) list;
       labels : int IdentMap.t;
       global_occurences : int IdentMap.t ref;
-      signals : (int * signal_origin * signal_binder) SignalMap.t;
-      signals_tags : (string, signal_binder list) Hashtbl.t;
-      all_local_signals : (valued_signal) list ref;
-      local_signals_scope : valued_signal list;
+      scope : (int * signal_origin * signal_binder * gatherer) SignalMap.t;
+      binders_env : (string, signal_binder list) Hashtbl.t;
+      local_only_env : (valued_signal) list ref;
+      local_only_scope : valued_signal list;
       machine_runs : (int * (int * signal list) list) IdentMap.t ref;
     }
 
@@ -162,7 +164,9 @@ module Make (E : Exp) = struct
 
   type signal_origin = Local | Input | Output
 
-  type signal = { ident : ident; origin : signal_origin; bind : signal_binder}
+  type gatherer = G_id | G_fun of exp
+
+  type signal = { ident : ident; origin : signal_origin; bind : signal_binder; gatherer : gatherer}
 
   type atom = { locals : signal list; exp : exp}
   type test = ident * ident option * exp option
@@ -173,7 +177,7 @@ module Make (E : Exp) = struct
   type label = Label of ident
 
   let mk_loc ?(loc=dummy_loc) content = {loc; content}
-  let mk_signal ?(origin=Local) ?(bind=No_binding) ident = {ident; origin; bind}
+  let mk_signal ?(origin=Local) ?(bind=No_binding) ?(gatherer=G_id) ident = {ident; origin; bind; gatherer}
 
   let mk_vid ?(fields=[]) sname ivalue = {sname; fields; ivalue}
   let mk_vsig signal locals exp = {signal; svalue = {locals; exp}}
@@ -273,10 +277,10 @@ module Make (E : Exp) = struct
       args_signals : (signal * core_type option) list;
       labels : int IdentMap.t;
       global_occurences : int IdentMap.t ref;
-      signals : (int * signal_origin * signal_binder) SignalMap.t;
-      signals_tags : (string, signal_binder list) Hashtbl.t;
-      all_local_signals : (valued_signal) list ref;
-      local_signals_scope : valued_signal list;
+      scope : (int * signal_origin * signal_binder * gatherer) SignalMap.t;
+      binders_env : (string, signal_binder list) Hashtbl.t;
+      local_only_env : (valued_signal) list ref;
+      local_only_scope : valued_signal list;
       machine_runs : (int * (int * signal list) list) IdentMap.t ref;
     }
 
@@ -293,20 +297,20 @@ module Make (E : Exp) = struct
     fprintf fmt "\n====================\n"
 
     let add_signal env locals vi =
-      let signals, s' = match IdentMap.find vi.sname !(env.global_occurences) with
+      let scope, s' = match IdentMap.find vi.sname !(env.global_occurences) with
         | exception Not_found ->
           let s = mk_signal vi.sname in
           env.global_occurences := IdentMap.add vi.sname 0 !(env.global_occurences);
-          SignalMap.add (mk_signal vi.sname) (0, Local, s.bind) env.signals, s
+          SignalMap.add (mk_signal vi.sname) (0, Local, s.bind, s.gatherer) env.scope, s
         | i ->
           let s = mk_signal vi.sname in
           env.global_occurences := IdentMap.add vi.sname (succ i) !(env.global_occurences);
-          SignalMap.add (mk_signal vi.sname) (succ i, Local, s.bind) env.signals,
+          SignalMap.add (mk_signal vi.sname) (succ i, Local, s.bind, s.gatherer) env.scope,
           {s with ident = {s.ident with content = Format.sprintf "%s~%d" s.ident.content (succ i)}}
       in
       let vs = {signal = s'; svalue = mk_atom ~locals vi.ivalue} in
-      env.all_local_signals := vs :: !(env.all_local_signals);
-      {env with signals; local_signals_scope = vs :: env.local_signals_scope}, vs
+      env.local_only_env := vs :: !(env.local_only_env);
+      {env with scope; local_only_scope = vs :: env.local_only_scope}, vs
 
 
     let add_label env s = IdentMap.(match find s env with
@@ -329,33 +333,33 @@ module Make (E : Exp) = struct
             {s with content = Format.sprintf "%s~%d" s.content i})
 
     let rename ~loc env bind s =
-      SignalMap.(match find (mk_signal s) env.signals with
+      SignalMap.(match find (mk_signal s) env.scope with
        | exception Not_found -> error ~loc @@ Unbound_identifier s.content
-       | (0, origin, _) ->
+       | (0, origin, _, gatherer) ->
          begin match bind with
-           | No_binding -> {ident = s; origin; bind=No_binding}
+           | No_binding -> {ident = s; origin; bind=No_binding; gatherer}
            | Event eident ->
-             let tags = try Hashtbl.find env.signals_tags s.content with Not_found -> [] in
+             let tags = try Hashtbl.find env.binders_env s.content with Not_found -> [] in
              let is_binded = List.exists (function
                  | Event id -> id.content = eident.content
                  | _ -> false) tags
              in
              if not is_binded then
-               Hashtbl.replace env.signals_tags s.content (bind :: tags);
+               Hashtbl.replace env.binders_env s.content (bind :: tags);
              let ident = mk_loc ~loc:s.loc (Format.sprintf "%s##%s" s.content eident.content) in
-             {ident; origin; bind}
+             {ident; origin; bind; gatherer}
            | Access (elt, fields) ->
              let fields_str = List.fold_left (fun acc field ->
                  Format.sprintf "%s##.%s" acc field.content) elt.content fields
              in
              let ident = mk_loc ~loc:elt.loc (fields_str) in
-             let tags = try Hashtbl.find env.signals_tags s.content with Not_found -> [] in
-             Hashtbl.replace env.signals_tags s.content (bind :: tags);
-             {ident; origin; bind}
+             let tags = try Hashtbl.find env.binders_env s.content with Not_found -> [] in
+             Hashtbl.replace env.binders_env s.content (bind :: tags);
+             {ident; origin; bind; gatherer}
          end
-       | (i, origin, _) ->
+       | (i, origin, _, gatherer) ->
          {ident = mk_loc ~loc:s.loc (Format.sprintf "%s~%d" s.content i);
-          origin; bind = No_binding})
+          origin; bind = No_binding; gatherer})
 
 
     let create_env sigs = {
@@ -365,13 +369,13 @@ module Make (E : Exp) = struct
           add s.ident 0 accmap )
           empty sigs);
 
-      signals = SignalMap.(List.fold_left (fun accmap (s, _) ->
-          add s (0, s.origin, s.bind) accmap )
+      scope = SignalMap.(List.fold_left (fun accmap (s, _) ->
+          add s (0, s.origin, s.bind, s.gatherer) accmap )
           empty sigs);
 
-      signals_tags = Hashtbl.create 19;
-      all_local_signals = ref [];
-      local_signals_scope = [];
+      binders_env = Hashtbl.create 19;
+      local_only_env = ref [];
+      local_only_scope = [];
       machine_runs = ref IdentMap.empty
     }
 
@@ -397,7 +401,7 @@ module Make (E : Exp) = struct
           mk_tagged (Par (st1, st2)) !+id
 
         | Derived.Emit s ->
-          let locals = List.map (fun x -> x.signal) env.local_signals_scope in
+          let locals = List.map (fun x -> x.signal) env.local_only_scope in
           let typ = match s.fields with
             | [] -> No_binding
             | l -> Access (s.sname, s.fields)
@@ -411,13 +415,13 @@ module Make (E : Exp) = struct
 
         | Derived.Await (s, tag, expopt) ->
           let typ = match tag with Some e -> Event e | None -> No_binding in
-          let locals = (List.map (fun x -> x.signal) env.local_signals_scope) in
+          let locals = (List.map (fun x -> x.signal) env.local_only_scope) in
           mk_tagged (Await (rename ~loc env typ s, Option.map (mk_atom ~locals) expopt)) !+id
 
         | Derived.Suspend (t, (s, tag, expopt)) ->
           let typ = match tag with Some e -> Event e | None -> No_binding in
           let s = rename ~loc:ast.loc env typ s in
-          let locals = (List.map (fun x -> x.signal) env.local_signals_scope) in
+          let locals = (List.map (fun x -> x.signal) env.local_only_scope) in
           mk_tagged (Suspend (visit env t, (s, Option.map (mk_atom ~locals) expopt))) !+id
 
         | Derived.Trap (Label s, t) ->
@@ -430,14 +434,14 @@ module Make (E : Exp) = struct
         | Derived.Present ((s, tag, expopt), t1, t2) ->
           let typ = match tag with Some e -> Event e | None -> No_binding in
           let s = rename ~loc env typ s in
-          let locals = (List.map (fun x -> x.signal) env.local_signals_scope) in
+          let locals = (List.map (fun x -> x.signal) env.local_only_scope) in
           mk_tagged (Present((s, Option.map (mk_atom ~locals) expopt), visit env t1, visit env t2)) !+id
         | Derived.Atom f -> mk_tagged (Atom (
-            mk_atom ~locals:(List.map (fun x -> x.signal) env.local_signals_scope) f
+            mk_atom ~locals:(List.map (fun x -> x.signal) env.local_only_scope) f
           )) !+id
 
         | Derived.Signal (vid,t) ->
-          let locals = List.map (fun x -> x.signal) env.local_signals_scope in
+          let locals = List.map (fun x -> x.signal) env.local_only_scope in
           let env, s' = add_signal env locals vid in
           mk_tagged (Signal (s', visit env t)) !+id
 

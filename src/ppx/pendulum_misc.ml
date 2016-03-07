@@ -100,18 +100,17 @@ let print_to_dot_one todot topdf topng name ext f e =
 let print_to_dot todot topdf topng loc pat =
   let open Location in
   fun e ->
-    let name = Filename.(
-        loc.loc_start.Lexing.pos_fname
-        |> chop_extension
-        |> basename
-      ) ^ ("_" ^ pat)
-    in
-    print_to_dot_one todot topdf topng name "_tagged" Ast.Tagged.print_to_dot e;
-    let sel, fg = Sync2ml.Of_ast.construct e in
-    print_to_dot_one todot topdf topng name "_sel" Sync2ml.Selection_tree.print_to_dot sel;
-    print_to_dot_one todot topdf topng name "_fg" Sync2ml.Flowgraph.print_to_dot fg;
-    let fg = Sync2ml.Schedule.interleave fg in
-    print_to_dot_one todot topdf topng name "_interfg"
-      Sync2ml.Flowgraph.print_to_dot fg
-    (* Format.printf "=============================@."; *)
-    (* Sync2ml.(pp_ml_sequence 0 Format.std_formatter (grc2ml fg)) *)
+    if not (topng || topdf || todot) then () else
+      let name = Filename.(
+          loc.loc_start.Lexing.pos_fname
+          |> chop_extension
+          |> basename
+        ) ^ ("_" ^ pat)
+      in
+      print_to_dot_one todot topdf topng name "_tagged" Ast.Tagged.print_to_dot e;
+      let sel, fg = Sync2ml.Of_ast.construct e in
+      print_to_dot_one todot topdf topng name "_sel" Sync2ml.Selection_tree.print_to_dot sel;
+      print_to_dot_one todot topdf topng name "_fg" Sync2ml.Flowgraph.print_to_dot fg;
+      let fg = Sync2ml.Schedule.interleave fg in
+      print_to_dot_one todot topdf topng name "_interfg"
+        Sync2ml.Flowgraph.print_to_dot fg

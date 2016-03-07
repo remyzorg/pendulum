@@ -219,22 +219,8 @@ let%sync test =
   (present s (pause) nothing;
    !(print_string "42-2"))
 
-
-
-(* let%sync test2 ~pdf = *)
-(*   let a = () in *)
-(*   let b = () in *)
-(*   let c = () in *)
-
-(*   loop ( *)
-(*     present a *)
-(*       (emit b ()) *)
-(*       (await c); *)
-(*     pause *)
-(*   ) || *)
-(*   loop ( *)
-(*     present a *)
-(*       (emit c ()) *)
-(*       (await b); *)
-(*     pause) *)
+let%sync emit_basic0 elt0 elt1 elt2 =
+  input (elt3 : int), (elt4 : int), elt5;
+  input (elt6 : int), (elt7 : int), elt8;
+  loop pause
 
