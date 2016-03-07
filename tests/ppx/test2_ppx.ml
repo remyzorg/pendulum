@@ -118,22 +118,6 @@ let%sync reactive_player =
   end
 
 
-let%sync basic =
-  input elt;
-  input elt2;
-
-  loop begin
-    present elt2##onmouseover
-      !(Format.printf "mouseover\n");
-    pause
-  end
-  ||
-  loop begin
-    present elt##onclick
-      !(Format.printf "click\n");
-    pause
-  end
-
 
 let%sync bang =
   loop begin
@@ -164,7 +148,7 @@ let%sync emit_basic0 elt0 elt1 elt2 =
   loop pause
 
 
-let%sync gatherer_0 ~dsource =
+let%sync gatherer_0 =
   input s (fun acc s -> s + acc);
   input s2 (fun acc s -> s :: acc) ;
   loop begin
@@ -174,7 +158,7 @@ let%sync gatherer_0 ~dsource =
   end
   ||
   loop begin
-    present s !(print_int !!s);
+    present s !(Format.printf "s %d" !!s);
     pause
   end
 
@@ -182,6 +166,7 @@ let () =
   let set_s, set_s2, r = gatherer_0 (0, []) in
   set_s 1;
   set_s 1;
+  set_s2 1;
   ignore @@ r ()
 
 

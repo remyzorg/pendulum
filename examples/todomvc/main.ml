@@ -309,6 +309,7 @@ module Controller = struct
       clear_complete select_all
       all completed active removestorage
     =
+    input s (+);
     let delete_item = 0 in let blur_item = 0 in
     let keydown_item = 0, 0 in let dblclick_item = 0 in
     let select_item = 0 in
@@ -327,9 +328,9 @@ module Controller = struct
 
     loop (
 
-      present removestorage##onclick !(Storage.clean_all ());
+      present removestorage##onclick !(Storage.clean_all ())
 
-      present (keydown_item & (snd !!keydown_item = 13 || snd !!keydown_item = 27)) (
+      || present (keydown_item & (snd !!keydown_item = 13 || snd !!keydown_item = 27)) (
         !(View.edited_item !!tasks (fst !!keydown_item));
         emit write;
       )
@@ -405,10 +406,10 @@ let main _ =
   let visibility_completed = "visibility_completed" @> CoerceTo.a in
   let remove_storage = "remove_storage" @> CoerceTo.a in
 
-  let _, _, m_react = Controller.machine
+  let _, _, _, m_react = Controller.machine
       (items_ul, new_todo, filter_footer,
        clear_complete, select_all, visibility_all,
-       visibility_completed, visibility_active, remove_storage)
+       visibility_completed, visibility_active, remove_storage, 0)
   in
   m_react ();
   Js._false

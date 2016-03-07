@@ -17,6 +17,7 @@ let%sync basic =
       (atom (Format.printf "click\n"))
   end
 
+
 let%sync emit_basic elt elt2 =
   input (elt3 : int);
   loop begin

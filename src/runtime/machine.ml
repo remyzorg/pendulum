@@ -9,10 +9,6 @@ type signal_state = Absent | Present
 exception Pause_exc
 exception Finish_exc
 
-(* type 'a t = { *)
-(*   instantiate : 'a -> ('a * (unit -> machine_state)); *)
-(* } *)
-
 type setter = Signal_setter : ('a -> 'b -> 'a) -> setter
 
 type ('a, 'b) signal = {
