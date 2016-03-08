@@ -487,17 +487,31 @@ module Ocaml_gen = struct
   let construct_global_signals_definitions env e = Tagged.(
       let signal_to_definition init_val next_def s =
         let mk_expr = match s.gatherer with
-          | G_id -> [%expr make_signal]
-          | G_fun f -> [%expr make_signal_gather [%e f]]
+          | None ->
+            begin match s.bind with
+            | Event (e, _) -> [%expr make_event_signal [%e init_val]]
+            | _ -> [%expr make_signal [%e init_val]]
+            end
+          | Some exp ->
+            match s.bind with
+            | Event (e, gatherer) ->
+              let init_val = ident_app_str gather_val_arg_name "" "init" in
+              let f = ident_app_str gather_val_arg_name "" "gather" in
+              [%expr let ([%p mk_pat_var f], [%p mk_pat_var init_val]) :
+                       ('a -> 'b -> 'a) * 'a = [%e exp] in
+                     make_signal_gather [%e mk_ident f] [%e mk_ident init_val]]
+            | _ -> [%expr make_signal_gather [%e exp] [%e init_val]]
         in
         [%expr
           let [%p mk_pat_var s.ident] =
-            [%e mk_expr] [%e init_val] in [%e next_def]]
+            [%e mk_expr] in [%e next_def]]
       in
       List.fold_left (fun acc (s, _) ->
           try
             Hashtbl.find env.binders_env s.ident.content
-            |> MList.map_filter has_tobe_defined (function Event e -> append_tag s e | _ -> s)
+            |> MList.map_filter has_tobe_defined (function
+                | Event (e, gatherer) as bind -> { (append_tag s e) with gatherer; bind}
+                | _ -> s)
             |> List.fold_left (signal_to_definition [%expr None]) acc
           with Not_found ->
             signal_to_definition (mk_ident s.ident) acc s
@@ -513,7 +527,7 @@ module Ocaml_gen = struct
     let globals_absent_setters =
       let cons_setabs s acc bind =
         match bind with
-        | Event e -> [%expr set_absent [%e mk_ident @@ (append_tag s e).ident]; [%e acc]]
+        | Event (e, _) -> [%expr set_absent [%e mk_ident @@ (append_tag s e).ident]; [%e acc]]
         | _ -> acc
       in List.fold_left (
         fun acc (s, _) -> try
@@ -564,13 +578,13 @@ module Ocaml_gen = struct
     let construct_rhs s tag =
       [%expr Dom_html.handler (
              fun ev ->
-               set_present_value [%e mk_ident (append_tag s tag).ident] (Some ev);
+               set_present_value [%e mk_ident (append_tag s tag).ident] ev;
                [%e step_call];
                Js._true)]
     in
     let construct_assign s acc typ =
       match typ with | No_binding -> acc | Access _ -> acc
-      | Event tag ->
+      | Event (tag, _) ->
       [%expr [%e construct_lhs s tag] := [%e construct_rhs s tag]; [%e acc]]
     in List.fold_left (
       fun acc (s, _) -> try

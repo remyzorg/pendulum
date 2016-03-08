@@ -90,3 +90,20 @@ let%sync reactive_player =
       ||
       !(dummyatom ())
     ); pause)
+
+
+let%sync mouse_react =
+  input span;
+  input w {
+    onmousemove = (fun x ev ->
+        Format.sprintf "%d,%d" ev##clientX ev##clientY), "";
+  };
+
+  loop begin
+    present w##onmousemove (
+      emit span##.textContent
+        Js.(some (string !!(w##onmousemove)))
+    ); pause
+  end
+
+

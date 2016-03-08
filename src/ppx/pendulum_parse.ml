@@ -80,25 +80,37 @@ let pop_signals_decl e =
     | [%expr ([%e? e_var] : [%t? t])] -> mk (get_orig orig) e_var, Some t
     | e_var -> mk ?gatherer (get_orig orig) e_var, None
   in
-  let rec aux p sigs =
+  let rec aux p binders sigs =
     match p with
     | [%expr [%e? {pexp_desc = Pexp_tuple (
                     [%expr [%e? ([%expr input] | [%expr output]) as orig]
                              [%e? e_var]] :: e_vars)}]; [%e? e2]] ->
-      aux e2 @@ List.fold_left (fun acc e_var' ->
+      aux e2 binders @@ List.fold_left (fun acc e_var' ->
           sig_of_expr orig e_var' :: acc
         ) (sig_of_expr orig e_var :: sigs) e_vars
 
     | [%expr [%e? ([%expr input] | [%expr output]) as orig] [%e? e_var]; [%e? e2] ] ->
-      aux e2 @@ sig_of_expr orig e_var :: sigs
+      aux e2 binders @@ sig_of_expr orig e_var :: sigs
 
-    | [%expr [%e? ([%expr input] | [%expr output]) as orig] [%e? e_var] [%e? g];
+    | [%expr [%e? ([%expr input] | [%expr output]) as orig]
+               [%e? e_var] [%e? {pexp_desc = Pexp_record (gatherers, None)}];
              [%e? e2] ] ->
-      let st = sig_of_expr ~gatherer:(G_fun g) orig e_var in
-      aux e2 @@ st :: sigs
+      let binder = List.map (fun ({txt; loc}, expr) ->
+          match txt with
+          | Lident s -> Event (Ast.mk_loc ~loc s, Some expr)
+          | _ -> Error.(syntax_error ~loc:e.pexp_loc Event_name)
+        ) gatherers
+      in
+      let s, _ as st = sig_of_expr orig e_var in
+      aux e2 ((s.ident.content, binder) :: binders) @@ st :: sigs
 
-    | e -> e, sigs
-  in aux e []
+    | [%expr [%e? ([%expr input] | [%expr output]) as orig] [%e? e_var] [%e? gatherer];
+             [%e? e2] ] ->
+      let st = sig_of_expr ~gatherer orig e_var in
+      aux e2 binders @@ st :: sigs
+
+    | e -> e, binders, sigs
+  in aux e [] []
 
 let ast_of_expr atom_mapper e =
   let rec visit e =
@@ -109,11 +121,8 @@ let ast_of_expr atom_mapper e =
     | [%expr input [%e? _ ] ; [%e? _]] ->
       Error.(syntax_error ~loc:e.pexp_loc Signal_decl_at_start)
 
-    | [%expr nothing] ->
-      Nothing
-
-    | [%expr pause] ->
-      Pause
+    | [%expr nothing] -> Nothing
+    | [%expr pause] -> Pause
 
     | [%expr emit [%e? signal] [%e? e_value]] ->
       let signal, fields =

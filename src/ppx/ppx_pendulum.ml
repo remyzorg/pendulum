@@ -14,7 +14,7 @@ module Ast = Sync2ml.Ast
 let parse_and_generate atom_mapper vb =
   let e, options, args = Pendulum_parse.parse_args (StringSet.empty) [] vb.pvb_expr in
   let has_opt s = StringSet.mem s options in
-  let e, inputs = Pendulum_parse.pop_signals_decl e in
+  let e, binders, inputs = Pendulum_parse.pop_signals_decl e in
   let sigs = List.(
       inputs @ map Ast.(fun (s, t) -> mk_signal ~origin:Input s, t) args
     )
@@ -29,7 +29,7 @@ let parse_and_generate atom_mapper vb =
       | _ -> "unknown"
     in
     let ast = Pendulum_parse.ast_of_expr atom_mapper e in
-    let tast, env = Ast.Tagged.of_ast ~sigs ast in
+    let tast, env = Ast.Tagged.of_ast ~sigs ~binders ast in
     let tast = Ast.Analysis.filter_dead_trees tast in
     Pendulum_misc.print_to_dot (has_opt "dot") (has_opt "pdf") (has_opt "png") loc pat tast;
     let ocaml_expr = Sync2ml.generate (has_opt "noooptim") (has_opt "animate") env tast in

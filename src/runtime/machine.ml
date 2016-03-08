@@ -30,16 +30,21 @@ let set_present_value s v =
   setval s v;
   s.pre <- s.set s.value v
 
-
 let set_default acc x = x
-
-let make_signal_gather =
-  fun set value -> { value; state = Absent; pre = value; set;}
 
 let make_signal value = {
   value; state = Absent; pre = value;
   set = fun _ x -> x;
 }
+
+let make_event_signal value = {
+  value = None; state = Absent; pre = None;
+  set = fun _ x -> Some x;
+}
+
+let make_signal_gather set value = { value; state = Absent; pre = value; set;}
+
+
 
 let pre s = s.pre
 let value s = s.value

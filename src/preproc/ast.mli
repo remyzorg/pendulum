@@ -28,11 +28,11 @@ module type S = sig
 
   type signal_origin = Local | Input | Output
 
-  type gatherer = G_id | G_fun of exp
+  type gatherer = exp option
 
   type signal_binder =
     | Access of ident * ident list
-    | Event of ident
+    | Event of ident * gatherer
     | No_binding
 
   type signal = { ident : ident; origin : signal_origin; bind : signal_binder; gatherer : gatherer}
@@ -43,7 +43,7 @@ module type S = sig
 
   type valued_signal = {signal : signal ; svalue : atom}
   type valued_ident = {sname : ident ; fields : ident list; ivalue : exp}
-  val mk_signal : ?origin:signal_origin -> ?bind:signal_binder -> ?gatherer:gatherer -> ident -> signal
+  val mk_signal : ?origin:signal_origin -> ?bind:signal_binder -> ?gatherer:exp -> ident -> signal
 
   val mk_vsig : signal -> signal list -> exp -> valued_signal
   val mk_vid : ?fields:ident list -> ident -> exp -> valued_ident
@@ -129,7 +129,10 @@ module type S = sig
 
     val print_env : Format.formatter -> env -> unit
 
-    val of_ast : ?sigs:((signal * core_type option) list) -> Derived.statement -> t * env
+    val of_ast :
+      ?sigs:((signal * core_type option) list) ->
+      ?binders:((string * signal_binder list) list) ->
+      Derived.statement -> t * env
 
     val print_to_dot : Format.formatter -> t -> unit
   end
