@@ -200,6 +200,24 @@ module View = struct
     To_dom.({txt; item_li; edit = of_input input_edit_item;
                             lbl = of_label lbl_content; selected})
 
+  let create_items
+      cnt tasks animate items_ul
+      delete_sig blur_sig dblclick_sig
+      keydown_sig select_sig strs selected
+    =
+    let open Pendulum.Machine in
+    let nb = List.fold_left (fun acc str ->
+        let cnt = cnt.value + acc + 1 in
+        let it = create_item animate delete_sig blur_sig dblclick_sig
+            keydown_sig select_sig None cnt str selected
+        in Hashtbl.add tasks cnt it; Dom.appendChild items_ul it.item_li;
+        acc + 1
+      ) 0 strs
+    in
+    Pendulum.Machine.set_present_value cnt (!!cnt + nb);
+    nb
+
+
   let jstr s = Js.some @@ Js.string ""
 
   let is_eq_char k q = Js.Optdef.case k
@@ -302,14 +320,19 @@ end
 module Controller = struct
   open Dom_html
 
-  let%sync machine ~animate ~print:pdf
-      (items_ul : element Js.t)
-      (newit : inputElement Js.t)
-      (itemcnt : element Js.t)
-      clear_complete select_all
-      all completed active removestorage
-    =
-    input s (+);
+  let%sync machine ~animate ~print:pdf =
+    input (items_ul : element Js.t);
+    input (newit : inputElement Js.t) {
+      onkeydown = [], fun acc ev ->
+          if enter_pressed ev && newit##.value##.length > 0
+          then newit##.value :: acc
+          else acc
+    };
+
+    input (itemcnt : element Js.t);
+    input clear_complete, select_all;
+    input all, completed, active, removestorage;
+
     let delete_item = 0 in let blur_item = 0 in
     let keydown_item = 0, 0 in let dblclick_item = 0 in
     let select_item = 0 in
@@ -342,13 +365,6 @@ module Controller = struct
 
       || present blur_item !(View.edited_item !!tasks !!blur_item)
 
-      || present add_item (
-        !(newit##.value := Js.string "";
-          View.add_append !!tasks !!items_ul !!cnt !!add_item
-         );
-        emit write
-      )
-
       || present delete_item (
         emit cntleft (!!cntleft - View.get_remove !!tasks !!items_ul !!delete_item);
         emit write
@@ -375,16 +391,14 @@ module Controller = struct
       || present visibility !(View.change_visiblity !!tasks
                                 (all, completed, active) !!visibility)
 
-      || present (newit##onkeydown
-                  & enter_pressed !!(newit##onkeydown)
-                  && newit##.value##.length > 0)
-        (emit cnt (!!cnt + 1);
-         emit cntleft (!!cntleft + 1);
-         emit add_item
-           (View.create_item animate
-              delete_item blur_item dblclick_item keydown_item
-              select_item !!visibility !!cnt newit##.value false);
-        )
+      || present (newit##onkeydown & !!(newit##onkeydown) <> []) (
+        emit cntleft
+          (View.create_items cnt !!tasks animate !!items_ul
+             delete_item blur_item dblclick_item keydown_item
+             select_item !!(newit##onkeydown) false);
+        emit newit##.value (Js.string "");
+        emit write;
+      )
 
       || present cntleft
               !(View.items_left !!tasks
@@ -406,10 +420,10 @@ let main _ =
   let visibility_completed = "visibility_completed" @> CoerceTo.a in
   let remove_storage = "remove_storage" @> CoerceTo.a in
 
-  let _, _, _, m_react = Controller.machine
+  let  _, _, m_react = Controller.machine
       (items_ul, new_todo, filter_footer,
        clear_complete, select_all, visibility_all,
-       visibility_completed, visibility_active, remove_storage, 0)
+       visibility_completed, visibility_active, remove_storage)
   in
   m_react ();
   Js._false
