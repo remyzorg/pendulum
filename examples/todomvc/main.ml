@@ -82,14 +82,18 @@ module Model = struct
 
   open Dom_html
 
-
-
   type item = {
     mutable txt : string;
     mutable item_li : divElement Js.t;
     mutable edit : inputElement Js.t;
     mutable lbl : labelElement Js.t;
     mutable selected : bool;
+  }
+
+  type doubly_linked = {
+    prev : doubly_linked;
+    value : item;
+    next : doubly_linked
   }
 
   let rec item_to_json k buf { txt; selected } =
@@ -324,7 +328,7 @@ module Controller = struct
     input (items_ul : element Js.t);
     input (newit : inputElement Js.t) {
       onkeydown = [], fun acc ev ->
-          if enter_pressed ev && newit##.value##.length > 0
+          if ev##.keyCode = 13 && newit##.value##.length > 0
           then newit##.value :: acc
           else acc
     };
