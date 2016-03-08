@@ -497,8 +497,8 @@ module Ocaml_gen = struct
             | Event (e, gatherer) ->
               let init_val = ident_app_str gather_val_arg_name "" "init" in
               let f = ident_app_str gather_val_arg_name "" "gather" in
-              [%expr let ([%p mk_pat_var init_val], [%p mk_pat_var f]) :
-                       'a * ('a -> 'b -> 'a) = [%e exp] in
+              [%expr let [%p mk_pat_var init_val], [%p mk_pat_var f] =
+                       ([%e exp] : 'a * ('a -> 'b -> 'a)) in
                      make_signal_gather [%e mk_ident f] [%e mk_ident init_val]]
             | _ -> [%expr make_signal_gather [%e exp] [%e init_val]]
         in
