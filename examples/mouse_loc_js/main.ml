@@ -17,26 +17,25 @@ let iter opt f =
   | None -> ()
   | Some o -> f o
 
-let update_field tarea ev =
-  tarea##.textContent :=
-    Js.some (Js.string @@ Format.sprintf "%dx%d" (ev##.clientX) (ev##.clientY))
+let%sync mouse_react =
+  input span;
+  input w {
+    onmousemove = (fun x ev ->
+        Format.sprintf "%d,%d" ev##.clientX ev##.clientY), "";
+  };
 
-let%sync mouse ~dot =
-  input tarea;
-  input window;
   loop begin
-    present window##onmousemove !(
-      iter !!(window##onmousemove)
-        (update_field !!tarea)
-    );
-    pause
+    present w##onmousemove (
+      emit span##.textContent
+        Js.(some (string !!(w##onmousemove)))
+    ); pause
   end
 
 let _ =
   let open Dom_html in
   window##.onload := handler (fun _ ->
       let area = "tarea" @> CoerceTo.a in
-      let _set_tarea, _step = mouse (area, window) in
+      let _step = mouse_react (area, window) in
       Js._false
     )
 

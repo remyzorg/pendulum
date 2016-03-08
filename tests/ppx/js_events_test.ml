@@ -96,7 +96,7 @@ let%sync mouse_react =
   input span;
   input w {
     onmousemove = (fun x ev ->
-        Format.sprintf "%d,%d" ev##clientX ev##clientY), "";
+        Format.sprintf "%d,%d" ev##clientX ev##clientY), 3;
   };
 
   loop begin
