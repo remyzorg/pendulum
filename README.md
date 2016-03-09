@@ -82,8 +82,6 @@ Check our [example](examples/todomvc) and the
 
 ![Sample of pendulum execution in Chrome, Fedora 19](examples/todomvc/sample.png)
 
-Details: 
-
 1. Add 100 items
 2. Select 100 items (one by one)
 3. Remove 100 items (one by one)
