@@ -29,7 +29,7 @@ let setval s v = s.value <- s.set s.value v
 let set_present_value s v =
   s.state <- Present;
   setval s v;
-  s.pre <- s.set s.value v
+  s.pre <- s.value
 
 let set_default acc x = x
 

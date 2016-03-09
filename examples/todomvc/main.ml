@@ -123,7 +123,6 @@ module Model = struct
     | Some v ->
       let cntleft = ref 0 in
       let cntmax = ref 0 in
-      debug "%s" v;
       let l = Deriving_Json.from_string [%derive.json: extracted_item] v in
       List.iter (fun ((k, str, sel) : int * string * bool) ->
           if not sel then incr cntleft;
@@ -146,7 +145,6 @@ module Model = struct
     end else
       Buffer.add_char b '0';
     let s = Buffer.contents b in
-    debug "%s" s;
     Storage.set s
 
 
@@ -211,6 +209,7 @@ module View = struct
     =
     let open Pendulum.Machine in
     let nb = List.fold_left (fun acc str ->
+
         let cnt = cnt.value + acc + 1 in
         let it = create_item animate delete_sig blur_sig dblclick_sig
             keydown_sig select_sig None cnt str selected
@@ -329,7 +328,10 @@ module Controller = struct
     input (newit : inputElement Js.t) {
       onkeydown = [], fun acc ev ->
           if ev##.keyCode = 13 && newit##.value##.length > 0
-          then newit##.value :: acc
+          then begin
+            debug "lol";
+            newit##.value :: acc
+          end
           else acc
     };
 
@@ -397,7 +399,7 @@ module Controller = struct
 
       || present (newit##onkeydown & !!(newit##onkeydown) <> []) (
         emit cntleft
-          (View.create_items cnt !!tasks animate !!items_ul
+          (!!cntleft + View.create_items cnt !!tasks animate !!items_ul
              delete_item blur_item dblclick_item keydown_item
              select_item !!(newit##onkeydown) false);
         emit newit##.value (Js.string "");

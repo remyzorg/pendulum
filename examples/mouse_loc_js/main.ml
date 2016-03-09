@@ -19,18 +19,13 @@ let iter opt f =
 
 
 
-let%sync mouse_react =
+let%sync mouse_react ~dsource =
   input span;
   input w {
-    onmousemove = "", fun x ev ->
-        Format.sprintf "%d,%d" ev##.clientX ev##.clientY;
-  };
+    onmousemove = "", (fun x ev ->
+        Format.sprintf "%d,%d" ev##.clientX ev##.clientY);
 
-  input (newit : Dom_html.inputElement Js.t) {
-    onkeydown = [], fun acc ev ->
-        if ev##.keyCode = 13 && newit##.value##.length > 0
-        then newit##.value :: acc
-        else acc
+    (* onkeydown = "", (fun x ev -> debug "lol"; ""); *)
   };
 
   loop begin
@@ -44,10 +39,15 @@ let%sync mouse_react =
 
 let _ =
   let open Dom_html in
+
+  window##.onkeydown := handler (fun _ ->
+      debug "lol";
+      Js._false
+    );
+
   window##.onload := handler (fun _ ->
       let area = "tarea" @> CoerceTo.a in
-      let lol = "lol" @> CoerceTo.input in
-      let _step = mouse_react (area, window, lol) in
+      let _step = mouse_react (area, window) in
       Js._false
     )
 
