@@ -328,11 +328,7 @@ module Controller = struct
     input (newit : inputElement Js.t) {
       onkeydown = [], fun acc ev ->
           if ev##.keyCode = 13 && newit##.value##.length > 0
-          then begin
-            debug "lol";
-            newit##.value :: acc
-          end
-          else acc
+          then newit##.value :: acc else acc
     };
 
     input (itemcnt : element Js.t);

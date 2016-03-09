@@ -18,13 +18,18 @@ The core language is completely compatible with vanilla OCaml compiler.
 **We would be grateful for any feedback on this implementation,
 but beware that this prototype is still in active developpement**
 
-
-
 # Documentation
 
 see a slight [documentation](https://www.github.com/remyzorg/pendulum/wiki/Documentation) and [examples](examples/)
 
+
+
 ## Example
+
+### todomvc benchmark
+
+Check our [example](examples/todomvc) and the 
+[benchmark results](https://github.com/remyzorg/todomvc-perf-comparison)
 
 A UI for playing video with customs controls: play/pause, seek, display time
 
