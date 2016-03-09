@@ -486,25 +486,16 @@ module Ocaml_gen = struct
 
   let construct_global_signals_definitions env e = Tagged.(
       let signal_to_definition init_val next_def s =
-        let mk_expr = match s.gatherer with
-          | None ->
-            begin match s.bind with
-            | Event (e, _) -> [%expr make_event_signal [%e init_val]]
-            | _ -> [%expr make_signal [%e init_val]]
-            end
-          | Some exp ->
-            match s.bind with
-            | Event (e, gatherer) ->
-              let init_val = ident_app_str gather_val_arg_name "" "init" in
-              let f = ident_app_str gather_val_arg_name "" "gather" in
-              [%expr let [%p mk_pat_var init_val], [%p mk_pat_var f] =
-                       ([%e exp] : 'a * ('a -> 'b -> 'a)) in
-                     make_signal_gather [%e mk_ident f] [%e mk_ident init_val]]
-            | _ -> [%expr make_signal_gather [%e exp] [%e init_val]]
-        in
-        [%expr
-          let [%p mk_pat_var s.ident] =
-            [%e mk_expr] in [%e next_def]]
+        let mk_expr = match s.bind with
+          | Event (e, gopt) ->
+            Option.casefv gopt (fun g ->
+                [%expr make_signal_gather ([%e g] :> _  * ( _ -> #Dom_html.event Js.t -> _ ))]
+              ) [%expr make_event_signal [%e init_val]]
+          | _ ->
+            Option.casefv s.gatherer (fun g ->
+                [%expr make_signal_gather ([%e init_val],[%e g])])
+              [%expr make_signal [%e init_val]]
+        in [%expr let [%p mk_pat_var s.ident] = [%e mk_expr] in [%e next_def]]
       in
       List.fold_left (fun acc (s, _) ->
           try
@@ -527,7 +518,13 @@ module Ocaml_gen = struct
     let globals_absent_setters =
       let cons_setabs s acc bind =
         match bind with
-        | Event (e, _) -> [%expr set_absent [%e mk_ident @@ (append_tag s e).ident]; [%e acc]]
+        | Event (e, None) ->
+          [%expr set_absent [%e mk_ident @@ (append_tag s e).ident]; [%e acc]]
+        | Event (e, Some g) ->
+          [%expr set_absent [%e mk_ident @@ (append_tag s e).ident];
+                 [%e mk_ident @@ (append_tag s e).ident].value <- 
+                   [%e mk_ident @@ (append_tag s e).ident].default;
+                 [%e acc]]
         | _ -> acc
       in List.fold_left (
         fun acc (s, _) -> try
