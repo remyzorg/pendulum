@@ -24,12 +24,14 @@ see a slight [documentation](https://www.github.com/remyzorg/pendulum/wiki/Docum
 
 
 
-## Example
+## Examples
 
 ### todomvc benchmark
 
 Check our [example](examples/todomvc) and the 
 [benchmark results](https://github.com/remyzorg/todomvc-perf-comparison)
+
+### Reactive player example
 
 A UI for playing video with customs controls: play/pause, seek, display time
 
