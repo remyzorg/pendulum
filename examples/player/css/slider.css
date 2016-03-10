@@ -1,0 +1,222 @@
+@import "compass/css3";
+
+$fabric: url(//i.imgur.com/9kxBTzr.jpg);
+$noise: url(//i.imgur.com/3JZchqt.png);
+
+$track-w: 28em;
+$track-h: 1.5em;
+$track-bg: #7aa9b3;
+$track-pad: .25em;
+
+$fill-perc: 46;
+$fill-max-w: $track-w - 2*$track-pad;
+$fill-r: $track-h/2 - $track-pad;
+$fill-sh: 
+  inset 0 -1px 1px #09313d, 
+  inset 0 1px 1px #c0edf3;
+$fill: $noise, 
+  linear-gradient(0deg, #249ac0, #70d1e2);
+
+$thumb-d: 2.25em;
+$thumb-refl: #777;
+$thumb-refl-a: rgba(#777, 0);
+
+$tip-fs: 2 .75;
+$tip-w: 8em/nth($tip-fs, 1);
+$tip-h: 3.75em/nth($tip-fs, 1);
+$tip-arrow-l: .75em/nth($tip-fs, 1);
+$tip-msg: 
+  'Not even started'
+  'Barely started' 
+  'Almost half way' 
+  'More than half done' 
+  'Almost there' 
+  'Done' 
+  'Half way there';
+$tip-r: .25em/nth($tip-fs, 1);
+$tip-offset: (
+  x: $tip-r $tip-r $tip-w - $tip-r $tip-w - $tip-r, 
+  y: $tip-h - $tip-r $tip-r $tip-r $tip-h - $tip-r
+);
+$tip-k: $tip-r*nth($tip-fs, 1)/.0625em;
+$tip-cp: 
+  $tip-w/2 + $tip-arrow-l $tip-h, 
+  $tip-w/2                $tip-h + $tip-arrow-l, 
+  $tip-w/2 - $tip-arrow-l $tip-h;
+$tip-base-a: 90deg/$tip-k;
+
+@for $i from 1 through 4 {
+  $xoff: nth(map-get($tip-offset, x), $i);
+  $yoff: nth(map-get($tip-offset, y), $i);
+  
+  @for $j from 0 through $tip-k {
+    $a: $j*$tip-base-a - (4 - $i)*90deg;
+    $tip-cp: $tip-cp, 
+      $xoff + $tip-r*cos($a) $yoff + $tip-r*sin($a);
+  }
+}
+
+@mixin track($flag: false) {
+  box-sizing: border-box;
+  padding: if($flag, 0, $track-pad);
+  width: $track-w; height: $track-h;
+  border-radius: $track-h/2;
+  box-shadow: 0 1px 1px #def3f8,
+    inset 0 .125em .125em #0d1112;
+  background: $track-bg;
+}
+
+@mixin fill() {
+  height: $track-h - 2*$track-pad;
+  border-radius: 
+    #{$fill-r} #{$track-h/8} #{$track-h/8} #{$fill-r} / 50%;
+  box-shadow: $fill-sh;
+  background: $fill;
+  background-clip: padding-box;
+}
+
+@mixin thumb() {
+  box-sizing: border-box;
+  border: solid .125em rgba(#cde0e6, .5);
+  width: $thumb-d; height: $thumb-d;
+  border-radius: 50%;
+  box-shadow: 
+    0 .125em .125em #3b4547;
+  background: 
+    radial-gradient($thumb-refl, $thumb-refl-a 70%) 
+      50% 50%, 
+    radial-gradient($thumb-refl, $thumb-refl-a 70%) 
+      50% 50%, 
+    radial-gradient(#{at 50% 0}, $thumb-refl, $thumb-refl-a 71%) 
+      50% 0, 
+    radial-gradient(#{at 50% 100%}, $thumb-refl, $thumb-refl-a 71%) 
+      50% 100%, 
+    radial-gradient(#{at 0 50%}, $thumb-refl, $thumb-refl-a 71%) 
+      0 50%, 
+    radial-gradient(#{at 100% 50%}, $thumb-refl, $thumb-refl-a 71%) 
+      100% 50%, 
+    radial-gradient(rgba(#3b4547, 0) 50%, #3b4547 71%) 
+      50% -.25em #fff;
+  background-clip: border-box;
+  background-origin: border-box;
+  background-repeat: no-repeat;
+  background-size: 
+    100% .125em, .125em  100%, 
+    50% 50%, 50% 50%, 50% 50%, 50% 50%, 
+    115% 115%;
+}
+
+html {
+  height: 100%;
+  background: 
+    radial-gradient(rgba(#a1def0, .75), rgba(#408193, .75)), 
+    $noise, $fabric;
+}
+
+input[type='range'] {
+  &, 
+  &::-webkit-slider-runnable-track, 
+  &::-webkit-slider-thumb {
+    -webkit-appearance: none;
+  }
+  
+  position: absolute;
+  top: 50%; left: 50%;
+  padding: $track-pad 0;
+  width: $track-w; height: 2*$track-h;
+  transform: translate(-50%, -50%);
+  opacity: .75;
+  background: transparent;
+  font-size: 1em;
+  cursor: pointer;
+  
+  &::-webkit-slider-runnable-track {
+    position: relative;
+    @include track(true);
+  }
+  &::-moz-range-track {
+    @include track();
+  }
+  &::-ms-track {
+    border: none;
+    @include track();
+    color: transparent;
+  }
+  
+  &::-moz-range-progress {
+    box-sizing: border-box;
+    border-left: solid $track-pad transparent;
+    @include fill();
+    border-radius: #{$track-h/2} #{$track-h/8} #{$track-h/8} #{$track-h/2} / 50%;
+    background-clip: padding-box;
+  }
+  &::-ms-fill-lower {
+    @include fill();
+  }
+  
+  &::-webkit-slider-thumb {
+    position: relative;
+    margin-top: ($track-h - $thumb-d)/2;
+    @include thumb();
+    filter: drop-shadow(0 1px #516570);
+  }
+  &::-moz-range-thumb {
+    @include thumb();
+  }
+  &::-ms-thumb {
+    @include thumb();
+  }
+  
+  &::-webkit-slider-runnable-track, /deep/ #track {
+    .js &:before {
+      position: absolute;
+      top: $track-pad; left: $track-pad;
+      width: $fill-perc*$fill-max-w/100;
+      @include fill();
+      content: '';
+    }
+  }
+  
+  .js & {
+    &::-webkit-slider-thumb, /deep/ #thumb {
+      &:before, &:after {
+        position: absolute;
+        bottom: 100%; left: 50%;
+        color: #ebeef3;
+        text-align: center;
+        text-shadow: 0 1px 1px #4d5d7e;
+      }
+      &:before {
+        width: $tip-w; height: $tip-h + $tip-arrow-l;
+        border-radius: $tip-r;
+        transform: translate(-50%, -.5em);
+        box-shadow: inset 0 1px 1px #d1e4f9;
+        background: $noise, 
+          linear-gradient(#b9d7f9, #a0a8d6);
+        clip-path: polygon($tip-cp);
+        font: #{nth($tip-fs, 1)*1em}/#{.75*$tip-h} trebuchet ms, verdana, arial, sans-serif;
+        content: '#{$fill-perc}%';
+      }
+      &:after {
+        width: .9*$tip-w*nth($tip-fs, 1)/nth($tip-fs, 2);
+        border-radius: 50%;
+        transform: translate(-50%, -2.75em);
+        box-shadow: 0 2.25em .625em -.5em rgba(#37545c, .75);
+        font: #{nth($tip-fs, 2)*1em} trebuchet ms, verdana, arial, sans-serif;
+        white-space: nowrap;
+        
+        @for $i from 0 to 4 {
+          @if $fill-perc > $i*25 and $fill-perc <= ($i + 1)*25 {
+            content: '#{nth($tip-msg, if($fill-perc == 100, 6, $i + 2))}';
+          }
+        }
+        @if $fill-perc == 0 { content: '#{nth($tip-msg, 1)}'; }
+      }
+    }
+  }
+  
+  &:focus {
+    outline: none;
+    opacity: .99;
+  }
+}

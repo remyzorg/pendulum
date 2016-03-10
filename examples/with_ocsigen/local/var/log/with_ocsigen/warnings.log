@@ -1,0 +1,3 @@
+Mar 10 14:07:02: ocsigen:main: Command pipe created
+Mar 10 14:07:02: ocsigen:config: While parsing config file, tag <host>: No defaulthostname, assuming it is "madness"
+Mar 10 14:07:02: ocsigen:main: Ocsigen has been launched (initialisations ok)

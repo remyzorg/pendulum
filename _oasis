@@ -18,11 +18,13 @@ Flag ppx
 Library "pendulum"
   Path: src/runtime/
   Pack: true
+  Install: true
   Modules: Interp, Runtime_ast, Runtime_misc, Machine
 
 Library "preproc"
   Path: src/preproc/
   Pack: true
+  Install: true
   FindlibParent: pendulum
   Modules: Utils, Ast, Grc, Sync2ml
   BuildDepends:
@@ -31,6 +33,7 @@ Library "preproc"
 
 Executable "ppx_pendulum"
   Path:           src/ppx
+  Install: true
   BuildDepends:
     compiler-libs.common,
     ppx_tools.metaquot,

@@ -59,3 +59,5 @@ true: annot, bin_annot
 <tests/*.ml{,i,y}>: pkg_oUnit
 <tests/*.ml{,i,y}>: use_pendulum
 # OASIS_STOP
+
+<examples>: -traverse
