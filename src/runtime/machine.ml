@@ -16,6 +16,7 @@ type ('a, 'b) signal = {
   mutable state : signal_state;
   mutable pre : 'a;
   set : 'a -> 'b -> 'a;
+  default : 'a;
 }
 
 
@@ -28,23 +29,23 @@ let setval s v = s.value <- s.set s.value v
 let set_present_value s v =
   s.state <- Present;
   setval s v;
-  s.pre <- s.set s.value v
+  s.pre <- s.value
 
 let set_default acc x = x
 
 let make_signal value = {
   value; state = Absent; pre = value;
-  set = fun _ x -> x;
+  set = (fun _ x -> x);
+  default = value;
 }
 
 let make_event_signal value = {
   value = None; state = Absent; pre = None;
-  set = fun _ x -> Some x;
+  set = (fun _ x -> Some x);
+  default  = value;
 }
 
-let make_signal_gather set value = { value; state = Absent; pre = value; set;}
-
-
+let make_signal_gather (value, set) = { value; state = Absent; pre = value; set; default = value}
 
 let pre s = s.pre
 let value s = s.value

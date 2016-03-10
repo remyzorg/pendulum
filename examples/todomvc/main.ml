@@ -123,7 +123,6 @@ module Model = struct
     | Some v ->
       let cntleft = ref 0 in
       let cntmax = ref 0 in
-      debug "%s" v;
       let l = Deriving_Json.from_string [%derive.json: extracted_item] v in
       List.iter (fun ((k, str, sel) : int * string * bool) ->
           if not sel then incr cntleft;
@@ -146,7 +145,6 @@ module Model = struct
     end else
       Buffer.add_char b '0';
     let s = Buffer.contents b in
-    debug "%s" s;
     Storage.set s
 
 
@@ -211,6 +209,7 @@ module View = struct
     =
     let open Pendulum.Machine in
     let nb = List.fold_left (fun acc str ->
+
         let cnt = cnt.value + acc + 1 in
         let it = create_item animate delete_sig blur_sig dblclick_sig
             keydown_sig select_sig None cnt str selected
@@ -228,13 +227,15 @@ module View = struct
       (fun _ -> false)
       (fun x -> x = Char.code q)
 
-  let get_remove h items_ul elt_id =
-    try
-      let it = Hashtbl.find h elt_id in
-      Hashtbl.remove h elt_id;
-      Dom.removeChild items_ul it.item_li;
-      if it.selected then 0 else 1
-    with Not_found -> 0
+  let remove_items h items_ul ids =
+    List.fold_left (fun acc id ->
+        try
+          let it = Hashtbl.find h id in
+          Hashtbl.remove h id;
+          Dom.removeChild items_ul it.item_li;
+          acc + if it.selected then 0 else 1
+        with Not_found -> acc
+      ) 0 ids
 
   let add_append h items_ul cnt it =
     Hashtbl.add h cnt it;
@@ -260,13 +261,15 @@ module View = struct
       it.edit##focus
     with Not_found -> ()
 
-  let selected_item h id =
-    try
-      let it = Hashtbl.find h id in
-      it.item_li##.className := Js.string (if it.selected then "" else "completed");
-      it.selected <- not it.selected;
-      if not it.selected then 1 else -1
-    with Not_found -> 0
+  let select_items h ids =
+    List.fold_left (fun acc id ->
+        try
+          let it = Hashtbl.find h id in
+          it.item_li##.className := Js.string (if it.selected then "" else "completed");
+          it.selected <- not it.selected;
+          if not it.selected then acc + 1 else acc -1;
+        with Not_found -> acc
+      ) 0 ids
 
   let items_left h footer left_cnt clear_complete select_all =
     let sp =
@@ -329,18 +332,18 @@ module Controller = struct
     input (newit : inputElement Js.t) {
       onkeydown = [], fun acc ev ->
           if ev##.keyCode = 13 && newit##.value##.length > 0
-          then newit##.value :: acc
-          else acc
+          then newit##.value :: acc else acc
     };
 
     input (itemcnt : element Js.t);
     input clear_complete, select_all;
+    input selected_items (fun l id -> id :: l);
+    input deleted_items (fun l id -> id :: l);
     input all, completed, active, removestorage;
 
-    let delete_item = 0 in let blur_item = 0 in
-    let keydown_item = 0, 0 in let dblclick_item = 0 in
-    let select_item = 0 in
-    let add_item = Model.add_item_default in
+    let blur_item = 0 in
+    let keydown_item = 0, 0 in
+    let dblclick_item = 0 in
     let cnt = 0 in
     let cntleft = 0 in
     let write = () in
@@ -350,8 +353,8 @@ module Controller = struct
     emit cntleft (Model.read !!tasks cnt
         (View.add_append !!tasks !!items_ul)
         (View.create_item animate
-           delete_item blur_item dblclick_item keydown_item
-           select_item !!visibility));
+           deleted_items blur_item dblclick_item keydown_item
+           selected_items !!visibility));
 
     loop (
 
@@ -362,15 +365,15 @@ module Controller = struct
         emit write;
       )
 
-      || present select_item (
-        emit cntleft (!!cntleft + View.selected_item !!tasks !!select_item);
+      || present selected_items (
+        emit cntleft (!!cntleft + View.select_items !!tasks !!selected_items);
         emit write
       )
 
       || present blur_item !(View.edited_item !!tasks !!blur_item)
 
-      || present delete_item (
-        emit cntleft (!!cntleft - View.get_remove !!tasks !!items_ul !!delete_item);
+      || present deleted_items (
+        emit cntleft (!!cntleft - View.remove_items !!tasks !!items_ul !!deleted_items);
         emit write
       )
 
@@ -397,19 +400,19 @@ module Controller = struct
 
       || present (newit##onkeydown & !!(newit##onkeydown) <> []) (
         emit cntleft
-          (View.create_items cnt !!tasks animate !!items_ul
-             delete_item blur_item dblclick_item keydown_item
-             select_item !!(newit##onkeydown) false);
+          (!!cntleft + View.create_items cnt !!tasks animate !!items_ul
+             deleted_items blur_item dblclick_item keydown_item
+             selected_items !!(newit##onkeydown) false);
         emit newit##.value (Js.string "");
         emit write;
       )
 
-      || present cntleft
-              !(View.items_left !!tasks
-                  !!itemcnt !!cntleft clear_complete select_all)
+      || present cntleft !(View.items_left !!tasks !!itemcnt
+                             !!cntleft clear_complete select_all)
 
-      || present write !(Model.write !!tasks)
-    ; pause)
+      || present write !(Model.write !!tasks);
+      pause
+    )
 
 end
 
@@ -424,12 +427,12 @@ let main _ =
   let visibility_completed = "visibility_completed" @> CoerceTo.a in
   let remove_storage = "remove_storage" @> CoerceTo.a in
 
-  let  _, _, m_react = Controller.machine
+  let  _, _, _, _, m_react = Controller.machine
       (items_ul, new_todo, filter_footer,
-       clear_complete, select_all, visibility_all,
+       clear_complete,select_all, [], [], visibility_all,
        visibility_completed, visibility_active, remove_storage)
   in
-  m_react ();
+  ignore (m_react ());
   Js._false
 
 

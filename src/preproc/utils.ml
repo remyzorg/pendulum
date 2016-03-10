@@ -82,6 +82,11 @@ module Option = struct
     | _, None | None, _ -> None
     | Some v1, Some v2 -> Some (f v1 v2)
 
+  let casefv opt f1 v2 =
+    match opt with
+    | Some e -> f1 e
+    | None -> v2
+
 end
 
 module Bitset = struct

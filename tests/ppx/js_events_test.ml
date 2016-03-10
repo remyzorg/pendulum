@@ -92,11 +92,13 @@ let%sync reactive_player =
     ); pause)
 
 
-let%sync mouse_react =
-  input span;
+let%sync mouse_react  =
+  input span {
+    onclick = 0, (fun acc ev -> acc + 1);
+  };
   input w {
     onmousemove = "", fun x ev ->
-        Format.sprintf "%d,%d" ev##clientX ev##clientY;
+        Format.sprintf "%d,%d" ev##.clientX ev##.clientY;
   };
 
   loop begin
@@ -106,4 +108,13 @@ let%sync mouse_react =
     ); pause
   end
 
+
+let%sync mouse_react =
+  input span {
+    onclick = 0, (fun acc ev -> acc + 1);
+  };
+
+  loop begin
+    pause
+  end
 

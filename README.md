@@ -18,13 +18,15 @@ The core language is completely compatible with vanilla OCaml compiler.
 **We would be grateful for any feedback on this implementation,
 but beware that this prototype is still in active developpement**
 
-
-
 # Documentation
 
 see a slight [documentation](https://www.github.com/remyzorg/pendulum/wiki/Documentation) and [examples](examples/)
 
-## Example
+
+
+## Examples and benchmark
+
+### Reactive player example
 
 A UI for playing video with customs controls: play/pause, seek, display time
 
@@ -63,7 +65,7 @@ let%sync reactive_player =
       ); pause)
 
   (* Each progression steps of the video, update the progress bar
-     with the right value. Except no_update is present. *)
+     with the right value. Except if no_update is present. *)
   || loop (
     present media##onprogress (
       present no_update nothing !(update_slider progress_bar media)
@@ -72,6 +74,23 @@ let%sync reactive_player =
     ); pause)
 ```
 see [this example](examples/player) for the full code
+
+### TodoMVC benchmark
+
+Check our [example](examples/todomvc) and the 
+[benchmark results](https://github.com/remyzorg/todomvc-perf-comparison)
+
+![Sample of pendulum execution in Chrome, Fedora 19](examples/todomvc/sample.png)
+
+1. Add 100 items
+2. Select 100 items (one by one)
+3. Remove 100 items (one by one)
+
+The reason why it's so fast, is that adding 100 items runs between two request
+animation frames. Ids of items are gathered in signals as lists and 
+the instant function just apply the action to all elements of the list
+in the following requestAnimationFrame. So it takes only one logical instant
+which is basically the execution of a list iterator.
 
 # Install
 
