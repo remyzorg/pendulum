@@ -1,8 +1,0 @@
-_server/with_ocsigen.cmo :
-_server/with_ocsigen.cmx :
-_server/with_ocsigen.cmo : _server/with_ocsigen.type_mli
-_server/with_ocsigen.cmx : _server/with_ocsigen.type_mli
-_client/with_ocsigen.cmo :
-_client/with_ocsigen.cmx :
-_client/with_ocsigen.cmo : _server/with_ocsigen.type_mli
-_client/with_ocsigen.cmx : _server/with_ocsigen.type_mli

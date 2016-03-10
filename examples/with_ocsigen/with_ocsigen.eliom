@@ -16,6 +16,20 @@ let main_service =
 
 
 
+
+
+[%%client
+
+    open Todomvc
+
+    let%sync todomvc_react =
+      loop pause
+
+
+
+]
+
+
 let () =
   With_ocsigen_app.register
     ~service:main_service
