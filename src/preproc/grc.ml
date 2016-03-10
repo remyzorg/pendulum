@@ -1,5 +1,7 @@
+
 open Ast
 open Utils
+
 
 
 module Selection_tree = struct
@@ -192,7 +194,7 @@ module Flowgraph = struct
 
     type t =
       | Call of action * t
-      | Test of test_value * t * t * t option (* then * else *)
+      | Test of test_value * t * t * t option (* then * else * join_value *)
       | Fork of t * t * t (* left * right * sync *)
       | Pause
       | Finish
@@ -397,10 +399,16 @@ module Of_ast = struct
       exits : Fg.t StringMap.t;
       under_suspend : bool;
       synctbl : (int * int, Fg.t) Hashtbl.t;
+      (* A Sync is the same flow, both in S and D,
+         so there is a special table for this *)
     }
 
-    type flow_builder = env -> Fg.Ast.Tagged.t -> Fg.t -> Fg.t -> Fg.t
 
+    (* Both surface and depth use a hashconsing function memo_rec : The result
+       of S(p) and D(p) is stored in a hashtbl indexed by p where p is the
+       integer identifier of the statement in the Ast. Thus, if S/D(p) is
+       required twice or more, the result is already in the table.
+    *)
     let memo_rec =
       fun h f ->
         let open Tagged in
@@ -412,6 +420,7 @@ module Of_ast = struct
         in g
 
 
+    (** See the compiling rules in documentation *)
     let surface h =
       let open Tagged in let open Fg in
       let surface surface env p pause endp =
@@ -535,12 +544,12 @@ module Of_ast = struct
             test_node (Selection q.id) (
               depth env q syn syn,
               syn,
-              None (* Some syn *)
+              None
             ),
             test_node (Selection r.id) (
               depth env r syn syn,
               syn,
-              None (* Some syn *)
+              None
             ),
             syn
           )
@@ -580,8 +589,10 @@ module Of_ast = struct
         exits = StringMap.empty;
         synctbl = Hashtbl.create 17;
       } in
+
       let depthtbl, surftbl = Hashtbl.create 30, Hashtbl.create 30 in
 
+      (* creates the surface function with the table, to be passed to depth *)
       let surface = surface surftbl in
 
       let s = surface env p Pause Finish in
@@ -591,8 +602,11 @@ module Of_ast = struct
         | Fork (_ , _, sync) -> Some sync
         | _ -> Some Finish
       in
+      (* the init part of the flowgraph *)
       test_node Finished (
         Finish,
+        (* Tests if the first stmt is selection : is the the first
+        execution or not *)
         test_node (Selection p.id) (d, s, endsync),
         Some Finish
       )
@@ -609,6 +623,10 @@ module Schedule = struct
     module Ast : Ast.S
     module Fg : Flowgraph.S
     module St : Selection_tree.S
+
+    (** The scheduling and cycle checking only happens here
+        when the flowgraph has been already built. 
+    *)
 
     val check_causality_cycles : 'a * Fg.t -> Fg.t list Ast.SignalMap.t
     val tag_tested_stmts : St.t -> Fg.t -> unit

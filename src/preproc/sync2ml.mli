@@ -1,3 +1,13 @@
+(** Sync2ml module
+    This module agregates all the function to transform from the Ast to
+    OCaml. It calls the Grc module and compiles the flowgraph to a pseudo
+    ML language with barely nothing except `if`, assignements, `let`, sequence,
+    ocaml expressions and grc primitives (emit, enter, exit, ...).
+
+    This language is then easily compiled to OCaml in the module OCaml_gen
+
+*)
+
 
 module Expression : sig
   type t = Parsetree.expression

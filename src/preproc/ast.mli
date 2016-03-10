@@ -1,4 +1,20 @@
 
+(** Ast module
+
+    This is functor interface to create an Esterel-like asbtract syntax tree
+    from Location module type and an Exp (expression) module type. Thus, the Ast functions
+    are independant from the general purpose language you want to compile to.
+
+    There is a raw version of the Ast, which is more like a Parsetree, called Derived, and
+    a more semantic version, Tagged.
+
+    In Tagged, the non-core statements of Esterel are remove, and all the statement are
+    indexed uniquely. During the transformation, Derived->Tagged, the system a bit of semantic
+    (like unbound signals, labels, and so on).
+
+*)
+
+
 module type Location = sig
   type t
   val none : t
