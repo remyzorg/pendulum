@@ -4,7 +4,7 @@ open Asttypes
 open Parsetree
 open Longident
 
-open Preproc
+open Pendulum_compiler
 
 open Utils
 

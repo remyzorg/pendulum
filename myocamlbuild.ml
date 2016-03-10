@@ -648,7 +648,7 @@ let () =
          in
 
          flag ["ocaml"; "compile"; "ppx_pendulum"] &
-         S [A "-ppx"; A ("src/ppx/ppx_pendulum." ^ native_suffix)];
+         S [A "-ppx"; A ("src/ppx/ppx_pendulum_ex." ^ native_suffix)];
          ignore(S [A "-dsource"]);
 
          mark_tag_used("tests");

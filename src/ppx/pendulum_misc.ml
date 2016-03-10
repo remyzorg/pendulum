@@ -5,7 +5,7 @@ open Asttypes
 open Parsetree
 open Longident
 
-open Preproc
+open Pendulum_compiler
 
 
 module Ast = Sync2ml.Ast

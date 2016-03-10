@@ -21,24 +21,35 @@ Library "pendulum"
   Install: true
   Modules: Interp, Runtime_ast, Runtime_misc, Machine
 
-Library "preproc"
+Library "pendulum_compiler"
   Path: src/preproc/
   Pack: true
   Install: true
   FindlibParent: pendulum
+  FindlibName: compiler 
   Modules: Utils, Ast, Grc, Sync2ml
   BuildDepends:
     unix,
     ppx_tools.metaquot
 
+Library "ppx"
+   Path: src/ppx
+   FindlibParent: pendulum
+   FindlibName: ppx
+   Install: true
+   Modules: Ppx_pendulum
+   XMETADescription: New-style (ppx) syntax extension
+   XMETARequires:    pendulum
+   XMETAExtraLines:  ppx = "ppx_pendulum"
+
 Executable "ppx_pendulum"
   Path:           src/ppx
-  Install: true
+  Install: false
   BuildDepends:
     compiler-libs.common,
     ppx_tools.metaquot,
-    pendulum.preproc
-  MainIs:         ppx_pendulum.ml
+    pendulum.compiler
+  MainIs:         ppx_pendulum_ex.ml
   CompiledObject: best
 
 Executable "test_ppx"

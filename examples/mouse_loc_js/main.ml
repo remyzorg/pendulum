@@ -24,14 +24,12 @@ let%sync mouse_react ~dsource =
   input w {
     onmousemove = "", (fun x ev ->
         Format.sprintf "%d,%d" ev##.clientX ev##.clientY);
-
-    (* onkeydown = "", (fun x ev -> debug "lol"; ""); *)
   };
 
   loop begin
     present w##onmousemove (
       emit span##.textContent
-        Js.(some (string !!(w##onmousemove)))
+        (Js.(some (string !!(w##onmousemove))))
     ); pause
   end
 

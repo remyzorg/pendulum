@@ -1,6 +1,6 @@
 
 
-open Preproc
+open Pendulum_compiler
 open Grc.Flowgraph
 
 
