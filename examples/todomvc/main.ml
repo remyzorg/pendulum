@@ -62,7 +62,7 @@ module Storage = struct
       (fun () -> failwith "Storage is not supported by this browser")
       (fun v -> v)
 
-  let key = string "jsoo-todo-state"
+  let key = string "pendulum-jsoo-todo-state"
 
   let clean_all () = storage##removeItem key
 
@@ -160,6 +160,10 @@ module View = struct
     | Some false -> if state then "none" else "block"
     | Some true -> if state then "block" else "none"
 
+  let get_item_li id = Format.sprintf "it-%d" id
+  let get_item_edit id = Format.sprintf "it-edit-%d" id
+
+
   let create_item
       animate delete_sig blur_sig dblclick_sig
       keydown_sig select_sig visibility cnt str selected
@@ -181,7 +185,7 @@ module View = struct
     let input_edit_item = input ~a:[
         a_input_type `Text; a_class ["edit"];
         a_value txt;
-        a_id (Format.sprintf "it-edit-%d" cnt);
+        a_id (get_item_edit cnt);
         a_onblur (fun _ -> Machine.set_present_value blur_sig cnt; animate (); true);
         a_onkeydown keyhandler; a_onkeypress keyhandler
       ] ()

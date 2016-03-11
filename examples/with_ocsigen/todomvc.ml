@@ -128,7 +128,7 @@ module Model = struct
       List.iter (fun ((k, str, sel) : int * string * bool) ->
           if not sel then incr cntleft;
           cntmax := max !cntmax k;
-          add_item k @@ create_item k (Js.string str) sel
+          add_item k @@ create_item k (Js.string str) sel;
         ) @@ List.sort (fun (k1, _, _) (k2, _, _) -> compare k1 k2) l;
       Pendulum.Machine.setval cnt !cntmax;
       !cntleft
@@ -183,7 +183,8 @@ module View = struct
         a_input_type `Text; a_class ["edit"];
         a_value txt;
         a_id (Format.sprintf "it-edit-%d" cnt);
-        a_onblur (fun _ -> Machine.set_present_value blur_sig cnt; animate (); true);
+        a_onblur (fun _ -> Machine.set_present_value blur_sig cnt;
+                   animate (); true);
         a_onkeydown keyhandler; a_onkeypress keyhandler
       ] ()
     in
@@ -201,21 +202,20 @@ module View = struct
     item_li##.className := Js.string (if selected then "completed" else "");
     item_li##.style##.display := Js.string @@ style_of_visibility false visibility;
     To_dom.({txt; item_li; edit = of_input input_edit_item;
-                            lbl = of_label lbl_content; selected})
+             lbl = of_label lbl_content; selected})
 
-  let create_items
-      cnt tasks animate items_ul
-      delete_sig blur_sig dblclick_sig
-      keydown_sig select_sig strs selected
-    =
+  let add_append h items_ul cnt it =
+    Dom.appendChild items_ul it.item_li;
+    Hashtbl.add h cnt it
+
+  let create_items cnt tasks animate items_ul delete_sig blur_sig
+      dblclick_sig keydown_sig select_sig strs selected =
     let open Pendulum.Machine in
     let nb = List.fold_left (fun acc str ->
-
         let cnt = cnt.value + acc + 1 in
         let it = create_item animate delete_sig blur_sig dblclick_sig
             keydown_sig select_sig None cnt str selected
-        in Hashtbl.add tasks cnt it; Dom.appendChild items_ul it.item_li;
-        acc + 1
+        in add_append tasks items_ul cnt it; acc + 1
       ) 0 strs
     in
     Pendulum.Machine.set_present_value cnt (!!cnt + nb);
@@ -237,10 +237,6 @@ module View = struct
           acc + if it.selected then 0 else 1
         with Not_found -> acc
       ) 0 ids
-
-  let add_append h items_ul cnt it =
-    Hashtbl.add h cnt it;
-    Dom.appendChild items_ul it.item_li
 
   let edited_item h id =
     try
@@ -308,7 +304,6 @@ module View = struct
     if cnt_left = 0 then Hashtbl.length h else 0
 
   let change_visiblity h (all, completed, active) v =
-    debug "when";
     let set (s1, s2, s3) =
       all##.className := Js.string s1;
       completed##.className := Js.string s2;
@@ -329,8 +324,8 @@ module Controller = struct
   open Dom_html
 
   let%sync machine ~animate =
-    input (items_ul : element Js.t);
-    input (newit : inputElement Js.t) {
+    input items_ul;
+    input newit {
       onkeydown = [], fun acc ev ->
           if ev##.keyCode = 13 && newit##.value##.length > 0
           then newit##.value :: acc else acc
@@ -358,7 +353,6 @@ module Controller = struct
            selected_items !!visibility));
 
     loop (
-
       present removestorage##onclick !(Storage.clean_all ())
 
       || present (keydown_item & (snd !!keydown_item = 13 || snd !!keydown_item = 27)) (
@@ -416,26 +410,4 @@ module Controller = struct
     )
 
 end
-
-(* let main _ = *)
-(*   let items_ul = "todo-list" @> CoerceTo.ul in *)
-(*   let new_todo = "new-todo" @> CoerceTo.input in *)
-(*   let filter_footer = "filter_footer" @> CoerceTo.element in *)
-(*   let clear_complete = "clear_complete" @> CoerceTo.button in *)
-(*   let select_all = "select_all" @> CoerceTo.input in *)
-(*   let visibility_active = "visibility_active" @> CoerceTo.a in *)
-(*   let visibility_all = "visibility_all" @> CoerceTo.a in *)
-(*   let visibility_completed = "visibility_completed" @> CoerceTo.a in *)
-(*   let remove_storage = "remove_storage" @> CoerceTo.a in *)
-
-(*   let  _, _, _, _, m_react = Controller.machine *)
-(*       (items_ul, new_todo, filter_footer, *)
-(*        clear_complete,select_all, [], [], visibility_all, *)
-(*        visibility_completed, visibility_active, remove_storage) *)
-(*   in *)
-(*   ignore (m_react ()); *)
-(*   Js._false *)
-
-
-(* let () = Dom_html.(window##.onload := handler main) *)
 

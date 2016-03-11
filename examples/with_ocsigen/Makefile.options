@@ -8,7 +8,7 @@ PROJECT_NAME := with_ocsigen
 # Source files for the server
 SERVER_FILES := $(wildcard *.eliomi *.eliom)
 # Source files for the client
-CLIENT_FILES := $(wildcard *.eliomi *.eliom)
+CLIENT_FILES := todomvc.ml $(wildcard *.eliomi *.eliom)
 
 # OCamlfind packages for the server
 SERVER_PACKAGES := lwt.ppx js_of_ocaml.deriving.ppx 
