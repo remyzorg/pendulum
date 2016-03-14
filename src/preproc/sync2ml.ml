@@ -706,7 +706,8 @@ module Ocaml_gen = struct
     in
     [%expr
       let open Pendulum.Runtime_misc in
-      let open Pendulum.Machine in
+      let open Pendulum.Program in
+      let open Pendulum.Signal in
       fun [%p sigs_step_arg] ->
         [%e construct_running_env debug nstmts body_expression ]]
 

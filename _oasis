@@ -19,7 +19,7 @@ Library "pendulum"
   Path: src/runtime/
   Pack: true
   Install: true
-  Modules: Interp, Runtime_ast, Runtime_misc, Machine
+  Modules: Runtime_ast, Runtime_misc, Signal, Program
 
 Library "pendulum_compiler"
   Path: src/preproc/
