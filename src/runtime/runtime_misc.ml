@@ -53,9 +53,14 @@ module Linked = struct
     mutable head : 'a head;
   }
 
+  let create_elt = assert false
 
   let create value =
     let rec e = {previous = e; value; next = e} in e
+
+  let remove a =
+    a.previous.next <- a.next;
+    a.next.previous <- a.previous
 
   let remove_elt l a =
     match l.head with
@@ -64,8 +69,7 @@ module Linked = struct
       if a.next == a then l.head <- Nil
       else begin
         if a == h then l.head <- Head a.next;
-        a.previous.next <- a.next;
-        a.next.previous <- a.previous
+        remove a
       end
 
   let append l1 l2 =
@@ -76,6 +80,15 @@ module Linked = struct
       h2.previous.next <- h1;
       h1.previous <- h2.previous;
       h2.previous <- h1.previous
+
+
+  let add l e = assert false
+    (* match l with *)
+    (* | Nil -> Head (create e) *)
+    (* | Head h -> *)
+
+
+  let push l e = assert false
 
 
 
