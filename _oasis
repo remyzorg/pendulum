@@ -32,7 +32,7 @@ Library "pendulum_compiler"
     unix,
     ppx_tools.metaquot
 
-Library "ppx"
+Library ppx
    Path: src/ppx
    FindlibParent: pendulum
    FindlibName: ppx
@@ -42,9 +42,9 @@ Library "ppx"
    XMETARequires:    pendulum
    XMETAExtraLines:  ppx = "ppx_pendulum"
 
-Executable "ppx_pendulum"
-  Path:           src/ppx
-  Install: false
+Executable ppx_pendulum
+  Path:           src/ppx/
+  Install: true
   BuildDepends:
     compiler-libs.common,
     ppx_tools.metaquot,

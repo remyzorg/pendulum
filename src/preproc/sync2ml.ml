@@ -28,6 +28,7 @@ let print_error fmt e =
       | _ -> assert false
     end
 
+
 let remove_ident_renaming s =
   try
     let content = String.sub s.content 0 ((String.rindex s.content '~')) in
@@ -412,6 +413,8 @@ module Ocaml_gen = struct
   let select_env_ident = mk_ident (Ast.mk_loc select_env_name)
   let gather_val_arg_name = Ast.mk_loc "arg~~"
 
+  let debug_instant_cnt_name = Ast.mk_loc "instant~cnt"
+
   let mk_mach_inst_step mch =
     {mch with content = Format.sprintf "%s~step" mch.content}
 
@@ -428,10 +431,30 @@ module Ocaml_gen = struct
       (Format.sprintf "%s%s%s" ident.content sep str)
 
   let remove_signal_renaming s =
-    try
-      Ast.({s with
-            content = String.sub s.content 0 ((String.rindex s.content '~'))})
+    try Ast.({s with content = String.sub s.content 0
+                         ((String.rindex s.content '~'))})
     with Not_found -> s
+
+
+  module Debug = struct
+
+
+    let str = string_const
+
+    let print expr =
+      [%expr Firebug.console##debug (Js.string [%e expr])]
+
+    let letin ~debug patvar value expr =
+      if debug then [%expr let [%p patvar] = [%e value] in
+                           [%e expr]]
+      else expr
+
+    let (++) a b = [%expr [%e a] ^ [%e b]]
+
+    let seqif ~debug debug_expr expr =
+      if debug then [%expr [%e debug_expr ]; [%e expr]] else expr
+
+  end
 
   let add_deref_local s =
     let open Ast in
@@ -593,26 +616,48 @@ module Ocaml_gen = struct
         with Not_found -> acc
     ) e env.Tagged.args_signals
 
-  let construct_raf_call stepfun_ident =
-    [%expr fun () ->
-           if ![%e mk_ident @@ Ast.mk_loc animated_state_var_name] then ()
-           else
-             [%e mk_ident @@ Ast.mk_loc animated_state_var_name] := true;
-             let _ = Dom_html.window##requestAnimationFrame
-                 (Js.wrap_callback (fun _ ->
-                      ignore @@ [%e stepfun_ident] ();
-                      [%e mk_ident @@ Ast.mk_loc animated_state_var_name] := false;
-                    ))
-             in ()
+  let construct_raf_call debug stepfun_ident =
+    let debug_cnt = mk_ident debug_instant_cnt_name in
+    let debug_cnt_str = [%expr string_of_int ![%e debug_cnt]] in
+    [%expr
+      fun () ->
+        if not ![%e mk_ident @@ Ast.mk_loc animated_state_var_name] then (
+          [%e Debug.(
+                seqif ~debug ([%expr incr [%e debug_cnt]]) (
+                  seqif ~debug (print @@ str "Add to next frame..." ++ debug_cnt_str)
+                  [%expr [%e mk_ident @@ Ast.mk_loc animated_state_var_name] := true]))];
+          let _ = Dom_html.window##requestAnimationFrame
+              (Js.wrap_callback (
+                  fun _ -> [%e Debug.(
+                         seqif ~debug
+                           (print (str "Frame start..." ++ debug_cnt_str))
+                           [%expr ignore @@ [%e stepfun_ident] ()])
+                  ]; [%e Debug.(seqif ~debug
+                           (print @@ str "Frame done..." ++ debug_cnt_str)
+                           [%expr [%e mk_ident @@ Ast.mk_loc animated_state_var_name] := false])]
+                ))
+          in ()) else
+          [%e Debug.(seqif ~debug (print (str "Already in next frame...")) [%expr ()])]
     ]
 
   let construct_animate_mutex animate body =
     if not animate then body else
       [%expr let [%p mk_pat_var @@ Ast.mk_loc animated_state_var_name] = ref false in [%e body]]
 
+  let construct_running_env debug nstmts body =
+    let body = [%expr
+      let [%p Pat.var select_env_var] =
+        Bitset.make [%e int_const (1 + nstmts)]
+      in [%e body ]]
+    in
+    if debug then [%expr let [%p mk_pat_var debug_instant_cnt_name] =
+                           ref 0 in [%e body]]
+    else body
 
-  let construct_instanciation_body animate nstmts env sel stepfun_body =
+  let construct_instanciation_body options nstmts env sel stepfun_body =
     let open Selection_tree in
+    let animate = StringSet.mem "animate" options in
+    let debug = StringSet.mem "debug" options in
     let sigs_step_arg =
       match env.Tagged.args_signals with
       | [] -> [%pat? ()]
@@ -630,14 +675,15 @@ module Ocaml_gen = struct
     let animate_ident_expr = mk_ident @@ Ast.mk_loc animate_name in
 
     let returned_stepfun_ident =
-      if animate then animate_ident_expr else stepfun_ident_expr
+      if animate then animate_ident_expr
+      else stepfun_ident_expr
     in
 
     let stepfun_definition e =
       if animate then
         Exp.let_ Asttypes.Recursive [
           Vb.mk stepfun_pat_var stepfun_lambda_expr;
-          Vb.mk animate_pat_var (construct_raf_call stepfun_ident_expr);
+          Vb.mk animate_pat_var (construct_raf_call debug stepfun_ident_expr);
         ] e
       else
         Exp.let_ Asttypes.Nonrecursive [Vb.mk stepfun_pat_var stepfun_lambda_expr] e
@@ -662,9 +708,7 @@ module Ocaml_gen = struct
       let open Pendulum.Runtime_misc in
       let open Pendulum.Machine in
       fun [%p sigs_step_arg] ->
-        let [%p Pat.var select_env_var] =
-          Bitset.make [%e int_const (1 + nstmts)]
-        in [%e body_expression ]]
+        [%e construct_running_env debug nstmts body_expression ]]
 
 
   let rec construct_test env depl test =
@@ -805,7 +849,7 @@ module Ocaml_gen = struct
 end
 
 
-let generate nooptim animate env tast =
+let generate options env tast =
   let selection_tree, flowgraph as grc = Of_ast.construct tast in
   Schedule.tag_tested_stmts selection_tree flowgraph;
   let _deps = Schedule.check_causality_cycles grc in
@@ -814,12 +858,12 @@ let generate nooptim animate env tast =
   let dep_array = Array.make (maxid + 1) [] in
   let ml_ast = grc2ml dep_array interleaved_cfg in
   let ml_ast' =
-    if not nooptim then
+    if not @@ StringSet.mem "nooptim" options then
       ML_optimize.gather_enter_exits ml_ast maxid
       |> ML_optimize.rm_useless_let_bindings
     else ml_ast
   in
   Ocaml_gen.(
-    construct_instanciation_body animate maxid env selection_tree
+    construct_instanciation_body options maxid env selection_tree
     @@ construct_sequence env dep_array ml_ast'
   )

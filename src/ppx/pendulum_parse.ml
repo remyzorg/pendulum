@@ -234,6 +234,9 @@ let rec parse_args options inputs exp =
   | [%expr fun ~print -> [%e? exp']] ->
     parse_args (addopt "print") inputs exp'
 
+  | [%expr fun ~debug -> [%e? exp']] ->
+    parse_args (addopt "debug") inputs exp'
+
   | [%expr fun ~print:[%p? pp_params] -> [%e? exp']] as prt_param ->
     let check_param opts = function
       | {ppat_desc = Ppat_var {txt = content; loc}} ->

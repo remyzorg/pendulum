@@ -77,7 +77,7 @@ see [this example](examples/player) for the full code
 
 ### TodoMVC benchmark
 
-Check our [example](examples/todomvc) and the 
+Check out [example](examples/todomvc) and the 
 [benchmark results](https://github.com/remyzorg/todomvc-perf-comparison)
 
 ![Sample of pendulum execution in Chrome, Fedora 19](examples/todomvc/sample.png)
