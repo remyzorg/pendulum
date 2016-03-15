@@ -53,10 +53,11 @@ module Linked = struct
     mutable head : 'a head;
   }
 
-  let create_elt = assert false
+  let create_elt value =
+    let rec e = {previous = e; value; next = e} in e
 
   let create value =
-    let rec e = {previous = e; value; next = e} in e
+    { head = Head (create_elt value) }
 
   let remove a =
     a.previous.next <- a.next;
@@ -81,16 +82,44 @@ module Linked = struct
       h1.previous <- h2.previous;
       h2.previous <- h1.previous
 
+  let add_after v elt =
+    let elt' = create_elt v in
+    elt'.next <- elt.next;
+    elt'.previous <- elt;
+    elt.next.previous <- elt';
+    elt.next <- elt'
 
-  let add l e = assert false
-    (* match l with *)
-    (* | Nil -> Head (create e) *)
-    (* | Head h -> *)
+  let add_before elt' elt =
+    elt'.previous <- elt.previous;
+    elt'.previous <- elt;
+    elt.previous.next <- elt';
+    elt.previous <- elt'
+
+  let add l e =
+    let elt = create_elt e in
+    match l.head with
+    | Nil -> l.head <- Head elt
+    | Head h ->
+      add_before elt h;
+      l.head <- Head elt
+
+  let push l e =
+    let elt = create_elt e in
+    match l.head with
+    | Nil -> l.head <- Head elt
+    | Head h -> add_before elt h
 
 
-  let push l e = assert false
 
-
+  let iter f l =
+    match l with
+    | Nil -> ()
+    | Head h ->
+      let rec aux elt =
+        f elt.value;
+        if elt.next == h then ()
+        else aux elt.next
+      in aux h
 
 
 
