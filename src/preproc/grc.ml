@@ -346,8 +346,7 @@ module Flowgraph = struct
               fprintf fmt "N%d [shape = none, label=<%a>]; @\n" my_id pp_dot fg;
               my_id
 
-          end
-          in Fgtbl.add h fg id; id
+          end in Fgtbl.add h fg id; id
       in
       fprintf fmt "@[<hov 2>digraph flowgraph {@\n";
       ignore(visit fg);

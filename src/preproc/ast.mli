@@ -106,6 +106,7 @@ module type S = sig
 
   type error =
     | Unbound_identifier of string
+
   exception Error of loc * error
   val error : loc:loc -> error -> 'a
   val print_error : Format.formatter -> error -> unit

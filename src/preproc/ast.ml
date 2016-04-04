@@ -507,7 +507,7 @@ module Make (E : Exp) = struct
         | Seq (st1, st2) ->
           fprintf fmt " N%d [label=\"%d seq\"];@\n" x.id x.id;
           fprintf fmt "N%d -> N%d ;@\n" x.id st1.id;
-          fprintf fmt "N%d -> N%d ;@\n" x.id st2.id;
+          fprintf fmt "N%d -> N%d [style = dashed];@\n" x.id st2.id;
           visit st1;
           visit st2;
         | Par (st1, st2) ->
@@ -533,8 +533,8 @@ module Make (E : Exp) = struct
         | Atom f -> fprintf fmt "N%d [label=\"%d atom\"]; @\n" x.id x.id
         | Present ((s, _), st1, st2) ->
           fprintf fmt "N%d [label=\"%d present(%s)\"]; @\n" x.id x.id s.ident.content;
-          fprintf fmt "N%d -> N%d ;@\n" x.id st1.id;
-          fprintf fmt "N%d -> N%d ;@\n" x.id st2.id;
+          fprintf fmt "N%d -> N%d;@\n" x.id st1.id;
+          fprintf fmt "N%d -> N%d [style = dashed];@\n" x.id st2.id;
           visit st1;
           visit st2;
         | Await (s, _) ->
