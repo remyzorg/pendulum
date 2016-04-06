@@ -162,6 +162,29 @@ let%sync gatherer_0 =
     pause
   end
 
+let%sync reincarnation ~debug ~print:pdf o1 o2 =
+  loop begin
+    let s = () in
+    present s (emit o1) (emit o2);
+    pause;
+    emit s;
+    !(print_string "ok");
+  end
+
+let%sync reincarnation2 o1 o2 =
+  loop (
+    let s = () in
+    trap t (
+      (pause;
+       emit s;
+       exit t)
+      ||
+      loop (
+        present s (emit o1) (emit o2);
+        pause)
+    )
+  )
+
 
 
 let () =
