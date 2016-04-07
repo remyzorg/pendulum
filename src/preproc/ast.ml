@@ -134,7 +134,8 @@ module type S = sig
       ?binders:((string * signal_binder list) list) ->
       Derived.statement -> t * env
 
-    val print_to_dot : Format.formatter -> t -> unit
+    val pp_st : Format.formatter -> t -> unit
+    val pp_dot : Format.formatter -> t -> unit
   end
 
   module Analysis : sig
@@ -490,63 +491,59 @@ module Make (E : Exp) = struct
           mk_tagged (Loop (
               visit env Derived.(mkl @@ Abort (mkl @@ Seq (st, mkl Halt), s)))
             ) !+id
-        | Derived.Every (s, st) -> mk_tagged (Seq (visit env (mkl @@ Derived.Await s), visit env
-                                                     (mkl @@ Derived.Loop_each (st, s)))) !+id
+        | Derived.Every (s, st) ->
+          mk_tagged (Seq (visit env (mkl @@ Derived.Await s), visit env
+              (mkl @@ Derived.Loop_each (st, s)))) !+id
 
       in
       let tagged = visit start_env ast in
       tagged, start_env
 
-    let print_to_dot fmt tagged =
-      let open Format in
-      let rec visit x = match x.st.content with
-        | Loop st ->
-          fprintf fmt "N%d [label=\"%d loop\"];@\n" x.id x.id;
-          fprintf fmt "N%d -> N%d ;@\n" x.id st.id;
-          visit st
-        | Seq (st1, st2) ->
-          fprintf fmt " N%d [label=\"%d seq\"];@\n" x.id x.id;
-          fprintf fmt "N%d -> N%d ;@\n" x.id st1.id;
-          fprintf fmt "N%d -> N%d [style = dashed];@\n" x.id st2.id;
-          visit st1;
-          visit st2;
-        | Par (st1, st2) ->
-          fprintf fmt "N%d [label=\"%d par\"]; @\n" x.id x.id;
-          fprintf fmt "N%d -> N%d ;@\n" x.id st1.id;
-          fprintf fmt "N%d -> N%d ;@\n" x.id st2.id;
-          visit st1;
-          visit st2;
-        | Emit vs -> fprintf fmt "N%d [label=\"%d emit(%s)\"];@\n"  x.id x.id vs.signal.ident.content
-        | Nothing  ->
-          fprintf fmt "N%d [label=\"%d nothing\"]; @\n" x.id x.id
-        | Pause  ->
-          fprintf fmt "N%d [label=\"%d pause\"]; @\n" x.id x.id
-        | Suspend (st, (s, _)) ->
-          fprintf fmt "N%d [label=\"%d suspend(%s)\"]; @\n" x.id x.id s.ident.content;
-          fprintf fmt "N%d -> N%d ;@\n" x.id st.id;
-          visit st
-        | Trap (Label s, st) ->
-          fprintf fmt "N%d [label=\" %d trap(%s)\"]; @\n" x.id x.id s.content;
-          fprintf fmt "N%d -> N%d ;@\n" x.id st.id;
-          visit st
-        | Exit (Label s) -> fprintf fmt "N%d [label=\"%d exit(%s)\"]; @\n" x.id x.id s.content
-        | Atom f -> fprintf fmt "N%d [label=\"%d atom\"]; @\n" x.id x.id
-        | Present ((s, _), st1, st2) ->
-          fprintf fmt "N%d [label=\"%d present(%s)\"]; @\n" x.id x.id s.ident.content;
-          fprintf fmt "N%d -> N%d;@\n" x.id st1.id;
-          fprintf fmt "N%d -> N%d [style = dashed];@\n" x.id st2.id;
-          visit st1;
-          visit st2;
-        | Await (s, _) ->
-          fprintf fmt "N%d [label=\"%d await(%s)\"]; @\n" x.id x.id s.ident.content
-        | Signal (vs, st) ->
-          fprintf fmt "N%d [label=\"%d signal(%s)\"]; @\n" x.id x.id vs.signal.ident.content;
-          fprintf fmt "N%d -> N%d ;@\n" x.id st.id;
-          visit st
-        | Run (id, sigs, _) ->
-          fprintf fmt "N%d [label=\"%d run %s %s\"]; @\n" x.id x.id id.content
-            (String.concat " " @@ List.map (fun x -> x.ident.content) sigs) 
 
+    let pp_st fmt x =
+      let open Format in
+      match x.st.content with
+        | Emit vs -> fprintf fmt "emit(%s)" vs.signal.ident.content
+        | Nothing  -> fprintf fmt "nothing"
+        | Pause  -> fprintf fmt "pause"
+        | Exit (Label s) -> fprintf fmt "exit(%s)" s.content
+        | Atom f -> fprintf fmt "atom"
+        | Await (s, _) -> fprintf fmt "await(%s)" s.ident.content
+        | Run (id, sigs, _) ->
+          fprintf fmt "run %s %s" id.content
+            (String.concat " " @@ List.map (fun x -> x.ident.content) sigs) 
+        | Loop st -> fprintf fmt "loop"
+        | Signal (vs, st) -> fprintf fmt "signal(%s)" vs.signal.ident.content
+        | Suspend (st, (s, _)) -> fprintf fmt "suspend(%s)"  s.ident.content
+        | Trap (Label s, st) -> fprintf fmt "trap(%s)"  s.content
+
+        | Seq (st1, st2) ->
+          fprintf fmt "seq" ;
+        | Par (st1, st2) ->
+          fprintf fmt "par" ;
+        | Present ((s, _), st1, st2) ->
+          fprintf fmt "present(%s)"  s.ident.content
+
+    let pp_dot fmt tagged =
+      let open Format in
+      let pr x = fprintf fmt "N%d [label=\"%d %a\"];@\n" x.id x.id pp_st x in
+      let edge dashed id1 id2 =
+        fprintf fmt "N%d -> N%d %s;@\n" id1 id2
+          (if dashed then "[style = dashed]" else "")
+      in
+      let rec visit x =
+        pr x;
+        match x.st.content with
+        | Emit _ | Nothing | Pause | Exit _ | Atom _ | Run _ | Await _ -> ()
+        | Suspend (st, _) | Trap (_, st) | Signal (_, st) | Loop st ->
+          edge false x.id st.id;
+          visit st
+        | Seq (st1, st2) | Present (_, st1, st2) ->
+          edge false x.id st1.id; edge true x.id st2.id;
+          visit st1; visit st2
+        | Par (st1, st2) -> 
+          edge false x.id st1.id; edge false x.id st2.id;
+          visit st1; visit st2
       in
       fprintf fmt "@[<hov 2>digraph tagged {@\n";
       visit tagged;

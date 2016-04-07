@@ -842,8 +842,10 @@ module Ocaml_gen = struct
     | MLpause -> [%expr raise Pause_exc]
     | MLfinish -> [%expr raise Finish_exc]
     | MLcall (ident, sigs, loc) ->
-      let tuple = match sigs with [] -> assert false | [s] -> [%expr [%e add_deref_local s].value]
-        | l -> Ast_helper.Exp.tuple ~loc @@ List.map (fun s -> [%expr [%e add_deref_local s].value]) l
+      let tuple = match sigs with [] -> assert false
+        | [s] -> [%expr [%e add_deref_local s].value]
+        | l -> Ast_helper.Exp.tuple ~loc @@
+          List.map (fun s -> [%expr [%e add_deref_local s].value]) l
       in [%expr [%e mk_ident ident] [%e tuple]]
 
 
@@ -851,7 +853,7 @@ end
 
 
 let generate options env tast =
-  let selection_tree, flowgraph as grc = Of_ast.construct tast in
+  let selection_tree, flowgraph as grc = Of_ast.construct options tast in
   Schedule.tag_tested_stmts selection_tree flowgraph;
   let _deps = Schedule.check_causality_cycles grc in
   let interleaved_cfg = Schedule.interleave flowgraph in

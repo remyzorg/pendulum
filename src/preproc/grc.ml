@@ -382,9 +382,10 @@ module Of_ast = struct
     module Ast : Ast.S
     module Fg : Flowgraph.S
     module St : Selection_tree.S
+    open Utils
 
-    val flowgraph : Ast.Tagged.t -> Fg.t
-    val construct : Ast.Tagged.t -> St.t * Fg.t
+    val flowgraph : Options.t -> Ast.Tagged.t -> Fg.t
+    val construct : Options.t -> Ast.Tagged.t -> St.t * Fg.t
   end
 
   module Make (Fg : Flowgraph.S) (St : Selection_tree.S with module Ast = Fg.Ast) = struct
@@ -420,7 +421,7 @@ module Of_ast = struct
 
 
     (** See the compiling rules in documentation *)
-    let surface h =
+    let surface options h =
       let open Tagged in let open Fg in
       let surface surface env p pause endp =
         match p.st.content with
@@ -501,7 +502,7 @@ module Of_ast = struct
       memo_rec h surface
 
 
-    let depth h surface =
+    let depth options h surface =
       let open Tagged in let open Fg in
       let depth depth env p pause endp =
         match p.st.content with
@@ -524,6 +525,12 @@ module Of_ast = struct
 
         | Seq (q, r) ->
           let end_seq = exit_node p endp in
+          if Options.is_debug options then begin
+            Format.printf "==================== %d %a \n> %a\n"
+              p.id Ast.Tagged.pp_st p Fg.pp_dot endp;
+            Format.printf "> %a\n" Fg.pp_dot end_seq ;
+          end;
+
           if env.under_suspend || Ast.Analysis.blocking q then
             test_node (Selection q.id) (
               depth env q pause (surface env r pause end_seq),
@@ -580,7 +587,7 @@ module Of_ast = struct
       in memo_rec h depth
 
 
-    let flowgraph p =
+    let flowgraph options p =
       let open Fg in
       let open Tagged in
       let env = {
@@ -592,10 +599,10 @@ module Of_ast = struct
       let depthtbl, surftbl = Hashtbl.create 30, Hashtbl.create 30 in
 
       (* creates the surface function with the table, to be passed to depth *)
-      let surface = surface surftbl in
+      let surface = surface options surftbl in
 
       let s = surface env p Pause Finish in
-      let d = depth depthtbl surface env p Pause Finish in
+      let d = depth options depthtbl surface env p Pause Finish in
 
       let endsync = match d with
         | Fork (_ , _, sync) -> Some sync
@@ -609,8 +616,8 @@ module Of_ast = struct
         test_node (Selection p.id) (d, s, endsync),
         Some Finish
       )
-    let construct p =
-      St.of_ast p, flowgraph p
+    let construct options p =
+      St.of_ast p, flowgraph options p
 
   end
 end

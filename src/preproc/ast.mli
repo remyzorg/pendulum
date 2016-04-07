@@ -151,7 +151,8 @@ module type S = sig
       ?binders:((string * signal_binder list) list) ->
       Derived.statement -> t * env
 
-    val print_to_dot : Format.formatter -> t -> unit
+    val pp_st : Format.formatter -> t -> unit
+    val pp_dot : Format.formatter -> t -> unit
   end
 
   module Analysis : sig

@@ -33,7 +33,8 @@ let parse_and_generate atom_mapper vb =
     let ast = Pendulum_parse.ast_of_expr atom_mapper e in
     let tast, env = Ast.Tagged.of_ast ~sigs ~binders ast in
     let tast = Ast.Analysis.filter_dead_trees tast in
-    Pendulum_misc.print_to_dot (has_opt "dot") (has_opt "pdf") (has_opt "png") loc pat tast;
+    Pendulum_misc.print_to_dot (StringSet.remove "debug" options)
+      (has_opt "dot") (has_opt "pdf") (has_opt "png") loc pat tast;
     let ocaml_expr = Sync2ml.generate options env tast in
     if has_opt "dsource" then Format.printf "%a@." Pprintast.expression ocaml_expr;
     [%expr [%e ocaml_expr]]

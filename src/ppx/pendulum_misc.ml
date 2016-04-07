@@ -97,7 +97,7 @@ let print_to_dot_one todot topdf topng name ext f e =
   if not todot then (Unix.unlink (full_name ^ ".dot"))
 
 
-let print_to_dot todot topdf topng loc pat =
+let print_to_dot options todot topdf topng loc pat =
   let open Location in
   fun e ->
     if not (topng || topdf || todot) then () else
@@ -107,8 +107,8 @@ let print_to_dot todot topdf topng loc pat =
           |> basename
         ) ^ ("_" ^ pat)
       in
-      print_to_dot_one todot topdf topng name "_tagged" Ast.Tagged.print_to_dot e;
-      let sel, fg = Sync2ml.Of_ast.construct e in
+      print_to_dot_one todot topdf topng name "_tagged" Ast.Tagged.pp_dot e;
+      let sel, fg = Sync2ml.Of_ast.construct options e in
       print_to_dot_one todot topdf topng name "_sel" Sync2ml.Selection_tree.print_to_dot sel;
       print_to_dot_one todot topdf topng name "_fg" Sync2ml.Flowgraph.print_to_dot fg;
       let fg = Sync2ml.Schedule.interleave fg in
