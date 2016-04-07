@@ -162,7 +162,7 @@ let%sync gatherer_0 =
     pause
   end
 
-let%sync reincarnation ~debug ~print:pdf o1 o2 =
+let%sync reincarnation o1 o2 =
   loop begin
     let s = () in
     present s (emit o1) (emit o2);
