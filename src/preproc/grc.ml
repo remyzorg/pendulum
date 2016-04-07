@@ -420,7 +420,6 @@ module Of_ast = struct
         in g
 
 
-
     (** See the compiling rules in documentation *)
     let surface options h =
       let open Tagged in let open Fg in
@@ -459,8 +458,9 @@ module Of_ast = struct
           @@ surf_r
 
         | Loop q ->
-          let surfp = enter_node p @@ surface env q pause pause in
-          surfp
+          enter_node p
+          @@ surface env q pause
+          @@ if Ast.Analysis.blocking q then endp else pause
 
         | Present ((s, atopt), q, r) ->
           let end_pres = exit_node p endp in
@@ -508,8 +508,10 @@ module Of_ast = struct
       let open Tagged in let open Fg in
       let depth depth env p pause endp =
         match p.st.content with
-        | Emit s -> endp
+        | Emit _ -> endp
         | Nothing -> endp
+        | Atom _ -> endp
+        | Exit _ -> endp
 
         | Pause -> Exit p.id >> endp
 
@@ -519,15 +521,12 @@ module Of_ast = struct
             pause,
             None)
 
-        | Atom f -> endp
-        | Exit _ -> endp
-
         | Loop q -> depth env q pause @@ surface env q pause endp
 
         | Seq (q, r) ->
           let end_seq = exit_node p endp in
-          let depth_r = depth env r pause end_seq in
-          if env.under_suspend || Ast.Analysis.blocking q then begin
+          let depth_r = depth env r pause endp in
+          if Ast.Analysis.blocking q then begin
             let surf_r = surface env r pause end_seq in
             let depth_q = depth env q pause surf_r in
             test_node (Selection q.id) (depth_q, depth_r, None)
@@ -550,9 +549,7 @@ module Of_ast = struct
               depth env r syn syn,
               syn,
               None
-            ),
-            syn
-          )
+            ), syn)
 
         | Present (s, q, r) ->
           let end_pres = exit_node p endp in
