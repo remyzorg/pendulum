@@ -413,11 +413,12 @@ module Of_ast = struct
       fun h f ->
         let open Tagged in
         let rec g env x p e =
-          try Hashtbl.find h x.id with
+          try Hashtbl.find h (x.id, p, e) with
           | Not_found ->
             let y = f g env x p e in
-            Hashtbl.add h x.id y; y
+            Hashtbl.add h (x.id, p, e) y; y
         in g
+
 
 
     (** See the compiling rules in documentation *)
@@ -437,6 +438,7 @@ module Of_ast = struct
 
         | Emit s -> Emit s >> endp
         | Nothing -> endp
+
         | Atom f -> Atom f >> endp
 
         | Suspend (q, _) ->
@@ -452,10 +454,13 @@ module Of_ast = struct
 
         | Seq (q,r) ->
           let surf_r = (surface env r pause @@ exit_node p endp) in
-          Hashtbl.remove h r.id;
           enter_node p
           @@ surface env q pause
           @@ surf_r
+
+        | Loop q ->
+          let surfp = enter_node p @@ surface env q pause pause in
+          surfp
 
         | Present ((s, atopt), q, r) ->
           let end_pres = exit_node p endp in
@@ -471,9 +476,6 @@ module Of_ast = struct
           enter_node p (
             Instantiate_run (id, sigs, loc)
             >> test_node (Is_paused (id, sigs, loc)) (pause, endrun, None))
-
-
-        | Loop q -> enter_node p @@ surface env q pause pause
 
         | Par (q, r) ->
           let syn = try Hashtbl.find env.synctbl (q.id, r.id) with
@@ -519,26 +521,18 @@ module Of_ast = struct
 
         | Atom f -> endp
         | Exit _ -> endp
-        | Loop q ->
-          let surf_q = surface env q pause pause in
-          depth env q pause surf_q
+
+        | Loop q -> depth env q pause @@ surface env q pause endp
 
         | Seq (q, r) ->
           let end_seq = exit_node p endp in
-          if Options.is_debug options then begin
-            Format.printf "==================== %d %a \n> %a\n"
-              p.id Ast.Tagged.pp_st p Fg.pp_dot endp;
-            Format.printf "> %a\n" Fg.pp_dot end_seq ;
-          end;
-
-          if env.under_suspend || Ast.Analysis.blocking q then
-            test_node (Selection q.id) (
-              depth env q pause (surface env r pause end_seq),
-              depth env r pause end_seq,
-              None
-            )
-          else
-            depth env r pause end_seq
+          let depth_r = depth env r pause end_seq in
+          if env.under_suspend || Ast.Analysis.blocking q then begin
+            let surf_r = surface env r pause end_seq in
+            let depth_q = depth env q pause surf_r in
+            test_node (Selection q.id) (depth_q, depth_r, None)
+          end
+          else depth_r
 
         | Par (q, r) ->
           let syn = try Hashtbl.find env.synctbl (q.id, r.id) with

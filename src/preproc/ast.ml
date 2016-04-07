@@ -503,26 +503,26 @@ module Make (E : Exp) = struct
     let pp_st fmt x =
       let open Format in
       match x.st.content with
-        | Emit vs -> fprintf fmt "emit(%s)" vs.signal.ident.content
+        | Emit vs -> fprintf fmt "emit %s " vs.signal.ident.content
         | Nothing  -> fprintf fmt "nothing"
         | Pause  -> fprintf fmt "pause"
-        | Exit (Label s) -> fprintf fmt "exit(%s)" s.content
+        | Exit (Label s) -> fprintf fmt "exit %s " s.content
         | Atom f -> fprintf fmt "atom"
-        | Await (s, _) -> fprintf fmt "await(%s)" s.ident.content
+        | Await (s, _) -> fprintf fmt "await %s " s.ident.content
         | Run (id, sigs, _) ->
           fprintf fmt "run %s %s" id.content
             (String.concat " " @@ List.map (fun x -> x.ident.content) sigs) 
         | Loop st -> fprintf fmt "loop"
         | Signal (vs, st) -> fprintf fmt "signal(%s)" vs.signal.ident.content
-        | Suspend (st, (s, _)) -> fprintf fmt "suspend(%s)"  s.ident.content
-        | Trap (Label s, st) -> fprintf fmt "trap(%s)"  s.content
+        | Suspend (st, (s, _)) -> fprintf fmt "suspend %s "  s.ident.content
+        | Trap (Label s, st) -> fprintf fmt "trap %s "  s.content
 
         | Seq (st1, st2) ->
           fprintf fmt "seq" ;
         | Par (st1, st2) ->
           fprintf fmt "par" ;
         | Present ((s, _), st1, st2) ->
-          fprintf fmt "present(%s)"  s.ident.content
+          fprintf fmt "present %s "  s.ident.content
 
     let pp_dot fmt tagged =
       let open Format in
