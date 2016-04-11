@@ -171,19 +171,25 @@ let%sync reincarnation o1 o2 =
     !(print_string "ok");
   end
 
-let%sync reincarnation2 o1 o2 =
+(* let%sync reincarnation2 ~print:pdf o1 o2 = *)
+(*   loop ( *)
+(*     let s = () in *)
+(*     trap t ( *)
+(*       (pause; *)
+(*        emit s; *)
+(*        exit t) *)
+(*       || *)
+(*       loop ( *)
+(*         present s (emit o1) (emit o2); *)
+(*         pause) *)
+(*     ) *)
+(*   ) *)
+
+let%sync reincarnation2 ~print:pdf o1 o2 =
   loop (
-    let s = () in
-    trap t (
-      (pause;
-       emit s;
-       exit t)
-      ||
-      loop (
-        present s (emit o1) (emit o2);
-        pause)
-    )
+    nothing
   )
+
 
 
 
