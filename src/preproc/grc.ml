@@ -384,8 +384,8 @@ module Of_ast = struct
     module St : Selection_tree.S
     open Utils
 
-    val flowgraph : Options.t -> Ast.Tagged.t -> Fg.t
-    val construct : Options.t -> Ast.Tagged.t -> St.t * Fg.t
+    val flowgraph : Ast.Tagged.env -> Options.t -> Ast.Tagged.t -> Fg.t
+    val construct : Ast.Tagged.env -> Options.t -> Ast.Tagged.t -> St.t * Fg.t
   end
 
   module Make (Fg : Flowgraph.S) (St : Selection_tree.S with module Ast = Fg.Ast) = struct
@@ -409,15 +409,15 @@ module Of_ast = struct
        integer identifier of the statement in the Ast. Thus, if S/D(p) is
        required twice or more, the result is already in the table.
     *)
-    let memo_rec =
-      fun h f ->
-        let open Tagged in
-        let rec g env x p e =
-          try Hashtbl.find h (x.id, p, e) with
-          | Not_found ->
-            let y = f g env x p e in
-            Hashtbl.add h (x.id, p, e) y; y
-        in g
+
+    let memo_rec h f =
+      let open Tagged in
+      let rec g env x p e =
+        try Hashtbl.find h (x.id, p, e) with
+        | Not_found ->
+          let y = f g env x p e in
+          Hashtbl.add h (x.id, p, e) y; y
+      in g
 
 
     (** See the compiling rules in documentation *)
@@ -521,7 +521,9 @@ module Of_ast = struct
             pause,
             None)
 
-        | Loop q -> depth env q pause @@ surface env q pause endp
+        | Loop q ->
+          depth env q pause @@ surface env q pause
+          @@ if Ast.Analysis.blocking q then endp else pause
 
         | Seq (q, r) ->
           let end_seq = exit_node p endp in
@@ -578,7 +580,7 @@ module Of_ast = struct
       in memo_rec h depth
 
 
-    let flowgraph options p =
+    let flowgraph astenv options p =
       let open Fg in
       let open Tagged in
       let env = {
@@ -607,8 +609,8 @@ module Of_ast = struct
         test_node (Selection p.id) (d, s, endsync),
         Some Finish
       )
-    let construct options p =
-      St.of_ast p, flowgraph options p
+    let construct env options p =
+      St.of_ast p, flowgraph env options p
 
   end
 end

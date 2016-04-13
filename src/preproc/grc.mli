@@ -123,10 +123,10 @@ module Of_ast : sig
     module St : Selection_tree.S
     open Utils
 
-    val flowgraph : Options.t -> Ast.Tagged.t -> Fg.t
+    val flowgraph : Ast.Tagged.env -> Options.t -> Ast.Tagged.t -> Fg.t
     (** construct only the flowgraph *)
 
-    val construct : Options.t -> Ast.Tagged.t -> St.t * Fg.t
+    val construct : Ast.Tagged.env -> Options.t -> Ast.Tagged.t -> St.t * Fg.t
     (** construct the grc structure from the ast and returns both
      the flowgraph and the selection tree *)
 

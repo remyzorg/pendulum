@@ -134,6 +134,7 @@ module type S = sig
 
 
     type env = {
+      cnt_id : int;
       args_signals : (signal * core_type option) list;
       labels : int IdentMap.t;
       global_occurences : int IdentMap.t ref;
