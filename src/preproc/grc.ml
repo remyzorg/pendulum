@@ -460,7 +460,8 @@ module Of_ast = struct
         | Loop q ->
           enter_node p
           @@ surface env q pause
-          @@ if Ast.Analysis.blocking q then endp else pause
+          (* @@ if Ast.Analysis.blocking q then endp else *)
+            pause
 
         | Present ((s, atopt), q, r) ->
           let end_pres = exit_node p endp in
@@ -523,7 +524,8 @@ module Of_ast = struct
 
         | Loop q ->
           depth env q pause @@ surface env q pause
-          @@ if Ast.Analysis.blocking q then endp else pause
+          (* @@ if Ast.Analysis.blocking q then endp else *)
+            pause
 
         | Seq (q, r) ->
           let end_seq = exit_node p endp in

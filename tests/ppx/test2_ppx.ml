@@ -162,7 +162,7 @@ let%sync gatherer_0 =
     pause
   end
 
-let%sync reincarnation o1 o2 =
+let%sync reincarnation1 o1 o2 =
   loop begin
     let s = () in
     present s (emit o1) (emit o2);
@@ -171,7 +171,7 @@ let%sync reincarnation o1 o2 =
     !(print_string "ok");
   end
 
-let%sync reincarnation2 ~print:pdf o1 o2 =
+let%sync reincarnation2 o1 o2 =
   loop (
     let s = () in
     trap t (
@@ -185,7 +185,23 @@ let%sync reincarnation2 ~print:pdf o1 o2 =
     )
   )
 
+let%sync loop_no_pause o1 o2 =
+  loop begin
+    !(print_string "ok");
+  end
 
+let%sync loop_no_pause2 o1 o2 =
+  loop (
+    (!(Format.printf "OK1"); pause)
+    ||
+    (!(Format.printf "OK2"); pause)
+  )
+
+let%sync loop_pause_pause ~print:pdf =
+  loop (
+    pause;
+    pause;
+  )
 
 
 let () =
