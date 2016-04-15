@@ -130,7 +130,7 @@ module Model = struct
           cntmax := max !cntmax k;
           add_item k @@ create_item k (Js.string str) sel;
         ) @@ List.sort (fun (k1, _, _) (k2, _, _) -> compare k1 k2) l;
-      Pendulum.Machine.setval cnt !cntmax;
+      Pendulum.Signal.setval cnt !cntmax;
       !cntleft
 
 
@@ -168,14 +168,14 @@ module View = struct
     let open Html5 in
     let open Pendulum in
     let lbl_content = label ~a:[a_ondblclick (fun evt ->
-        Machine.set_present_value dblclick_sig cnt; animate (); true)]
+        Signal.set_present_value dblclick_sig cnt; animate (); true)]
         [pcdata @@ Js.to_string (str##trim)]
     in
     let btn_rm = button ~a:[a_class ["destroy"]; a_onclick (fun evt ->
-        Machine.set_present_value delete_sig cnt; animate (); true)] []
+        Signal.set_present_value delete_sig cnt; animate (); true)] []
     in
     let keyhandler ev =
-      Machine.set_present_value keydown_sig (cnt, ev##.keyCode);
+      Signal.set_present_value keydown_sig (cnt, ev##.keyCode);
       animate (); true
     in
     let txt = Js.to_string @@ str##trim in
@@ -183,7 +183,7 @@ module View = struct
         a_input_type `Text; a_class ["edit"];
         a_value txt;
         a_id (Format.sprintf "it-edit-%d" cnt);
-        a_onblur (fun _ -> Machine.set_present_value blur_sig cnt;
+        a_onblur (fun _ -> Signal.set_present_value blur_sig cnt;
                    animate (); true);
         a_onkeydown keyhandler; a_onkeypress keyhandler
       ] ()
@@ -192,7 +192,7 @@ module View = struct
       let a = [
         a_input_type `Checkbox; a_class ["toggle"];
         a_onclick (fun _ ->
-            Pendulum.Machine.set_present_value select_sig cnt; animate (); true)
+            Pendulum.Signal.set_present_value select_sig cnt; animate (); true)
       ] in
       let a = if selected then (a_checked `Checked) :: a else a
       in input ~a ()
@@ -210,7 +210,7 @@ module View = struct
 
   let create_items cnt tasks animate items_ul delete_sig blur_sig
       dblclick_sig keydown_sig select_sig strs selected =
-    let open Pendulum.Machine in
+    let open Pendulum.Signal in
     let nb = List.fold_left (fun acc str ->
         let cnt = cnt.value + acc + 1 in
         let it = create_item animate delete_sig blur_sig dblclick_sig
@@ -218,7 +218,7 @@ module View = struct
         in add_append tasks items_ul cnt it; acc + 1
       ) 0 strs
     in
-    Pendulum.Machine.set_present_value cnt (!!cnt + nb);
+    Pendulum.Signal.set_present_value cnt (!!cnt + nb);
     nb
 
 
