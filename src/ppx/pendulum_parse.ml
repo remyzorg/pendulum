@@ -171,8 +171,10 @@ let ast_of_expr atom_mapper e =
       let e' = visit e in
       Signal (vid, e')
 
-    | [%expr signal [%e? signal] [%e? _]] ->
-      Error.signal_value_missing e (check_expr_ident signal).content
+    | [%expr signal [%e? signal] [%e? e]] ->
+      let vid = Ast.mk_vid (check_expr_ident signal) @@ atom_mapper [%expr ()] in
+      let e' = visit e in
+      Signal (vid, e')
 
     | [%expr suspend [%e? e] [%e? signal]] ->
       Suspend (visit e, check_signal_presence_expr atom_mapper signal)
