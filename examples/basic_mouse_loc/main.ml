@@ -31,13 +31,13 @@ let%sync m =
 
 let () =
   let open Pendulum in
-  let open Machine in
+  let open Signal in
   let open Graphics in
   Graphics.open_graph " 300x300";
 
-  let (set_btn_up,
+  let set_btn_up,
        set_move,
-       set_ex),
+       set_ex,
       step_m = m ((), Graphics.mouse_pos (), ())
   in
   while true do
