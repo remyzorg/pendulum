@@ -366,10 +366,16 @@ module Ocaml_gen = struct
   open Ast_helper
   open Parsetree
 
+
   let dumb = Exp.constant (Asttypes.Const_int 0)
 
   let int_const i = Exp.constant (Asttypes.Const_int i)
   let string_const s = Exp.constant (Asttypes.Const_string(s, None))
+
+
+  (* let dumb = Exp.constant (Ast_helper.Const.int 0) *)
+  (* let int_const i = Exp.constant (Ast_helper.Const.int i) *)
+  (* let string_const s = Exp.constant (Ast_helper.Const.string s) *)
 
   let mk_pat_var ?t s =
     let pvar = Pat.(Asttypes.(var @@ Location.mkloc s.content s.loc)) in

@@ -12,8 +12,8 @@ module Ast = Sync2ml.Ast
 
 let string_const ident =
   let open Ast in
+  (* Exp.constant ~loc:ident.loc @@ Const.string ident.content *)
   Exp.constant ~loc:ident.loc (Const_string (ident.content, None))
-
 
 let rec expr_of_ast e =
   let open Ast in
