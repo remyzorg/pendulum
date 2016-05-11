@@ -32,8 +32,8 @@ let%sync m2 =
   end
 
 let () =
-  let open Pendulum.Machine in
-  let (set_a, set_b), step = m (0, "") in
+  let open Pendulum.Signal in
+  let set_a, set_b, step = m (0, "") in
   for i = 1 to 10 do
     set_a i;
     ignore (step ());
@@ -42,7 +42,7 @@ let () =
 let () = Format.printf "@."
 
 let () =
-  let open Pendulum.Machine in
+  let open Pendulum.Signal in
   let set_a, step = m2 () in
   for i = 0 to 9 do
     if i mod 3 = 0 then set_a ();

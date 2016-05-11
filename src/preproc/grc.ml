@@ -346,8 +346,7 @@ module Flowgraph = struct
               fprintf fmt "N%d [shape = none, label=<%a>]; @\n" my_id pp_dot fg;
               my_id
 
-          end
-          in Fgtbl.add h fg id; id
+          end in Fgtbl.add h fg id; id
       in
       fprintf fmt "@[<hov 2>digraph flowgraph {@\n";
       ignore(visit fg);
@@ -383,9 +382,10 @@ module Of_ast = struct
     module Ast : Ast.S
     module Fg : Flowgraph.S
     module St : Selection_tree.S
+    open Utils
 
-    val flowgraph : Ast.Tagged.t -> Fg.t
-    val construct : Ast.Tagged.t -> St.t * Fg.t
+    val flowgraph : Ast.Tagged.env -> Options.t -> Ast.Tagged.t -> Fg.t
+    val construct : Ast.Tagged.env -> Options.t -> Ast.Tagged.t -> St.t * Fg.t
   end
 
   module Make (Fg : Flowgraph.S) (St : Selection_tree.S with module Ast = Fg.Ast) = struct
@@ -409,19 +409,19 @@ module Of_ast = struct
        integer identifier of the statement in the Ast. Thus, if S/D(p) is
        required twice or more, the result is already in the table.
     *)
-    let memo_rec =
-      fun h f ->
-        let open Tagged in
-        let rec g env x p e =
-          try Hashtbl.find h x.id with
-          | Not_found ->
-            let y = f g env x p e in
-            Hashtbl.add h x.id y; y
-        in g
+
+    let memo_rec h f =
+      let open Tagged in
+      let rec g env x p e =
+        try Hashtbl.find h (x.id, p, e) with
+        | Not_found ->
+          let y = f g env x p e in
+          Hashtbl.add h (x.id, p, e) y; y
+      in g
 
 
     (** See the compiling rules in documentation *)
-    let surface h =
+    let surface options h =
       let open Tagged in let open Fg in
       let surface surface env p pause endp =
         match p.st.content with
@@ -437,6 +437,7 @@ module Of_ast = struct
 
         | Emit s -> Emit s >> endp
         | Nothing -> endp
+
         | Atom f -> Atom f >> endp
 
         | Suspend (q, _) ->
@@ -452,10 +453,15 @@ module Of_ast = struct
 
         | Seq (q,r) ->
           let surf_r = (surface env r pause @@ exit_node p endp) in
-          Hashtbl.remove h r.id;
           enter_node p
           @@ surface env q pause
           @@ surf_r
+
+        | Loop q ->
+          enter_node p
+          @@ surface env q pause
+          (* @@ if Ast.Analysis.blocking q then endp else *)
+            pause
 
         | Present ((s, atopt), q, r) ->
           let end_pres = exit_node p endp in
@@ -471,9 +477,6 @@ module Of_ast = struct
           enter_node p (
             Instantiate_run (id, sigs, loc)
             >> test_node (Is_paused (id, sigs, loc)) (pause, endrun, None))
-
-
-        | Loop q -> enter_node p @@ surface env q pause pause
 
         | Par (q, r) ->
           let syn = try Hashtbl.find env.synctbl (q.id, r.id) with
@@ -502,12 +505,14 @@ module Of_ast = struct
       memo_rec h surface
 
 
-    let depth h surface =
+    let depth options h surface =
       let open Tagged in let open Fg in
       let depth depth env p pause endp =
         match p.st.content with
-        | Emit s -> endp
+        | Emit _ -> endp
         | Nothing -> endp
+        | Atom _ -> endp
+        | Exit _ -> endp
 
         | Pause -> Exit p.id >> endp
 
@@ -517,22 +522,20 @@ module Of_ast = struct
             pause,
             None)
 
-        | Atom f -> endp
-        | Exit _ -> endp
         | Loop q ->
-          let surf_q = surface env q pause pause in
-          depth env q pause surf_q
+          depth env q pause @@ surface env q pause
+          (* @@ if Ast.Analysis.blocking q then endp else *)
+            pause
 
         | Seq (q, r) ->
           let end_seq = exit_node p endp in
-          if env.under_suspend || Ast.Analysis.blocking q then
-            test_node (Selection q.id) (
-              depth env q pause (surface env r pause end_seq),
-              depth env r pause end_seq,
-              None
-            )
-          else
-            depth env r pause end_seq
+          let depth_r = depth env r pause endp in
+          if Ast.Analysis.blocking q then begin
+            let surf_r = surface env r pause end_seq in
+            let depth_q = depth env q pause surf_r in
+            test_node (Selection q.id) (depth_q, depth_r, None)
+          end
+          else depth_r
 
         | Par (q, r) ->
           let syn = try Hashtbl.find env.synctbl (q.id, r.id) with
@@ -550,9 +553,7 @@ module Of_ast = struct
               depth env r syn syn,
               syn,
               None
-            ),
-            syn
-          )
+            ), syn)
 
         | Present (s, q, r) ->
           let end_pres = exit_node p endp in
@@ -581,7 +582,7 @@ module Of_ast = struct
       in memo_rec h depth
 
 
-    let flowgraph p =
+    let flowgraph astenv options p =
       let open Fg in
       let open Tagged in
       let env = {
@@ -593,10 +594,10 @@ module Of_ast = struct
       let depthtbl, surftbl = Hashtbl.create 30, Hashtbl.create 30 in
 
       (* creates the surface function with the table, to be passed to depth *)
-      let surface = surface surftbl in
+      let surface = surface options surftbl in
 
       let s = surface env p Pause Finish in
-      let d = depth depthtbl surface env p Pause Finish in
+      let d = depth options depthtbl surface env p Pause Finish in
 
       let endsync = match d with
         | Fork (_ , _, sync) -> Some sync
@@ -610,8 +611,8 @@ module Of_ast = struct
         test_node (Selection p.id) (d, s, endsync),
         Some Finish
       )
-    let construct p =
-      St.of_ast p, flowgraph p
+    let construct env options p =
+      St.of_ast p, flowgraph env options p
 
   end
 end

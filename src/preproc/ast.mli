@@ -106,6 +106,7 @@ module type S = sig
 
   type error =
     | Unbound_identifier of string
+
   exception Error of loc * error
   val error : loc:loc -> error -> 'a
   val print_error : Format.formatter -> error -> unit
@@ -133,6 +134,7 @@ module type S = sig
 
 
     type env = {
+      cnt_id : int;
       args_signals : (signal * core_type option) list;
       labels : int IdentMap.t;
       global_occurences : int IdentMap.t ref;
@@ -150,7 +152,8 @@ module type S = sig
       ?binders:((string * signal_binder list) list) ->
       Derived.statement -> t * env
 
-    val print_to_dot : Format.formatter -> t -> unit
+    val pp_st : Format.formatter -> t -> unit
+    val pp_dot : Format.formatter -> t -> unit
   end
 
   module Analysis : sig

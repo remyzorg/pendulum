@@ -366,10 +366,16 @@ module Ocaml_gen = struct
   open Ast_helper
   open Parsetree
 
+
   let dumb = Exp.constant (Asttypes.Const_int 0)
 
   let int_const i = Exp.constant (Asttypes.Const_int i)
   let string_const s = Exp.constant (Asttypes.Const_string(s, None))
+
+
+  (* let dumb = Exp.constant (Ast_helper.Const.int 0) *)
+  (* let int_const i = Exp.constant (Ast_helper.Const.int i) *)
+  (* let string_const s = Exp.constant (Ast_helper.Const.string s) *)
 
   let mk_pat_var ?t s =
     let pvar = Pat.(Asttypes.(var @@ Location.mkloc s.content s.loc)) in
@@ -842,8 +848,10 @@ module Ocaml_gen = struct
     | MLpause -> [%expr raise Pause_exc]
     | MLfinish -> [%expr raise Finish_exc]
     | MLcall (ident, sigs, loc) ->
-      let tuple = match sigs with [] -> assert false | [s] -> [%expr [%e add_deref_local s].value]
-        | l -> Ast_helper.Exp.tuple ~loc @@ List.map (fun s -> [%expr [%e add_deref_local s].value]) l
+      let tuple = match sigs with [] -> assert false
+        | [s] -> [%expr [%e add_deref_local s].value]
+        | l -> Ast_helper.Exp.tuple ~loc @@
+          List.map (fun s -> [%expr [%e add_deref_local s].value]) l
       in [%expr [%e mk_ident ident] [%e tuple]]
 
 
@@ -851,7 +859,7 @@ end
 
 
 let generate options env tast =
-  let selection_tree, flowgraph as grc = Of_ast.construct tast in
+  let selection_tree, flowgraph as grc = Of_ast.construct env options tast in
   Schedule.tag_tested_stmts selection_tree flowgraph;
   let _deps = Schedule.check_causality_cycles grc in
   let interleaved_cfg = Schedule.interleave flowgraph in

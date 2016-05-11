@@ -43,6 +43,13 @@ module StringSet = Set.Make(struct
     let compare = compare
   end)
 
+module Options = struct
+  type t = StringSet.t
+  let is_option str s = StringSet.mem str s
+  let is_debug s = StringSet.mem "debug" s
+end
+
+
 module Queue = struct
   type 'a t = 'a list * 'a list
   let empty = ([], [])

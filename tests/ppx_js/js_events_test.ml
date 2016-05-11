@@ -29,3 +29,28 @@ let%sync emit_basic =
   end
 
 
+let%sync instant_abs =
+  input a;
+  signal b begin
+    signal w begin
+      loop begin
+        present a##click begin
+          present b nothing begin
+            emit w
+          end
+        end;
+        pause
+      end
+      ||
+      loop begin
+        present w
+          (atom (write state)) (* side effect *)
+      end
+    end
+  end
+
+
+
+
+
+

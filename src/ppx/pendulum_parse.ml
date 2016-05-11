@@ -171,8 +171,10 @@ let ast_of_expr atom_mapper e =
       let e' = visit e in
       Signal (vid, e')
 
-    | [%expr signal [%e? signal] [%e? _]] ->
-      Error.signal_value_missing e (check_expr_ident signal).content
+    | [%expr signal [%e? signal] [%e? e]] ->
+      let vid = Ast.mk_vid (check_expr_ident signal) @@ atom_mapper [%expr ()] in
+      let e' = visit e in
+      Signal (vid, e')
 
     | [%expr suspend [%e? e] [%e? signal]] ->
       Suspend (visit e, check_signal_presence_expr atom_mapper signal)
@@ -262,7 +264,7 @@ let rec parse_args options inputs exp =
   | [%expr fun ([%p? {ppat_desc = Ppat_var ident}] : [%t? typ]) -> [%e? exp']] ->
     parse_args options (Ast.({content = ident.txt; loc = ident.loc}, Some typ) :: inputs) exp'
 
-  | { pexp_desc = Pexp_fun (s, _, _, _) } when s <> "" ->
+  | { pexp_desc = Pexp_fun ((* Labelled *) s, _, _, _) } when s <> "" ->
     Error.(syntax_error ~loc:exp.pexp_loc (Unknown_arg_option s))
 
   | { pexp_desc = Pexp_fun _ } ->

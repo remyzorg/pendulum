@@ -12,8 +12,8 @@ module Ast = Sync2ml.Ast
 
 let string_const ident =
   let open Ast in
+  (* Exp.constant ~loc:ident.loc @@ Const.string ident.content *)
   Exp.constant ~loc:ident.loc (Const_string (ident.content, None))
-
 
 let rec expr_of_ast e =
   let open Ast in
@@ -97,20 +97,19 @@ let print_to_dot_one todot topdf topng name ext f e =
   if not todot then (Unix.unlink (full_name ^ ".dot"))
 
 
-let print_to_dot todot topdf topng loc pat =
+let print_to_dot env options todot topdf topng loc pat e =
   let open Location in
-  fun e ->
-    if not (topng || topdf || todot) then () else
-      let name = Filename.(
-          loc.loc_start.Lexing.pos_fname
-          |> chop_extension
-          |> basename
-        ) ^ ("_" ^ pat)
-      in
-      print_to_dot_one todot topdf topng name "_tagged" Ast.Tagged.print_to_dot e;
-      let sel, fg = Sync2ml.Of_ast.construct e in
-      print_to_dot_one todot topdf topng name "_sel" Sync2ml.Selection_tree.print_to_dot sel;
-      print_to_dot_one todot topdf topng name "_fg" Sync2ml.Flowgraph.print_to_dot fg;
-      let fg = Sync2ml.Schedule.interleave fg in
-      print_to_dot_one todot topdf topng name "_interfg"
-        Sync2ml.Flowgraph.print_to_dot fg
+  if not (topng || topdf || todot) then () else
+    let name = Filename.(
+        loc.loc_start.Lexing.pos_fname
+        |> chop_extension
+        |> basename
+      ) ^ ("_" ^ pat)
+    in
+    let pr tag f t = print_to_dot_one todot topdf topng name tag f t in
+    pr "_tagged" Ast.Tagged.pp_dot e;
+    let sel, fg = Sync2ml.Of_ast.construct env options e in
+    pr "_sel" Sync2ml.Selection_tree.print_to_dot sel;
+    pr "_fg" Sync2ml.Flowgraph.print_to_dot fg;
+    let fg = Sync2ml.Schedule.interleave fg in
+    pr "_interfg" Sync2ml.Flowgraph.print_to_dot fg
