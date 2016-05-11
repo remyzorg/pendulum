@@ -20,7 +20,7 @@ but beware that this prototype is still in active developpement**
 
 # Documentation
 
-see a slight [documentation](https://www.github.com/remyzorg/pendulum/wiki/Documentation) and [examples](examples/)
+see a slight [documentation](https://www.github.com/remyzorg/pendulum/wiki) and [examples](examples/)
 
 
 
