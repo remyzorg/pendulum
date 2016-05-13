@@ -223,21 +223,17 @@ let ast_of_expr atom_mapper e =
     | e -> Error.(syntax_error ~loc:e.pexp_loc Keyword)
   in visit e
 
+
+
+let compiler_options = ["animate"; "dsource"; "ast"; "print"; "debug"; "nooptim"]
+
 let rec parse_args options inputs exp =
   let addopt opt = StringSet.add opt options in
   match exp with
-  | [%expr fun ~animate -> [%e? exp']] ->
-    parse_args (addopt "animate") inputs exp'
-  | [%expr fun ~dsource -> [%e? exp']] ->
-    parse_args (addopt "dsource") inputs exp'
-  | [%expr fun ~ast -> [%e? exp']] ->
-    parse_args (addopt "ast") inputs exp'
 
-  | [%expr fun ~print -> [%e? exp']] ->
-    parse_args (addopt "print") inputs exp'
-
-  | [%expr fun ~debug -> [%e? exp']] ->
-    parse_args (addopt "debug") inputs exp'
+  | {pexp_desc = Pexp_fun (s, None, _, exp')}
+    when s <> "" && List.mem s compiler_options ->
+    parse_args (addopt s) inputs exp'
 
   | [%expr fun ~print:[%p? pp_params] -> [%e? exp']] as prt_param ->
     let check_param opts = function
@@ -254,9 +250,6 @@ let rec parse_args options inputs exp =
       | _ -> Error.(error ~loc:prt_param.pexp_loc Wrong_argument_values)
     in
     parse_args opts inputs exp'
-
-  | [%expr fun ~nooptim -> [%e? exp']] ->
-    parse_args (addopt "nooptim") inputs exp'
 
   | [%expr fun [%p? {ppat_desc = Ppat_var ident}] -> [%e? exp']] ->
     parse_args options (Ast.({content = ident.txt; loc = ident.loc}, None) :: inputs) exp'
