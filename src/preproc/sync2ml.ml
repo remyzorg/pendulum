@@ -572,7 +572,7 @@ module Ocaml_gen = struct
         env.args_signals
     in
     match globals with
-    | [] -> [%expr stepfun]
+    | [] -> stepfun
     | [(s, _)] -> [%expr set_present_value [%e mk_ident s.ident], [%e stepfun]]
     | l -> Exp.tuple @@ List.fold_left (fun acc (s, _) ->
         [%expr set_present_value [%e mk_ident s.ident]] :: acc
@@ -586,12 +586,11 @@ module Ocaml_gen = struct
     let mk_method str expr = Asttypes.(Cf.method_ {txt = str; loc = pcf_loc}
         Public (Cfk_concrete (Fresh, expr))) in
     let mk_field_setter s = mk_method s.ident.content
-        [%expr set_present_value [%e mk_ident s.ident]]
-    in
+        [%expr set_present_value [%e mk_ident s.ident]] in
     let pcstr_fields =
       List.fold_left
         (fun acc (s, _) -> if filter_binded s then mk_field_setter s :: acc else acc)
-        [(mk_method api_react_function_name stepfun)] env.args_signals
+        [(mk_method api_react_function_name [%expr [%e stepfun] ()])] env.args_signals
     in Exp.object_ {pcstr_self = Pat.any (); pcstr_fields}
 
   let construct_machine_registers_definitions env e =
@@ -678,7 +677,7 @@ module Ocaml_gen = struct
     let open Selection_tree in
     let animate = StringSet.mem "animate" options in
     let debug = StringSet.mem "debug" options in
-    let asobject = StringSet.mem "object" options in
+    let asobject = StringSet.mem "obj" options in
     let sigs_step_arg =
       match env.Tagged.args_signals with
       | [] -> [%pat? ()]

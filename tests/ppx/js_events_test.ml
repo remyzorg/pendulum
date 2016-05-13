@@ -117,4 +117,3 @@ let%sync mouse_react =
   loop begin
     pause
   end
-

@@ -225,7 +225,7 @@ let ast_of_expr atom_mapper e =
 
 
 
-let compiler_options = ["animate"; "dsource"; "ast"; "print"; "debug"; "nooptim"]
+let compiler_options = ["animate"; "dsource"; "ast"; "print"; "debug"; "nooptim"; "obj"]
 
 let rec parse_args options inputs exp =
   let addopt opt = StringSet.add opt options in
