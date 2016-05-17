@@ -41,15 +41,14 @@ let rec check_signal_presence_expr atom_mapper e =
     let ident, tag, _ = check_signal_presence_expr atom_mapper sigexpr in
     ident, tag, Some (atom_mapper boolexpr)
 
-  | [%expr [%e? elt] ## [%e? event]] ->
-     let elt_ident = check_expr_ident elt in
-     let event_ident =
-       begin match event with
-       | {pexp_desc = Pexp_ident {txt = Lident content; loc}} -> {loc; content}
-       | _ -> Error.(syntax_error ~loc:event.pexp_loc Event_name)
-       end
-     in
-     elt_ident, Some event_ident, None
+
+  | [%expr [%e? elt] ##
+             [%e? {pexp_desc = Pexp_ident {txt = Lident content; loc}} ]]
+  | {pexp_desc = Pexp_field (elt, {txt = Lident content; loc})} ->
+    check_expr_ident elt, Some {loc; content}, None
+
+  | [%expr [%e? elt] ## [%e? err]] ->
+    Error.(syntax_error ~loc:err.pexp_loc Event_name)
   | _ -> Error.(syntax_error ~loc:e.pexp_loc Signal_test)
 
 let rec check_signal_emit_expr acc atom_mapper e =

@@ -580,6 +580,20 @@ module Ocaml_gen = struct
         [%expr set_present_value [%e mk_ident s.ident]] :: acc
       ) [stepfun] l
 
+  let construct_input_setters_object env stepfun =
+    let open Tagged in
+    let globals =
+      List.filter (fun (s, _) -> not @@ Hashtbl.mem env.Tagged.binders_env s.ident.content)
+        env.args_signals
+    in
+    match globals with
+    | [] -> true, [%expr stepfun]
+    | [(s, _)] -> false, [%expr set_present_value [%e mk_ident s.ident], [%e stepfun]]
+    | l -> false, Exp.tuple @@ List.fold_left (fun acc (s, _) ->
+        [%expr set_present_value [%e mk_ident s.ident]] :: acc
+      ) [stepfun] l
+
+
   let construct_machine_registers_definitions env e =
     IdentMap.fold (fun k (_, insts) acc ->
         List.fold_left (fun acc (inst_int_id, args) ->

@@ -48,22 +48,32 @@ module type S = sig
 
   type signal_binder =
     | Access of ident * ident list
-    | Event of ident * gatherer
+    | Event of ident * gatherer (** each event tag has a gatherer *)
     | No_binding
 
-  type signal = { ident : ident; origin : signal_origin; bind : signal_binder; gatherer : gatherer}
+  type signal = {
+    ident : ident; (** located signal identifier *)
+    origin : signal_origin; (** denote where it's been defined. *)
+    bind : signal_binder; (** a tag used in signal expressions for a spcial usage of a signal*)
+    gatherer : gatherer (** gathering function *)
+  }
+
   type label = Label of ident
   type atom = { locals : signal list; exp : exp}
+  (** an expression with its local scope *)
 
   type test = ident * ident option * exp option
+  (** a presence test expression : a signal, a tag, an expr *)
 
   type valued_signal = {signal : signal ; svalue : atom}
-  type valued_ident = {sname : ident ; fields : ident list; ivalue : exp}
-  val mk_signal : ?origin:signal_origin -> ?bind:signal_binder -> ?gatherer:exp -> ident -> signal
+  (** a signal carrying an expression (for definition or emission) *)
 
+  type valued_ident = {sname : ident ; fields : ident list; ivalue : exp}
+  (** a valued signal in the derived ast *)
+
+  val mk_signal : ?origin:signal_origin -> ?bind:signal_binder -> ?gatherer:exp -> ident -> signal
   val mk_vsig : signal -> signal list -> exp -> valued_signal
   val mk_vid : ?fields:ident list -> ident -> exp -> valued_ident
-
   val mk_atom : ?locals:signal list -> exp -> atom
 
   module IdentMap : Map.S with type key = ident
@@ -92,6 +102,7 @@ module type S = sig
       | Signal of valued_ident * statement
       | Run of ident * ident list * loc
 
+      (** Non-core statements *)
       | Halt
       | Sustain of valued_ident
       | Present_then of test * statement
@@ -133,16 +144,24 @@ module type S = sig
     and tagged = (tagged_ast) location
 
 
-    type env = {
-      cnt_id : int;
+   type env = {
       args_signals : (signal * core_type option) list;
+      (** inputs and outputs signals *)
       labels : int IdentMap.t;
+      (** scoped preemption labels *)
       global_occurences : int IdentMap.t ref;
+      (** global ccounter of occurences of signal names *)
       scope : (int * signal_origin * signal_binder * gatherer) SignalMap.t;
+      (** local signal scope *)
       binders_env : (string, signal_binder list) Hashtbl.t;
+      (** signals created as a binding with particular
+          side effects : events, assignements *)
       local_only_env : (valued_signal) list ref;
+      (** global env of local defined signals *)
       local_only_scope : valued_signal list;
+      (** local env of local defined signals *)
       machine_runs : (int * (int * signal list) list) IdentMap.t ref;
+      (** machine runs env *)
     }
 
     val print_env : Format.formatter -> env -> unit
@@ -152,6 +171,7 @@ module type S = sig
       ?binders:((string * signal_binder list) list) ->
       Derived.statement -> t * env
 
+    (** pretty printers *)
     val pp_st : Format.formatter -> t -> unit
     val pp_dot : Format.formatter -> t -> unit
   end

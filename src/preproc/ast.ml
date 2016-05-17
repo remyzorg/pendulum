@@ -117,7 +117,6 @@ module type S = sig
     and tagged = (tagged_ast) location
 
     type env = {
-      cnt_id : int;
       args_signals : (signal * core_type option) list;
       labels : int IdentMap.t;
       global_occurences : int IdentMap.t ref;
@@ -281,7 +280,6 @@ module Make (E : Exp) = struct
       {id; st = {loc ; content}}
 
     type env = {
-      cnt_id : int;
       args_signals : (signal * core_type option) list;
       labels : int IdentMap.t;
       global_occurences : int IdentMap.t ref;
@@ -371,7 +369,6 @@ module Make (E : Exp) = struct
 
 
     let create_env sigs binders = {
-      cnt_id = 0;
       args_signals = sigs;
       labels = IdentMap.empty;
       global_occurences = ref IdentMap.(List.fold_left (fun accmap (s, _) ->
@@ -500,7 +497,7 @@ module Make (E : Exp) = struct
 
       in
       let tagged = visit start_env ast in
-      tagged, { start_env with cnt_id = !id }
+      tagged, start_env
 
 
     let pp_st fmt x =
