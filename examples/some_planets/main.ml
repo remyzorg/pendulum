@@ -268,7 +268,7 @@ let _ =
         (* clear ctx canvas##.height canvas##.width; *)
 
         c := {!c with
-          x = (!center).x +. radius *. (cos angle) *. pi;
+          x = (!centertx.fillStyle = "red";).x +. radius *. (cos angle) *. pi;
           y = (!center).y +. radius *. (sin angle) *. pi
         };
 
