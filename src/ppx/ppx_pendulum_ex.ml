@@ -12,7 +12,6 @@ open Utils
 module Ast = Sync2ml.Ast
 
 
-
 let parse_and_generate atom_mapper vb =
   let e, options, args = Pendulum_parse.parse_args (StringSet.empty) [] vb.pvb_expr in
   let has_opt s = StringSet.mem s options in
@@ -33,9 +32,10 @@ let parse_and_generate atom_mapper vb =
     let ast = Pendulum_parse.ast_of_expr atom_mapper e in
     let tast, env = Ast.Tagged.of_ast ~sigs ~binders ast in
     let tast = Ast.Analysis.filter_dead_trees tast in
+    let pname = Format.sprintf "%s_%s" (Pendulum_misc.filename loc) pat in
     Pendulum_misc.print_to_dot env (StringSet.remove "debug" options)
-      (has_opt "dot") (has_opt "pdf") (has_opt "png") loc pat tast;
-    let ocaml_expr = Sync2ml.generate options env tast in
+      (has_opt "dot") (has_opt "pdf") (has_opt "png") pname tast;
+    let ocaml_expr = Sync2ml.generate pname options env tast in
     if has_opt "dsource" then Format.printf "%a@." Pprintast.expression ocaml_expr;
     [%expr [%e ocaml_expr]]
 
