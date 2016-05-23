@@ -81,20 +81,20 @@ let init_model ctx =
   let h = 20. in
   let x = float_of_int @@ ctx##.canvas##.clientWidth / 2 in
   let ground = 0. in
-  {ground; player = {x; y = 0.; w = 10.; h; color = "red"; vx = 10.; vy = 0.}}
+  {ground; player = {x; y = 0.; w = 10.; h; color = "red"; vx = 1.; vy = 0.}}
 
-let move_entity e dir =
+let move_entity dt e dir =
   match dir with
-  | Right -> { e with x = e.x +. e.vx }
-  | Left -> { e with x = e.x -. e.vx }
-  | Up when e.y = 0. -> { e with vy = 24. }
+  | Right -> { e with x = e.x +. e.vx *. dt }
+  | Left -> { e with x = e.x -. e.vx *. dt }
+  | Up when e.y = 0. -> { e with vy = 6. }
   | _ -> e
 
 
-let move_model _ m move = { m with player = move_entity m.player move }
-let gravity _ ({player} as m) =
+let move_model dt m move = { m with player = move_entity dt m.player move }
+let gravity dt ({player} as m) =
   let y = max 0. (player.y +. player.vy) in
-  let vy = if y > 0. then player.vy -. 4. else 0. in
+  let vy = if y > 0. then player.vy -. dt /. 4. else 0. in
   {m with player = { player with y; vy;} }
 
 
@@ -140,11 +140,11 @@ let%sync game ~obj w ctx dt =
     !(clear !!ctx);
 
        present (keydowns & List.mem Refresh !!keydowns) !((!!w)##.location##reload)
-    || present left (emit model (move_model dt !!model Left))
-    || present right (emit model (move_model dt !!model Right))
-    || present up (emit model (move_model dt !!model Up))
+    || present left (emit model (move_model !!dt !!model Left))
+    || present right (emit model (move_model !!dt !!model Right))
+    || present up (emit model (move_model !!dt !!model Up))
 
-    ; emit model (gravity dt !!model)
+    ; emit model (gravity !!dt !!model)
     ; emit redraw
     ; pause
   end
@@ -176,11 +176,12 @@ let _ =
           g#keyups k; Js._false
         );
 
-      let tick  = ref 20. in
+      let fps = 60. in
+      let tick  = ref 0. in
 
       let rec loop_raf timestamp =
         let _ = window##requestAnimationFrame (Js.wrap_callback loop_raf) in
-        if timestamp > !tick +. 20. then begin
+        if timestamp > !tick +. (1000. /. fps) then begin
           let elaps = timestamp -. !tick in
           tick := timestamp;
           g#dt elaps;
