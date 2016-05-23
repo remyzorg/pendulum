@@ -55,12 +55,12 @@ let clear ctx = ctx##clearRect 0. 0.
 
 type entity = {
   x : float; y : float; w : float; h : float; color : string;
-  speed : float;
+  vx : float; vy : float
 }
 
 let pp_entity () e =
-  Format.sprintf "{x = %f,y = %f); speed = %f}"
-    e.x e.y e.speed
+  Format.sprintf "{x = %f,y = %f); vx = %f}"
+    e.x e.y e.vx
 
 type model = {
   ground : float;
@@ -81,16 +81,24 @@ let init_model ctx =
   let h = 20. in
   let x = float_of_int @@ ctx##.canvas##.clientWidth / 2 in
   let ground = 0. in
-  {ground; player = {x; y = 0.; w = 10.; h; color = "red"; speed = 2.}}
-
+  {ground; player = {x; y = 0.; w = 10.; h; color = "red"; vx = 4.; vy = 0.}}
 
 let move_entity e dir =
-  {e with x = begin e.x +. match dir with
-  | Right -> e.speed | Left -> ~-. (e.speed) | _ -> 0.end}
+  match dir with
+  | Right -> { e with x = e.x +. e.vx }
+  | Left -> { e with x = e.x -. e.vx }
+  | Up when e.y = 0. -> { e with vy = 24. }
+  | _ -> e
+
 
 let move_model m move = { m with player = move_entity m.player move }
+let gravity ({player} as m) =
+  let y = max 0. (player.y +. player.vy) in
+  let vy = if y > 0. then player.vy -. 4. else 0. in
+  {m with player = { player with y; vy;} }
 
-let%sync game ~obj w ctx =
+
+let%sync game ~obj w ctx dt =
   input keydowns (fun acc k -> k :: acc);
   input keyups (fun acc k -> k :: acc);
 
@@ -131,6 +139,8 @@ let%sync game ~obj w ctx =
     || present right (emit model (move_model !!model Right))
     || present up (emit model (move_model !!model Up))
 
+    ; emit model (gravity !!model)
+
     ; emit redraw
     ; pause
   end
@@ -150,7 +160,7 @@ let _ =
       let canvas = "canvas" @> CoerceTo.canvas in
       let ctx = canvas##getContext (Dom_html._2d_) in
 
-      let g = game (window, ctx, [], [Nope 0]) in
+      let g = game (window, ctx, 0., [], [Nope 0]) in
 
       document##.onkeydown := handler (fun ev ->
           debug "";
@@ -163,12 +173,14 @@ let _ =
           g#keyups k; Js._false
         );
 
-      let tick  = ref 0. in
+      let tick  = ref 25. in
 
       let rec loop_raf timestamp =
         let _ = window##requestAnimationFrame (Js.wrap_callback loop_raf) in
-        if timestamp > !tick then begin
-          tick := timestamp +. 0.;
+        if timestamp > !tick +. 25. then begin
+          let elaps = timestamp -. !tick in
+          tick := timestamp;
+          g#dt elaps;
           ignore @@ g#react;
         end;
         ()
