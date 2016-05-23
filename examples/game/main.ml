@@ -26,16 +26,16 @@ module Controles = struct
 
   let keycode e = e##.keyCode
 
-  type key = Right | Left | Space | Nope of int | Refresh
+  type key = Right | Left | Up | Nope of int | Refresh
 
   let string_of_key = function
     | Right -> "Right" | Left -> "Left" | Refresh -> "Refresh"
-    | Space -> "Space" | Nope i -> "Nope " ^ string_of_int i
+    | Up -> "Up" | Nope i -> "Nope " ^ string_of_int i
 
   let to_key = function
     | 37 | 72 | 81 -> Left
     | 39 | 76 | 68 -> Right
-    | 32 -> Space
+    | 32 | 38 -> Up
     | 82 -> Refresh
     | i -> Nope i
 
@@ -45,7 +45,7 @@ end
 open Controles
 
 let is_move =
-  function Right | Left | Space -> true | _ -> false
+  function Right | Left | Up -> true | _ -> false
 
 
 let clear ctx = ctx##clearRect 0. 0.
@@ -63,26 +63,32 @@ let pp_entity () e =
     e.x e.y e.speed
 
 type model = {
+  ground : float;
   player : entity
 }
 
 let pp_model () m =
   Format.sprintf "{player = %a}" pp_entity m.player
 
+
 let draw_model ctx model =
   ctx##.fillStyle := Js.string model.player.color;
-  ctx##fillRect model.player.x model.player.y model.player.w model.player.h
+  let y = float_of_int ctx##.canvas##.clientHeight
+          -. model.ground -. model.player.h -. model.player.y
+  in ctx##fillRect model.player.x y model.player.w model.player.h
 
 let init_model ctx =
   let h = 20. in
   let x = float_of_int @@ ctx##.canvas##.clientWidth / 2 in
-  let y = float_of_int @@ ctx##.canvas##.clientHeight - (int_of_float h) in
-  {player = {x; y; w = 10.; h; color = "red"; speed = 2.}}
+  let ground = 0. in
+  {ground; player = {x; y = 0.; w = 10.; h; color = "red"; speed = 2.}}
 
 
 let move_entity e dir =
   {e with x = begin e.x +. match dir with
   | Right -> e.speed | Left -> ~-. (e.speed) | _ -> 0.end}
+
+let move_model m move = { m with player = move_entity m.player move }
 
 let%sync game ~obj w ctx =
   input keydowns (fun acc k -> k :: acc);
@@ -90,11 +96,12 @@ let%sync game ~obj w ctx =
 
   let model = init_model !!ctx in
   let redraw = () in
+  let left = () in let right = () in let up = () in
 
-  let left = () in
-  let right = () in
-  let jump = () in
-
+  loop begin
+    !(debug "[%s]" (String.concat "; " @@ List.map string_of_key !!keydowns));
+  end
+  ||
   loop begin
     await (keydowns & List.mem Left !!keydowns); trap up begin
       loop (emit left (); pause)
@@ -110,29 +117,20 @@ let%sync game ~obj w ctx =
   end
   ||
   loop begin
-    await (keydowns & List.mem Space !!keydowns); trap up begin
-      loop (emit jump (); pause)
-      || loop (present (keyups & List.mem Space !!keyups) (exit up))
+    await (keydowns & List.mem Up !!keydowns); trap up begin
+      loop (emit up (); pause)
+      || loop (present (keyups & List.mem Up !!keyups) (exit up))
     end; pause
   end
   ||
-
-
   loop begin
     !(clear !!ctx);
-    present (keydowns & List.mem Refresh !!keydowns) !((!!w)##.location##reload);
 
-    present left begin
-      emit model {player = move_entity (!!model).player Left};
-    end
-    ||
-    present right begin
-      emit model {player = move_entity (!!model).player Right};
-    end
-    ||
-    present jump begin
-      emit model {player = move_entity (!!model).player Space};
-    end
+    present (keydowns & List.mem Refresh !!keydowns) !((!!w)##.location##reload)
+    || present left (emit model (move_model !!model Left))
+    || present right (emit model (move_model !!model Right))
+    || present up (emit model (move_model !!model Up))
+
     ; emit redraw
     ; pause
   end
@@ -143,6 +141,8 @@ let%sync game ~obj w ctx =
   end
 
 
+
+
 let _ =
   let open Dom_html in
   window##.onload := handler (fun _ ->
@@ -150,7 +150,7 @@ let _ =
       let canvas = "canvas" @> CoerceTo.canvas in
       let ctx = canvas##getContext (Dom_html._2d_) in
 
-      let g = game (window, ctx, [Nope 0], [Nope 0]) in
+      let g = game (window, ctx, [], [Nope 0]) in
 
       document##.onkeydown := handler (fun ev ->
           debug "";

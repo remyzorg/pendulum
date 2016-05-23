@@ -2,10 +2,8 @@
 
 all: main.ml
 	ocamlbuild -use-ocamlfind \
-		-package js_of_ocaml.ppx \
-		-package pendulum \
-		-package js_of_ocaml \
-		-package pendulum.ppx \
+		-pkgs js_of_ocaml.ppx,js_of_ocaml \
+		-pkgs pendulum,pendulum.ppx \
 		main.byte
 	js_of_ocaml main.byte
 
