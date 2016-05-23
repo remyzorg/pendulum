@@ -81,7 +81,7 @@ let init_model ctx =
   let h = 20. in
   let x = float_of_int @@ ctx##.canvas##.clientWidth / 2 in
   let ground = 0. in
-  {ground; player = {x; y = 0.; w = 10.; h; color = "red"; vx = 4.; vy = 0.}}
+  {ground; player = {x; y = 0.; w = 10.; h; color = "red"; vx = 10.; vy = 0.}}
 
 let move_entity e dir =
   match dir with
@@ -91,8 +91,8 @@ let move_entity e dir =
   | _ -> e
 
 
-let move_model m move = { m with player = move_entity m.player move }
-let gravity ({player} as m) =
+let move_model _ m move = { m with player = move_entity m.player move }
+let gravity _ ({player} as m) =
   let y = max 0. (player.y +. player.vy) in
   let vy = if y > 0. then player.vy -. 4. else 0. in
   {m with player = { player with y; vy;} }
@@ -107,40 +107,44 @@ let%sync game ~obj w ctx dt =
   let left = () in let right = () in let up = () in
 
   loop begin
-    !(debug "[%s]" (String.concat "; " @@ List.map string_of_key !!keydowns));
+    present (keydowns & List.mem Left !!keydowns) (
+      trap up (loop (
+          present (keyups & List.mem Left !!keyups)
+            (exit up)
+        ; emit left ()
+        ; pause))
+    ) ; pause
   end
   ||
   loop begin
-    await (keydowns & List.mem Left !!keydowns); trap up begin
-      loop (emit left (); pause)
-      || loop (present (keyups & List.mem Left !!keyups) (exit up))
-    end; pause
+    present (keydowns & List.mem Right !!keydowns) (
+      trap up (loop (
+          present (keyups & List.mem Right !!keyups)
+            (exit up)
+        ; emit right ()
+        ; pause))
+    ) ; pause
   end
   ||
   loop begin
-    await (keydowns & List.mem Right !!keydowns); trap up begin
-      loop (emit right (); pause)
-      || loop (present (keyups & List.mem Right !!keyups) (exit up))
-    end; pause
-  end
-  ||
-  loop begin
-    await (keydowns & List.mem Up !!keydowns); trap up begin
-      loop (emit up (); pause)
-      || loop (present (keyups & List.mem Up !!keyups) (exit up))
-    end; pause
+    present (keydowns & List.mem Up !!keydowns) (
+      trap up (loop (
+          present (keyups & List.mem Up !!keyups)
+            (exit up)
+        ; emit up ()
+        ; pause))
+    ) ; pause
   end
   ||
   loop begin
     !(clear !!ctx);
 
-    present (keydowns & List.mem Refresh !!keydowns) !((!!w)##.location##reload)
-    || present left (emit model (move_model !!model Left))
-    || present right (emit model (move_model !!model Right))
-    || present up (emit model (move_model !!model Up))
+       present (keydowns & List.mem Refresh !!keydowns) !((!!w)##.location##reload)
+    || present left (emit model (move_model dt !!model Left))
+    || present right (emit model (move_model dt !!model Right))
+    || present up (emit model (move_model dt !!model Up))
 
-    ; emit model (gravity !!model)
-
+    ; emit model (gravity dt !!model)
     ; emit redraw
     ; pause
   end
@@ -160,24 +164,23 @@ let _ =
       let canvas = "canvas" @> CoerceTo.canvas in
       let ctx = canvas##getContext (Dom_html._2d_) in
 
-      let g = game (window, ctx, 0., [], [Nope 0]) in
+      let g = game (window, ctx, 0., [], []) in
 
-      document##.onkeydown := handler (fun ev ->
-          debug "";
+      window##.onkeydown := handler (fun ev ->
           let k = (to_key ev##.keyCode) in
           g#keydowns k; Js._false
         );
 
-      document##.onkeyup := handler (fun ev ->
+      window##.onkeyup := handler (fun ev ->
           let k = (to_key ev##.keyCode) in
           g#keyups k; Js._false
         );
 
-      let tick  = ref 25. in
+      let tick  = ref 20. in
 
       let rec loop_raf timestamp =
         let _ = window##requestAnimationFrame (Js.wrap_callback loop_raf) in
-        if timestamp > !tick +. 25. then begin
+        if timestamp > !tick +. 20. then begin
           let elaps = timestamp -. !tick in
           tick := timestamp;
           g#dt elaps;
