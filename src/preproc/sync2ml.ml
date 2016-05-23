@@ -870,14 +870,33 @@ module Ocaml_gen = struct
 end
 
 
-let generate options env tast =
+let generate pname options env tast =
+  let t0 = Sys.time () in
+
   let selection_tree, flowgraph as grc = Of_ast.construct env options tast in
+  let t_cons = Sys.time () -. t0 in
+
   Schedule.tag_tested_stmts selection_tree flowgraph;
+
   let _deps = Schedule.check_causality_cycles grc in
+  let t_check = Sys.time () -. t_cons in
+
   let interleaved_cfg = Schedule.interleave flowgraph in
+  let t_inter = Sys.time () -. t_check in
   let maxid, deps = deplist selection_tree in
   let dep_array = Array.make (maxid + 1) [] in
   let ml_ast = grc2ml dep_array interleaved_cfg in
+  let t_ml = Sys.time () -. t_inter in
+
+  if StringSet.mem "stats" options then Schedule.Stats.(
+      Format.printf "======> %s\nfg:\t%a\nfg_sched:\t%a\n"
+        pname pp flowgraph pp interleaved_cfg
+      ; Format.printf "time: cons(%f); check (%f); inter(%f); ml(%f)\n"
+          t_cons t_check t_inter t_ml
+      ; Format.printf "<======\n"
+
+    );
+
   let ml_ast' =
     if not @@ StringSet.mem "nooptim" options then
       ML_optimize.gather_enter_exits ml_ast maxid

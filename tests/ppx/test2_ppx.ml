@@ -30,7 +30,7 @@ let%sync m_loop_incr =
     pause
   )
 
-let%sync many_par =
+let%sync many_par ~stats =
   loop pause
   || loop pause
   || loop pause
@@ -75,7 +75,7 @@ let%sync many_par =
 
 
 
-let%sync reactive_player =
+let%sync reactive_player ~stats =
   input play;
   input pause;
   input start_slide;
