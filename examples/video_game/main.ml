@@ -20,20 +20,33 @@ let (@>) s coerce =
     (fun () -> error "can't find element %s" s)
 
 
-let keycode e = e##.keyCode
+module Controles = struct
 
-type key = Right | Left | Space | Nope of int | Refresh
-let is_move = function Right | Left | Space -> true | _ -> false
+  let pressed = Array.make 1000 0
 
-let string_of_key = function Right -> "Right" | Left -> "Left"
-  | Space -> "Space" | Nope i -> "Nope " ^ string_of_int i | Refresh -> "Refresh"
+  let keycode e = e##.keyCode
 
-let to_key = function
-  | 37 | 72 | 81 -> Left
-  | 39 | 76 | 68 -> Right
-  | 32 -> Space
-  | 82 -> Refresh
-  | i -> Nope i
+  type key = Right | Left | Space | Nope of int | Refresh
+
+  let string_of_key = function
+    | Right -> "Right" | Left -> "Left" | Refresh -> "Refresh"
+    | Space -> "Space" | Nope i -> "Nope " ^ string_of_int i
+
+  let to_key = function
+    | 37 | 72 | 81 -> Left
+    | 39 | 76 | 68 -> Right
+    | 32 -> Space
+    | 82 -> Refresh
+    | i -> Nope i
+
+
+end
+
+open Controles
+
+let is_move =
+  function Right | Left | Space -> true | _ -> false
+
 
 let clear ctx = ctx##clearRect 0. 0.
     (float_of_int ctx##.canvas##.clientWidth)
@@ -45,46 +58,85 @@ type entity = {
   speed : float;
 }
 
+let pp_entity () e =
+  Format.sprintf "{x = %f,y = %f); speed = %f}"
+    e.x e.y e.speed
+
 type model = {
   player : entity
 }
+
+let pp_model () m =
+  Format.sprintf "{player = %a}" pp_entity m.player
 
 let draw_model ctx model =
   ctx##.fillStyle := Js.string model.player.color;
   ctx##fillRect model.player.x model.player.y model.player.w model.player.h
 
 let init_model ctx =
-  let h = 10. in
+  let h = 20. in
   let x = float_of_int @@ ctx##.canvas##.clientWidth / 2 in
   let y = float_of_int @@ ctx##.canvas##.clientHeight - (int_of_float h) in
-  {player = {x; y; w = 10.; h; color = "red"; speed = 1.}}
+  {player = {x; y; w = 10.; h; color = "red"; speed = 2.}}
 
-let move_entity e dir = {
-  e with x = begin e.x +. match dir with
-  | Right -> e.x +. e.speed
-  | Left -> e.x -. e.speed
-  | _ -> e.x
-  end}
 
-let%sync game ~obj w ctx key =
+let move_entity e dir =
+  {e with x = begin e.x +. match dir with
+  | Right -> e.speed | Left -> ~-. (e.speed) | _ -> 0.end}
+
+let%sync game ~obj w ctx =
+  input keydowns (fun acc k -> k :: acc);
+  input keyups (fun acc k -> k :: acc);
 
   let model = init_model !!ctx in
   let redraw = () in
 
+  let left = () in
+  let right = () in
+  let jump = () in
+
+  loop begin
+    await (keydowns & List.mem Left !!keydowns); trap up begin
+      loop (emit left (); pause)
+      || loop (present (keyups & List.mem Left !!keyups) (exit up))
+    end; pause
+  end
+  ||
+  loop begin
+    await (keydowns & List.mem Right !!keydowns); trap up begin
+      loop (emit right (); pause)
+      || loop (present (keyups & List.mem Right !!keyups) (exit up))
+    end; pause
+  end
+  ||
+  loop begin
+    await (keydowns & List.mem Space !!keydowns); trap up begin
+      loop (emit jump (); pause)
+      || loop (present (keyups & List.mem Space !!keyups) (exit up))
+    end; pause
+  end
+  ||
+
+
   loop begin
     !(clear !!ctx);
+    present (keydowns & List.mem Refresh !!keydowns) !((!!w)##.location##reload);
 
-    present (key & !!key = Refresh) !((!!w)##.location##reload);
-
-    present (key & is_move !!key) begin
-      emit model {player = move_entity (!!model).player !!key}
+    present left begin
+      emit model {player = move_entity (!!model).player Left};
     end
-
+    ||
+    present right begin
+      emit model {player = move_entity (!!model).player Right};
+    end
+    ||
+    present jump begin
+      emit model {player = move_entity (!!model).player Space};
+    end
     ; emit redraw
     ; pause
   end
   ||
-
   loop begin
     present redraw !(draw_model !!ctx !!model);
     pause
@@ -98,16 +150,27 @@ let _ =
       let canvas = "canvas" @> CoerceTo.canvas in
       let ctx = canvas##getContext (Dom_html._2d_) in
 
-      let g = game (window, ctx, Nope 0) in
+      let g = game (window, ctx, [Nope 0], [Nope 0]) in
 
-      window##.onkeydown := handler (fun ev ->
+      document##.onkeydown := handler (fun ev ->
+          debug "";
           let k = (to_key ev##.keyCode) in
-          g#key k; Js._false
+          g#keydowns k; Js._false
         );
 
-      let rec loop_raf _ =
-        ignore @@ g#react;
+      document##.onkeyup := handler (fun ev ->
+          let k = (to_key ev##.keyCode) in
+          g#keyups k; Js._false
+        );
+
+      let tick  = ref 0. in
+
+      let rec loop_raf timestamp =
         let _ = window##requestAnimationFrame (Js.wrap_callback loop_raf) in
+        if timestamp > !tick then begin
+          tick := timestamp +. 0.;
+          ignore @@ g#react;
+        end;
         ()
       in
       let _ = window##requestAnimationFrame (Js.wrap_callback loop_raf) in
