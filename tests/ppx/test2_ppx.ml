@@ -214,5 +214,13 @@ let () =
 
 
 
+let p =
+  let%sync react_obj ~obj a =
+    loop begin
+      !(Format.printf "%d\n" !!a)
+    ; pause
+    end in react_obj (0)
 
-
+let () =
+  p#a 10;
+  ignore @@ p#react 

@@ -641,6 +641,12 @@ module Schedule = struct
       -> Fg.t * Fg.t
     val children: Fg.t -> Fg.t -> Fg.t -> Fg.t
     val interleave: Fg.t -> Fg.t
+
+    module Stats : sig
+      val size : Fg.t -> int
+      val pp : Format.formatter -> Fg.t -> unit
+    end
+
   end
 
   module Make
@@ -698,7 +704,7 @@ module Schedule = struct
       visit empty fg
 
     let memo_rec (type a) (module H : Hashtbl.S with type key = a) =
-      let h = H.create 17 in
+      let h = H.create 87 in
       fun f ->
         let rec g x =
           try H.find h x with
@@ -963,6 +969,31 @@ module Schedule = struct
           Fgtbl.add visit_tbl fg fg'; fg'
       in
       visit fg
+
+    module Stats = struct
+
+      let size fg =
+        let h = Fgtbl.create 119 in
+        let rec aux fg =
+          try Fgtbl.find h fg with
+          | Not_found ->
+            Fgtbl.add h fg ();
+            begin match fg with
+              | Call (Exit n, t) -> aux t
+              | Call (a, t) -> aux t
+              | Test (_, t1, t2, _) | Fork (t1, t2, _) ->
+                aux t1; aux t2
+              | Pause | Finish -> ()
+            end
+        in
+        aux fg; Fgtbl.length h
+
+      let pp fmt fg =
+        Format.fprintf fmt "size: %d" (size fg)
+
+    end
+
+
   end
 
 end

@@ -97,15 +97,16 @@ let print_to_dot_one todot topdf topng name ext f e =
   if not todot then (Unix.unlink (full_name ^ ".dot"))
 
 
-let print_to_dot env options todot topdf topng loc pat e =
+let filename loc =
   let open Location in
+  Filename.(
+    loc.loc_start.Lexing.pos_fname
+    |> chop_extension
+    |> basename
+  )
+
+let print_to_dot env options todot topdf topng name e =
   if not (topng || topdf || todot) then () else
-    let name = Filename.(
-        loc.loc_start.Lexing.pos_fname
-        |> chop_extension
-        |> basename
-      ) ^ ("_" ^ pat)
-    in
     let pr tag f t = print_to_dot_one todot topdf topng name tag f t in
     pr "_tagged" Ast.Tagged.pp_dot e;
     let sel, fg = Sync2ml.Of_ast.construct env options e in

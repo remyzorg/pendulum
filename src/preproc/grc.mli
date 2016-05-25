@@ -164,6 +164,15 @@ module Schedule : sig
     (** It basically linearize the flowgraph by removing all the Fork
         The algorithm is rather naive and could be optimized.*)
 
+    module Stats : sig
+
+      val size : Fg.t -> int
+
+      val pp : Format.formatter -> Fg.t -> unit
+
+
+    end
+
   end
 
   module Make (Fg : Flowgraph.S) (St : Selection_tree.S with module Ast = Fg.Ast) : S
