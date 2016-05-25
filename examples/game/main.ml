@@ -30,6 +30,7 @@ let sprites = [
   (* "s8"    , (15., 288., 43., 14.); *)
 ]
 
+let to_jsstring s = Js.(some @@ string s)
 
 let draw_sprites ctx =
   let img = Dom_html.(createImg document) in
@@ -52,7 +53,7 @@ module Controles = struct
   let keycode e = e##.keyCode
 
   type key = Right | Run | Left | Up | Nope of int | Refresh
-  type direction = R | L
+  type direction = R | L [@@deriving yojson, show]
 
   let string_of_key = function
     | Right -> "Right" | Left -> "Left" | Refresh -> "Refresh"
@@ -61,7 +62,7 @@ module Controles = struct
   let to_key = function
     | 37 | 72 | 81 -> Left
     | 39 | 76 | 68 -> Right
-    | 38 | 75 -> Up
+    | 38 | 75 | 90 -> Up
     | 87 | 32 -> Run
     | 82 -> Refresh
     | i -> Nope i
@@ -73,45 +74,47 @@ open Controles
 let is_move =
   function Right | Left | Up | Run -> true | _ -> false
 
-
 let clear ctx = ctx##clearRect 0. 0.
     (float_of_int ctx##.canvas##.clientWidth)
     (float_of_int ctx##.canvas##.clientHeight)
 
-
 type entity = {
-  x : float; y : float; w : float; h : float; color : string;
-  vx : float; vy : float; dir : direction; vx_mod : bool;
-}
+  x : float;
+  y : float;
+  w : float;
+  h : float;
+  color : string;
+  vx : float;
+  vy : float;
+  dir : direction;
+  vx_mod : bool;
+} [@@deriving yojson, show]
 
-let pp_entity () e =
-  Format.sprintf "{x = %f,y = %f); vx = %f}"
-    e.x e.y e.vx
+let pp_entity e =
+  let json = entity_to_yojson e in
+  Yojson.Safe.pretty_to_string ~std:true json
+
 
 type model = {
   ground : float;
   player : entity
 }
 
-let pp_model () m =
-  Format.sprintf "{player = %a}" pp_entity m.player
-
-let draw_model dt img t ctx model =
+let draw_model dt img t ctx ({player = p} as m) =
   let asp = int_of_float @@ if dt = 0. then 20. else 20. /. dt in
-  let animspeed = if model.player.vx_mod then asp else asp + asp / 2 in
-  let walk = model.player.vx <> 0. && t mod animspeed < animspeed / 2 in
-  let jump = model.player.y > 0. in
-  let name = match model.player.dir with
-    | R when jump -> "jright"
-    | L when jump -> "jleft"
-    | R when walk -> "wright"
-    | L when walk -> "wleft"
-    | R -> "right"
-    | L -> "left"
+  let asp = if p.vx_mod then asp / 2 else asp in
+  let asp = if asp = 0 then 8 else asp in
+  let walk = p.vx <> 0. && t mod asp < asp / 2 in
+  let name =
+    match p.dir with
+    | R -> if p.y > 0. then "jright" else if walk then "wright" else "right"
+    | L -> if p.y > 0. then "jleft" else if walk then "wleft" else "left"
   in
   let y = float_of_int ctx##.canvas##.clientHeight
-          -. model.ground -. model.player.h -. model.player.y
-  in draw_image ctx name img model.player.x y
+          -. m.ground -. p.h -. p.y in
+  let background = "back" @> Dom_html.CoerceTo.img in
+  ctx##drawImage background 0. 0.;
+  draw_image ctx name img p.x y
 
 let init_model ctx = {
   ground = 0.;
@@ -125,15 +128,16 @@ let init_model ctx = {
 
 let walk dir' ({vx; dir; vx_mod} as p) =
   let vx = match dir' with
-    | L -> ~-.1.
-    | R -> 1.
+    | L -> ~-.2.
+    | R -> 2.
   in
   let vx_mod = dir = dir' && vx_mod in
-  let vx = if vx_mod then vx *. 2.5 else vx in
+  let vx = if vx_mod then vx *. 2. else vx in
   {p with vx; dir = dir'; vx_mod}
 
 let jump p =
-  if p.y = 0. then { p with vy = if p.vx_mod then 7. else 6. } else p
+  if p.y = 0. then { p with vy = if p.vx_mod then 7. else 6.;
+                   vx = p.vx *. 1.5} else p
 
 let speed_up p =
   if p.y = 0. then { p with vx_mod = true } else p
@@ -211,15 +215,12 @@ let%sync game ~obj w img ctx debuglb dt =
 
     ; present (keydowns & List.mem Refresh !!keydowns) !((!!w)##.location##reload)
     || present run (emit model (player speed_up !!model))
-    || present left (emit model (player (walk L) !!model))
-    || present right (emit model (player (walk R) !!model))
+    || present left
+      (present right nothing
+         (emit model (player (walk L) !!model)))
+      (present right
+         (emit model (player (walk R) !!model)))
     || present up (emit model (player jump !!model))
-
-    ; emit debuglb##.textContent
-      (Js.some @@ Js.string @@ Format.sprintf "%s %s %s"
-         (if !? left then "Left" else "")
-         (if !? right then "Right" else "")
-         (if !? up then "Up" else ""))
 
     ; emit model (player (physics !!dt) !!model)
 
@@ -229,8 +230,9 @@ let%sync game ~obj w img ctx debuglb dt =
   end
   ||
   loop begin
-    present redraw !(draw_model !!dt !!img !!frame !!ctx !!model);
-    pause
+    present redraw !(draw_model !!dt !!img !!frame !!ctx !!model)
+    ; emit debuglb##.textContent (to_jsstring @@ pp_entity (!!model).player)
+    ; pause
   end
 
 
@@ -239,7 +241,7 @@ let _ =
   let open Dom_html in
   window##.onload := handler (fun _ ->
 
-      let debuglb = "debug" @> CoerceTo.label in
+      let debuglb = "debug" @> CoerceTo.pre in
       (* let debuglb2 = "debug2" @> CoerceTo.label in *)
       let canvas = "canvas" @> CoerceTo.canvas in
       let mario = "mario" @> CoerceTo.img in
@@ -248,18 +250,13 @@ let _ =
       let g = game (window, mario, ctx, debuglb, 0., [], []) in
 
       window##.onkeydown := handler (fun ev ->
-          let k = (to_key ev##.keyCode) in
-          g#keydowns k; Js._false
+          g#keydowns (to_key ev##.keyCode); Js._false
         );
-
       window##.onkeyup := handler (fun ev ->
-          let k = (to_key ev##.keyCode) in
-          g#keyups k; Js._false
+          g#keyups (to_key ev##.keyCode); Js._false
         );
 
-      draw_sprites ctx;
-
-      let fps = 60. in
+      let fps = 30. in
       let interval = 1000. /. fps in
       let tick  = ref 0. in
       let rec loop_raf timestamp =
