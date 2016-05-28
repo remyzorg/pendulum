@@ -413,6 +413,7 @@ module Ocaml_gen = struct
   let stepfun_name = "p~stepfun"
   let animate_name = "animate"
   let gather_str = "gather"
+  let api_react_function_name = "react"
   let animated_state_var_name = "animated_next_raf"
   let select_env_name = "pendulum~state"
   let select_env_var = Location.(mkloc select_env_name !Ast_helper.default_loc)
@@ -443,8 +444,6 @@ module Ocaml_gen = struct
 
 
   module Debug = struct
-
-
     let str = string_const
 
     let print expr =
@@ -459,7 +458,6 @@ module Ocaml_gen = struct
 
     let seqif ~debug debug_expr expr =
       if debug then [%expr [%e debug_expr ]; [%e expr]] else expr
-
   end
 
   let add_deref_local s =
@@ -574,25 +572,26 @@ module Ocaml_gen = struct
         env.args_signals
     in
     match globals with
-    | [] -> true, [%expr stepfun]
-    | [(s, _)] -> false, [%expr set_present_value [%e mk_ident s.ident], [%e stepfun]]
-    | l -> false, Exp.tuple @@ List.fold_left (fun acc (s, _) ->
+    | [] -> stepfun
+    | [(s, _)] -> [%expr set_present_value [%e mk_ident s.ident], [%e stepfun]]
+    | l -> Exp.tuple @@ List.fold_left (fun acc (s, _) ->
         [%expr set_present_value [%e mk_ident s.ident]] :: acc
       ) [stepfun] l
 
   let construct_input_setters_object env stepfun =
     let open Tagged in
-    let globals =
-      List.filter (fun (s, _) -> not @@ Hashtbl.mem env.Tagged.binders_env s.ident.content)
-        env.args_signals
-    in
-    match globals with
-    | [] -> true, [%expr stepfun]
-    | [(s, _)] -> false, [%expr set_present_value [%e mk_ident s.ident], [%e stepfun]]
-    | l -> false, Exp.tuple @@ List.fold_left (fun acc (s, _) ->
-        [%expr set_present_value [%e mk_ident s.ident]] :: acc
-      ) [stepfun] l
-
+    let pcf_loc = Ast.dummy_loc in
+    let filter_binded s = not @@ Hashtbl.mem
+        env.Tagged.binders_env s.ident.content in
+    let mk_method str expr = Asttypes.(Cf.method_ {txt = str; loc = pcf_loc}
+        Public (Cfk_concrete (Fresh, expr))) in
+    let mk_field_setter s = mk_method s.ident.content
+        [%expr set_present_value [%e mk_ident s.ident]] in
+    let pcstr_fields =
+      List.fold_left
+        (fun acc (s, _) -> if filter_binded s then mk_field_setter s :: acc else acc)
+        [(mk_method api_react_function_name [%expr [%e stepfun] ()])] env.args_signals
+    in Exp.object_ {pcstr_self = Pat.any (); pcstr_fields}
 
   let construct_machine_registers_definitions env e =
     IdentMap.fold (fun k (_, insts) acc ->
@@ -678,6 +677,7 @@ module Ocaml_gen = struct
     let open Selection_tree in
     let animate = StringSet.mem "animate" options in
     let debug = StringSet.mem "debug" options in
+    let asobject = StringSet.mem "obj" options in
     let sigs_step_arg =
       match env.Tagged.args_signals with
       | [] -> [%pat? ()]
@@ -708,12 +708,10 @@ module Ocaml_gen = struct
       else
         Exp.let_ Asttypes.Nonrecursive [Vb.mk stepfun_pat_var stepfun_lambda_expr] e
     in
-    let no_params, input_setters_tuple =
-      construct_input_setters_tuple env returned_stepfun_ident
-    in
     let return_value_expr =
-      if no_params then [%expr [%e returned_stepfun_ident]]
-      else [%expr [%e input_setters_tuple]]
+      (if asobject then construct_input_setters_object
+       else construct_input_setters_tuple)
+        env returned_stepfun_ident
     in
     let body_expression =
       construct_global_signals_definitions env
@@ -872,14 +870,33 @@ module Ocaml_gen = struct
 end
 
 
-let generate options env tast =
+let generate pname options env tast =
+  let t0 = Sys.time () in
+
   let selection_tree, flowgraph as grc = Of_ast.construct env options tast in
+  let t_cons = Sys.time () -. t0 in
+
   Schedule.tag_tested_stmts selection_tree flowgraph;
+
   let _deps = Schedule.check_causality_cycles grc in
+  let t_check = Sys.time () -. t_cons in
+
   let interleaved_cfg = Schedule.interleave flowgraph in
+  let t_inter = Sys.time () -. t_check in
   let maxid, deps = deplist selection_tree in
   let dep_array = Array.make (maxid + 1) [] in
   let ml_ast = grc2ml dep_array interleaved_cfg in
+  let t_ml = Sys.time () -. t_inter in
+
+  if StringSet.mem "stats" options then Schedule.Stats.(
+      Format.printf "======> %s\nfg:\t%a\nfg_sched:\t%a\n"
+        pname pp flowgraph pp interleaved_cfg
+      ; Format.printf "time: cons(%f); check (%f); inter(%f); ml(%f)\n"
+          t_cons t_check t_inter t_ml
+      ; Format.printf "<======\n"
+
+    );
+
   let ml_ast' =
     if not @@ StringSet.mem "nooptim" options then
       ML_optimize.gather_enter_exits ml_ast maxid
