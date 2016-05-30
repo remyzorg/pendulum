@@ -511,19 +511,29 @@ module Ocaml_gen = struct
     | No_binding | Event _ -> true
     | Access _ -> false
 
+  (* let signal_to_definition init_val next_def s = *)
+  (*   let mk_expr = match s.bind with *)
+  (*     | Event (e, gopt) -> *)
+  (*       Option.casefv gopt (fun g -> *)
+  (*           [%expr make_signal_gather ([%e g] :> _ * ( _ -> #Dom_html.event Js.t -> _ ))] *)
+  (*         ) [%expr make_event_signal [%e init_val]] *)
+  (*     | _ -> mk_ident s.ident *)
+  (*   [%expr let [%p mk_pat_var s.ident] = [%e mk_expr] in [%e next_def]] *)
+
+  let signal_to_definition init_val next_def s =
+    let mk_expr = match s.bind with
+      | Event (e, gopt) ->
+        Option.casefv gopt (fun g ->
+            [%expr make_signal_gather ([%e g] :> _ * ( _ -> #Dom_html.event Js.t -> _ ))]
+          ) [%expr make_event_signal [%e init_val]]
+      | _ ->
+        Option.casefv s.gatherer (fun g ->
+            [%expr make_signal_gather ([%e init_val],[%e g])])
+          [%expr make_signal [%e init_val]] in
+    [%expr let [%p mk_pat_var s.ident] = [%e mk_expr] in [%e next_def]]
+
+  (* TODO : define this function with structed signals as input *)
   let construct_global_signals_definitions env e = Tagged.(
-      let signal_to_definition init_val next_def s =
-        let mk_expr = match s.bind with
-          | Event (e, gopt) ->
-            Option.casefv gopt (fun g ->
-                [%expr make_signal_gather ([%e g] :> _  * ( _ -> #Dom_html.event Js.t -> _ ))]
-              ) [%expr make_event_signal [%e init_val]]
-          | _ ->
-            Option.casefv s.gatherer (fun g ->
-                [%expr make_signal_gather ([%e init_val],[%e g])])
-              [%expr make_signal [%e init_val]]
-        in [%expr let [%p mk_pat_var s.ident] = [%e mk_expr] in [%e next_def]]
-      in
       List.fold_left (fun acc (s, _) ->
           try
             Hashtbl.find env.binders_env s.ident.content
@@ -533,7 +543,7 @@ module Ocaml_gen = struct
             |> List.fold_left (signal_to_definition [%expr None]) acc
           with Not_found ->
             signal_to_definition (mk_ident s.ident) acc s
-        ) (construct_local_signals_definitions env e) @@ env.args_signals)
+        ) (construct_local_signals_definitions env e) env.args_signals)
 
   let construct_set_all_absent_definition env e =
     let open Tagged in
@@ -592,6 +602,9 @@ module Ocaml_gen = struct
         (fun acc (s, _) -> if filter_binded s then mk_field_setter s :: acc else acc)
         [(mk_method api_react_function_name [%expr [%e stepfun] ()])] env.args_signals
     in Exp.object_ {pcstr_self = Pat.any (); pcstr_fields}
+
+  (* let construct_program_object env e = *)
+  (*   [%expr  *)
 
   let construct_machine_registers_definitions env e =
     IdentMap.fold (fun k (_, insts) acc ->
@@ -684,6 +697,16 @@ module Ocaml_gen = struct
       | [s, t] -> mk_pat_var ?t s.ident
       | l -> Pat.tuple @@ List.rev_map (fun (s, t) -> mk_pat_var ?t s.ident) l
     in
+
+    let sigs_step_mk_expr =
+      (* add mk signals except for tagged signals *)
+      assert false
+
+      (* match env.Tagged.args_signals with *)
+      (* | [] -> [%pat? ()] *)
+      (* | [s, t] -> mk_pat_var ?t s.ident *)
+      (* | l -> Pat.tuple @@ List.rev_map (fun (s, t) -> mk_pat_var ?t s.ident) l *)
+    in
     let stepfun_lambda_expr =
       [%expr fun () -> try [%e stepfun_body] with
              | Pause_exc -> set_absent (); Pause
@@ -696,8 +719,7 @@ module Ocaml_gen = struct
 
     let returned_stepfun_ident =
       if animate then animate_ident_expr
-      else stepfun_ident_expr
-    in
+      else stepfun_ident_expr in
 
     let stepfun_definition e =
       if animate then
@@ -706,28 +728,31 @@ module Ocaml_gen = struct
           Vb.mk animate_pat_var (construct_raf_call debug stepfun_ident_expr);
         ] e
       else
-        Exp.let_ Asttypes.Nonrecursive [Vb.mk stepfun_pat_var stepfun_lambda_expr] e
-    in
+        Exp.let_ Asttypes.Nonrecursive [Vb.mk stepfun_pat_var stepfun_lambda_expr] e in
+
     let return_value_expr =
       (if asobject then construct_input_setters_object
        else construct_input_setters_tuple)
-        env returned_stepfun_ident
-    in
+        env returned_stepfun_ident in
     let body_expression =
-      construct_global_signals_definitions env
+      construct_running_env debug nstmts
+      @@ construct_global_signals_definitions env
       @@ construct_set_all_absent_definition env
       @@ construct_machine_registers_definitions env
       @@ construct_animate_mutex animate
       @@ stepfun_definition
       @@ construct_callbacks_assigns animate env
-      @@ return_value_expr
-    in
+      @@ return_value_expr in
     [%expr
       let open Pendulum.Runtime_misc in
       let open Pendulum.Program in
       let open Pendulum.Signal in
-      fun [%p sigs_step_arg] ->
-        [%e construct_running_env debug nstmts body_expression ]]
+      let f [%p sigs_step_arg] = [%e body_expression] in
+      object
+        method create [%p sigs_step_arg] = f [%e sigs_step_mk_expr]
+        method create_run = f
+      end
+    ]
 
 
   let rec construct_test env depl test =
