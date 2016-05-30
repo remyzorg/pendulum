@@ -1,8 +1,6 @@
 
 open Firebug
 
-
-
 (* Jsoo boilerplate code *)
 
 module Dom_html = struct
@@ -97,7 +95,7 @@ let update_content elt b =
 open Dom_html
 
 (* The reactive program of the player *)
-let%sync reactive_player ~animate
+let%sync reactive_player ~animate ~obj
     (play_pause : buttonElement Js.t)
     (progress_bar : inputElement Js.t)
     (media : _mediaElement Js.t)
@@ -111,10 +109,9 @@ let%sync reactive_player ~animate
   !(update_content play_pause (pre state)); (* update the button at start-up *)
 
   loop ( (* handle the different possibles actions  : *)
-       present media##onplay !(update_content play_pause !!state)
-    || present media##onpause !(update_content play_pause !!state)
-    || present play_pause##onclick (emit state (not !!state))
+       present play_pause##onclick (emit state (not !!state))
     || present state !(update_state !!state media play_pause)
+    || present state !(update_content play_pause !!state)
   ; pause)
 
   || loop ( (* while the user moves the cursor, display the time over it *)
@@ -129,7 +126,7 @@ let%sync reactive_player ~animate
       loop (                                          (* every instant,  *)
         emit no_update;                                 (* emits the blocking signal *)
         present progress_bar##onmouseup (               (* if the button is released*)
-          !(set_visible false (pre slider_value);         (* stop displaying the time over the cursor *)
+          !(set_visible false !!slider_value;         (* stop displaying the time over the cursor *)
             update_media media progress_bar);             (* set the current time of the video *)
           exit t'                                         (* leave the escape block and stop this behavior *)
           ); pause)); pause)
@@ -139,11 +136,10 @@ let%sync reactive_player ~animate
       present no_update nothing                     (* if the blocking signal is present, do nothing *)
         !(update_slider progress_bar media)         (* else, update the progress bar with the current time of the video*)
       ||
-      !(update_time_a media (pre time_a))           (* update the display of the current time *)
+      !(update_time_a media !!time_a)           (* update the display of the current time *)
     ); pause)
 
 
-let wrapper react f p = Dom_html.handler (fun _ -> f p;  react (); Js._true)
 
 let main _ =
   let open Dom_html in
@@ -159,9 +155,7 @@ let main _ =
      Signals and _react function are implicitely triggered by the generated code
      of the program
   *)
-  let _set_time, _set_range_value, _react =
-    reactive_player (play_button, progress_bar, media, time, range_value)
-  in
+  reactive_player (play_button, progress_bar, media, time, range_value);
   Js._false
 
 

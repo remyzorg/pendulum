@@ -1,7 +1,7 @@
 open Dom_html
 open Format
 
-let%sync mouse ~obj =
+let%sync mouse =
   input s;
   input w {
     onmousemove =
