@@ -3,12 +3,19 @@ open Pendulum.Runtime_ast
 
 let dummyatom () = Format.printf "Hello\n"
 
-let%sync mouse_machine1 =
+let%sync p1 =
   input s;
   let s' = !!s + 1 in
   let s'' = !!s' + 1 in
   (loop (pause))
 
+let%sync p2 ~dsource a b =
+  loop begin
+    present a##onclick (
+      emit a##.textContent Js.(some @@ string "lol")
+    ) ; pause
+  end
+  || loop (emit b; pause)
 
 let%sync incr =
   input s;
