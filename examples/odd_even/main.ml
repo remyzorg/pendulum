@@ -33,18 +33,18 @@ let%sync m2 =
 
 let () =
   let open Pendulum.Signal in
-  let set_a, set_b, step = m (0, "") in
+  let prog = m#create (0, "") in
   for i = 1 to 10 do
-    set_a i;
-    ignore (step ());
+    prog#a i;
+    ignore (prog#react);
   done
 
 let () = Format.printf "@."
 
 let () =
   let open Pendulum.Signal in
-  let set_a, step = m2 () in
+  let m = m2#create () in
   for i = 0 to 9 do
-    if i mod 3 = 0 then set_a ();
-    ignore (step ());
+    if i mod 3 = 0 then m#a ();
+    ignore (m#react);
   done

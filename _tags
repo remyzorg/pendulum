@@ -1,6 +1,4 @@
-
 <tests/ppx/*>: ppx_pendulum
-
 # OASIS_START
 # DO NOT EDIT (digest: 12109e4431341e205eb08dd8c125b735)
 # Ignore VCS directories, you can use the same kind of rule outside
@@ -60,5 +58,3 @@ true: annot, bin_annot
 <tests/ppx/*.ml{,i,y}>: use_pendulum
 <tests/ppx/*.ml{,i,y}>: use_pendulum_compiler
 # OASIS_STOP
-
-<examples>: -traverse

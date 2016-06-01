@@ -36,7 +36,7 @@ let main _ =
   let text_content = "checksubmit_content" @> CoerceTo.input in
   let checkbox_accept = "checksubmit_accept" @> CoerceTo.input in
   let request_button = "checksubmit_request" @> CoerceTo.button in
-  let _ = machine (checkbox_accept, request_button, text_content, ()) in
+  let _ = machine#create (checkbox_accept, request_button, text_content, ()) in
   Js._false
 
 

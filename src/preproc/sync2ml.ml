@@ -367,15 +367,15 @@ module Ocaml_gen = struct
   open Parsetree
 
 
-  let dumb = Exp.constant (Asttypes.Const_int 0)
+  (* let dumb = Exp.constant (Asttypes.Const_int 0) *)
 
-  let int_const i = Exp.constant (Asttypes.Const_int i)
-  let string_const s = Exp.constant (Asttypes.Const_string(s, None))
+  (* let int_const i = Exp.constant (Asttypes.Const_int i) *)
+  (* let string_const s = Exp.constant (Asttypes.Const_string(s, None)) *)
 
 
-  (* let dumb = Exp.constant (Ast_helper.Const.int 0) *)
-  (* let int_const i = Exp.constant (Ast_helper.Const.int i) *)
-  (* let string_const s = Exp.constant (Ast_helper.Const.string s) *)
+  let dumb = Exp.constant (Ast_helper.Const.int 0)
+  let int_const i = Exp.constant (Ast_helper.Const.int i)
+  let string_const s = Exp.constant (Ast_helper.Const.string s)
 
   let mk_pat_var ?t s =
     let pvar = Pat.(Asttypes.(var @@ Location.mkloc s.content s.loc)) in
@@ -522,11 +522,6 @@ module Ocaml_gen = struct
       Option.casefv s.gatherer (fun g ->
           [%expr make_signal_gather ([%e init_val],[%e g])])
         [%expr make_signal [%e init_val]]
-
-  let signal_to_init env s =
-    if Hashtbl.mem env.Tagged.binders_env s.ident.content then
-      mk_ident s.ident
-    else signal_to_creation_expr (mk_ident s.ident) s
 
   let signal_to_definition rhs next_def s =
     [%expr let [%p mk_pat_var s.ident] = [%e rhs] in [%e next_def]]
@@ -686,26 +681,29 @@ module Ocaml_gen = struct
     let open Selection_tree in
     let animate = StringSet.mem "animate" options in
     let debug = StringSet.mem "debug" options in
-    let asobject = StringSet.mem "obj" options in
-
-    let create_function_args_pat =
+    let build_tuple tuple mk init =
       match env.Tagged.args_signals with
-      | [] -> [%pat? ()]
-      | [s, t] -> mk_pat_var ?t s.ident
-      | l -> Pat.tuple @@ List.rev_map (fun (s, t) -> mk_pat_var ?t s.ident) l
+      | [] -> init
+      | [s, t] -> mk ?t s
+      | l -> tuple @@ List.rev_map (fun (s, t) -> mk ?t s) l
     in
+    let mk_notbind mk mknb s =
+      if Hashtbl.mem env.Tagged.binders_env s.ident.content then
+        mk s.ident else mknb s.ident
+    in
+    let create_function_args_pat =
+      build_tuple Pat.tuple (fun ?t s -> mk_pat_var ?t s.ident) [%pat? ()] in
     let create_function_run_args_pat =
-      match env.Tagged.args_signals with
-      | [] -> [%pat? ()]
-      | [s, t] -> mk_pat_var ?t:(Option.map signaltype_of_type t) s.ident
-      | l -> Pat.tuple @@ List.rev_map (fun (s, t) ->
-          mk_pat_var ?t:(Option.map signaltype_of_type t) s.ident) l
+      build_tuple Pat.tuple
+        (fun ?t -> mk_notbind mk_pat_var
+            (mk_pat_var ?t:(Option.map signaltype_of_type t))
+        ) [%pat? ()]
     in
     let create_function_args_expr =
-      match env.Tagged.args_signals with
-      | [] -> [%expr ()]
-      | [s, t] -> signal_to_init env s
-      | l -> Exp.tuple @@ List.rev_map (fun (s, t) -> signal_to_init env s) l
+      build_tuple Exp.tuple (
+        fun ?t s -> mk_notbind mk_ident (
+            fun _ -> signal_to_creation_expr (mk_ident s.ident) s) s
+      ) [%expr ()]
     in
 
     let stepfun_lambda_expr =
@@ -818,7 +816,6 @@ module Ocaml_gen = struct
       let prog_ident, machine_fun, args_init_tuple_exp, _, idents =
         mk_machine_instantiation machine_ident inst_int_id sigs
       in
-      let rename_with' = {prog_ident with content = prog_ident.content ^ "'"} in
       [%expr [%e mk_ident prog_ident] := [%e machine_fun]#create_run [%e args_init_tuple_exp]]
 
     | MLassign_signal (ident, mlast) ->

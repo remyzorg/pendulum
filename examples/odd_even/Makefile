@@ -2,7 +2,7 @@
 
 
 all:
-	ocamlbuild -package pendulum -cflags "-ppx ppx_pendulum -dsource" main.byte
+	ocamlbuild -use-ocamlfind -package pendulum -package pendulum.ppx main.byte
 
 clean:
 	ocamlbuild -clean
