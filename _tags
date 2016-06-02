@@ -1,3 +1,4 @@
+<examples>: -traverse
 <tests/ppx/*>: ppx_pendulum
 # OASIS_START
 # DO NOT EDIT (digest: 12109e4431341e205eb08dd8c125b735)
