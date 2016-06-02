@@ -100,13 +100,13 @@ module Flowgraph = struct
       | Enter of int
       | Exit of int
       | Local_signal of Ast.valued_signal
-      | Instantiate_run of Ast.ident * Ast.signal list * Ast.loc
+      | Instantiate_run of Ast.ident * Ast.signal Ast.run_param list * Ast.loc
 
     type test_value =
       | Signal of Ast.signal * Ast.atom option
       | Selection of int
       | Sync of (int * int)
-      | Is_paused of Ast.ident * Ast.signal list * Ast.loc
+      | Is_paused of Ast.ident * Ast.signal Ast.run_param list * Ast.loc
       | Finished
 
     type t =
@@ -155,12 +155,12 @@ module Flowgraph = struct
 
 
     type action =
-      | Emit of Ast.valued_signal
-      | Atom of Ast.atom
+      | Emit of valued_signal
+      | Atom of atom
       | Enter of int
       | Exit of int
-      | Local_signal of Ast.valued_signal
-      | Instantiate_run of Ast.ident * Ast.signal list * Ast.loc
+      | Local_signal of valued_signal
+      | Instantiate_run of ident * signal run_param list * loc
 
     let pp_action_dot fmt a =
       Format.(fprintf fmt "%s" begin
@@ -186,10 +186,10 @@ module Flowgraph = struct
         end)
 
     type test_value =
-      | Signal of Ast.signal * atom option
+      | Signal of signal * atom option
       | Selection of int
       | Sync of (int * int)
-      | Is_paused of Ast.ident * Ast.signal list * Ast.loc
+      | Is_paused of ident * signal run_param list * loc
       | Finished
 
     type t =
@@ -749,9 +749,12 @@ module Schedule = struct
 
 
         | Call (Instantiate_run (_, sigs, _) , t) ->
-          List.exists (fun s' -> s.ident.content = s'.ident.content) sigs || aux (t, stop, s)
+          List.exists (fun s' -> s.ident.content = s'.ident.content)
+          @@ Ast.filter_param (fun x -> x) sigs
+          || aux (t, stop, s)
         | Test (Is_paused (_, sigs, _), t1, t2, _) ->
-          List.exists (fun s' -> s.ident.content = s'.ident.content) sigs
+          List.exists (fun s' -> s.ident.content = s'.ident.content)
+          @@ Ast.filter_param (fun x -> x) sigs
           || aux (t1, stop, s)
           || aux (t2, stop, s)
 
@@ -765,6 +768,7 @@ module Schedule = struct
 
     let extract_emits_tests_sets fg stop =
       let open SignalSet in
+      let fold_set = List.fold_left (fun acc x -> add x acc) in
       let aux aux (fg, stop) =
         match fg with
         | fg when fg == stop -> empty, empty
@@ -775,13 +779,13 @@ module Schedule = struct
 
         | Call (Instantiate_run (_, sigs, _), t) ->
           let emits, tests = aux (t, stop) in
-          List.fold_left (fun acc x -> add x acc) emits sigs,
-          List.fold_left (fun acc x -> add x acc) tests sigs
+          let sigs = Ast.filter_param (fun x -> x) sigs in
+          fold_set emits sigs, fold_set tests sigs
         | Test (Is_paused (_, sigs, _), t1, t2, _) ->
           let emits1, tests1 = aux (t1, stop) in
           let emits2, tests2 = aux (t2, stop) in
-          List.fold_left (fun acc x -> add x acc) (union emits1 emits2) sigs,
-          List.fold_left (fun acc x -> add x acc) (union tests1 tests2) sigs
+          let sigs = Ast.filter_param (fun x -> x) sigs in
+          fold_set (union emits1 emits2) sigs, fold_set (union tests1 tests2) sigs
 
         | Call (_, t) -> aux (t, stop)
         | Test (Signal (s, atopt), t1, t2, _) ->

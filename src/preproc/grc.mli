@@ -60,13 +60,13 @@ module Flowgraph : sig
       | Enter of int
       | Exit of int
       | Local_signal of Ast.valued_signal
-      | Instantiate_run of Ast.ident * Ast.signal list * Ast.loc
+      | Instantiate_run of Ast.ident * Ast.signal Ast.run_param list * Ast.loc
 
     type test_value =
       | Signal of Ast.signal * Ast.atom option
       | Selection of int
       | Sync of (int * int)
-      | Is_paused of Ast.ident * Ast.signal list * Ast.loc
+      | Is_paused of Ast.ident * Ast.signal Ast.run_param list * Ast.loc
       | Finished
 
     type t =

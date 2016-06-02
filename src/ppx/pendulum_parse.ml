@@ -12,25 +12,30 @@ module Ast = Sync2ml.Ast
 
 
 let check_expr_ident e =
-  let open Ast in
   let open Error in
   match e.pexp_desc with
-  | Pexp_ident {txt = Lident content; loc} -> {loc; content}
+  | Pexp_ident {txt = Lident content; loc} -> Ast.{loc; content}
   | _ -> syntax_error ~loc:e.pexp_loc Signal_name
 
 let check_pat_ident e =
-  let open Ast in
   let open Error in
   match e.ppat_desc with
-  | Ppat_var {txt = content; loc} ->
-     {loc; content}
+  | Ppat_var {txt = content; loc} -> Ast.{loc; content}
   | _ -> syntax_error ~loc:e.ppat_loc Signal_name
+
+let check_run_param e =
+  let open Ast in
+  let open Error in
+  match e with
+  | {pexp_desc = Pexp_ident {txt = Lident content; loc}} -> Ast.(Sig_param {loc; content})
+  | [%expr ![%p? e]] -> Exp_param e
+  | _ -> syntax_error ~loc:e.pexp_loc Signal_name
 
 let signal_tuple_to_list e =
   let open Ast in
-  match e.pexp_desc with
-  | Pexp_ident {txt = Lident content; loc } -> [{loc; content}]
-  | Pexp_tuple exprs -> List.map check_expr_ident exprs
+  match e with
+  | { pexp_desc = Pexp_ident {txt = Lident content; loc }} -> [Sig_param {loc; content}]
+  | { pexp_desc = Pexp_tuple exprs } -> List.map check_run_param exprs
   | _ -> Error.syntax_error ~loc:e.pexp_loc Error.Signal_tuple
 
 let rec check_signal_presence_expr atom_mapper e =

@@ -71,6 +71,10 @@ module type S = sig
   type valued_ident = {sname : ident ; fields : ident list; ivalue : exp}
   (** a valued signal in the derived ast *)
 
+  type 'a run_param = Sig_param of 'a | Exp_param of exp
+
+  val filter_param : ('a -> 'b) -> 'a run_param list -> 'b list
+
   val mk_signal : ?origin:signal_origin -> ?bind:signal_binder -> ?gatherer:exp -> ident -> signal
   val mk_vsig : signal -> signal list -> exp -> valued_signal
   val mk_vid : ?fields:ident list -> ident -> exp -> valued_ident
@@ -100,7 +104,7 @@ module type S = sig
       | Present of test * statement * statement
       | Atom of exp
       | Signal of valued_ident * statement
-      | Run of ident * ident list * loc
+      | Run of ident * ident run_param list * loc
 
       (** Non-core statements *)
       | Halt
@@ -140,7 +144,7 @@ module type S = sig
       | Atom of atom
       | Signal of valued_signal * t
       | Await of test
-      | Run of ident * signal list * loc
+      | Run of ident * signal run_param list * loc
     and tagged = (tagged_ast) location
 
 
@@ -161,7 +165,7 @@ module type S = sig
       (** global env of local defined signals *)
       local_only_scope : valued_signal list;
       (** local env of local defined signals *)
-      machine_runs : (int * (int * signal list) list) IdentMap.t ref;
+      machine_runs : (int * (int * signal run_param list) list) IdentMap.t ref;
       (** machine runs env *)
     }
 

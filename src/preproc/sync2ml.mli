@@ -51,7 +51,7 @@ and ml_ast =
   | MLemit of Ast.valued_signal
   | MLif of ml_test_expr * ml_sequence * ml_sequence
   | MLassign_signal of Ast.ident * ml_ast
-  | MLassign_machine of int * (Ast.ident * Ast.signal list * Ast.loc)
+  | MLassign_machine of int * (Ast.ident * Ast.signal Ast.run_param list * Ast.loc)
   | MLenter of int
   | MLexit of int
   | MLenters_exits of (Utils.Bitset.t * Utils.Bitset.t)
@@ -59,7 +59,7 @@ and ml_ast =
   | MLunitexpr of Ast.atom
   | MLpause
   | MLfinish
-  | MLcall of Ast.ident * Ast.signal list * Ast.loc
+  | MLcall of Ast.ident * Ast.signal Ast.run_param list * Ast.loc
 
 module Ocaml_gen : sig
   val mk_ident : Ast.ident -> Parsetree.expression

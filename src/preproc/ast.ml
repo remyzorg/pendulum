@@ -45,6 +45,9 @@ module type S = sig
 
   type valued_signal = {signal : signal ; svalue : atom}
   type valued_ident = {sname : ident ; fields : ident list; ivalue : exp}
+
+  type 'a run_param = Sig_param of 'a | Exp_param of exp
+  val filter_param : ('a -> 'b) -> 'a run_param list -> 'b list
   val mk_signal : ?origin:signal_origin -> ?bind:signal_binder -> ?gatherer:exp -> ident -> signal
 
   val mk_vsig : signal -> signal list -> exp -> valued_signal
@@ -75,7 +78,7 @@ module type S = sig
       | Present of test * statement * statement
       | Atom of exp
       | Signal of valued_ident * statement
-      | Run of ident * ident list * loc
+      | Run of ident * ident run_param list * loc
 
       | Halt
       | Sustain of valued_ident
@@ -113,7 +116,7 @@ module type S = sig
       | Atom of atom
       | Signal of valued_signal * t
       | Await of test
-      | Run of ident * signal list * loc
+      | Run of ident * signal run_param list * loc
     and tagged = (tagged_ast) location
 
     type env = {
@@ -125,7 +128,7 @@ module type S = sig
       binders_env : (string, signal_binder list) Hashtbl.t;
       local_only_env : (valued_signal) list ref;
       local_only_scope : valued_signal list;
-      machine_runs : (int * (int * signal list) list) IdentMap.t ref;
+      machine_runs : (int * (int * signal run_param list) list) IdentMap.t ref;
     }
 
     val print_env : Format.formatter -> env -> unit
@@ -183,6 +186,12 @@ module Make (E : Exp) = struct
 
   type label = Label of ident
 
+  type 'a run_param = Sig_param of 'a | Exp_param of exp
+
+  let filter_param f l = l
+    |> List.fold_left (fun acc -> function Sig_param x -> (f x) :: acc | _ -> acc) []
+    |> List.rev
+
   let mk_loc ?(loc=dummy_loc) content = {loc; content}
   let mk_signal ?(origin=Local) ?(bind=No_binding) ?gatherer ident = {ident; origin; bind; gatherer}
 
@@ -206,7 +215,7 @@ module Make (E : Exp) = struct
       | Present of test * statement * statement
       | Atom of exp
       | Signal of valued_ident * statement
-      | Run of ident * ident list * loc
+      | Run of ident * ident run_param list * loc
 
       | Halt
       | Sustain of valued_ident
@@ -274,7 +283,7 @@ module Make (E : Exp) = struct
       | Atom of atom
       | Signal of valued_signal * t
       | Await of test
-      | Run of ident * signal list * loc
+      | Run of ident * signal run_param list * loc
     and tagged = (tagged_ast) location
 
     let mk_tagged ?(loc = dummy_loc) content id =
@@ -289,7 +298,7 @@ module Make (E : Exp) = struct
       binders_env : (string, signal_binder list) Hashtbl.t;
       local_only_env : (valued_signal) list ref;
       local_only_scope : valued_signal list;
-      machine_runs : (int * (int * signal list) list) IdentMap.t ref;
+      machine_runs : (int * (int * signal run_param list) list) IdentMap.t ref;
     }
 
   let print_env fmt e =
@@ -459,8 +468,14 @@ module Make (E : Exp) = struct
           mk_tagged (Signal (s', visit env t)) !+id
 
         | Derived.Run (mident, ids, loc) ->
-          let sigs = List.map (rename ~loc env No_binding) ids in
-          let machine_id = add_rename_machine env.machine_runs mident sigs in
+          let sigs = List.map (function
+              | Exp_param exp -> Exp_param exp
+              | Sig_param s -> Sig_param (rename ~loc env No_binding s)
+            ) ids
+          in
+          let machine_id =
+            add_rename_machine env.machine_runs mident sigs
+          in
           mk_tagged (Run (machine_id, sigs, loc)) !+id
 
 
@@ -514,7 +529,7 @@ module Make (E : Exp) = struct
         | Await (s, _) -> fprintf fmt "await %s " s.ident.content
         | Run (id, sigs, _) ->
           fprintf fmt "run %s %s" id.content
-            (String.concat " " @@ List.map (fun x -> x.ident.content) sigs) 
+            (String.concat " " @@ filter_param (fun x -> x.ident.content) sigs) 
         | Loop st -> fprintf fmt "loop"
         | Signal (vs, st) -> fprintf fmt "signal(%s)" vs.signal.ident.content
         | Suspend (st, (s, _)) -> fprintf fmt "suspend %s "  s.ident.content
