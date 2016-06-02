@@ -157,7 +157,7 @@ let physics dt p =
 
 let player f ({player} as m) = { m with player = f player }
 
-let%sync game ~obj w img ctx debuglb dt =
+let%sync game w img ctx debuglb dt =
   input keydowns (fun acc k -> k :: acc);
   input keyups (fun acc k -> k :: acc);
 
@@ -247,7 +247,7 @@ let _ =
       let mario = "mario" @> CoerceTo.img in
       let ctx = canvas##getContext (Dom_html._2d_) in
 
-      let g = game (window, mario, ctx, debuglb, 0., [], []) in
+      let g = game#create (window, mario, ctx, debuglb, 0., [], []) in
 
       window##.onkeydown := handler (fun ev ->
           g#keydowns (to_key ev##.keyCode); Js._false

@@ -431,12 +431,12 @@ let main _ =
   let visibility_completed = "visibility_completed" @> CoerceTo.a in
   let remove_storage = "remove_storage" @> CoerceTo.a in
 
-  let  _, _, _, _, m_react = Controller.machine
+  let m = Controller.machine#create
       (items_ul, new_todo, filter_footer,
        clear_complete,select_all, [], [], visibility_all,
        visibility_completed, visibility_active, remove_storage)
   in
-  ignore (m_react ());
+  ignore m#react;
   Js._false
 
 

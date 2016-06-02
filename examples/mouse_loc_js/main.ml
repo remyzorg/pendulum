@@ -20,7 +20,7 @@ let%sync mouse =
 let onload _ =
   let s = createSpan document in
   Dom.appendChild document##.body s;
-  mouse (s, window);
+  mouse#create (s, window);
   Js._false
 ;;
 

@@ -35,17 +35,14 @@ let () =
   let open Graphics in
   Graphics.open_graph " 300x300";
 
-  let set_btn_up,
-       set_move,
-       set_ex,
-      step_m = m ((), Graphics.mouse_pos (), ())
+  let m_p = m#create ((), Graphics.mouse_pos (), ())
   in
   while true do
     let status =
       Graphics.(wait_next_event [Mouse_motion; Button_down; Key_pressed])
     in
-    set_move (status.mouse_x, status.mouse_y);
-    if status.button then set_btn_up ();
-    if status.keypressed && status.key ='q' then set_ex ();
-    ignore(step_m ())
+    m_p#move (status.mouse_x, status.mouse_y);
+    if status.button then m_p#btn_up ();
+    if status.keypressed && status.key ='q' then m_p#ex ();
+    ignore(m_p#react)
   done

@@ -239,7 +239,7 @@ let rec parse_args options inputs exp =
   let addopt opt = StringSet.add opt options in
   match exp with
 
-  | {pexp_desc = Pexp_fun (s, None, _, exp')}
+  | {pexp_desc = Pexp_fun (Labelled s, None, _, exp')}
     when s <> "" && List.mem s compiler_options ->
     parse_args (addopt s) inputs exp'
 
@@ -265,7 +265,7 @@ let rec parse_args options inputs exp =
   | [%expr fun ([%p? {ppat_desc = Ppat_var ident}] : [%t? typ]) -> [%e? exp']] ->
     parse_args options (Ast.({content = ident.txt; loc = ident.loc}, Some typ) :: inputs) exp'
 
-  | { pexp_desc = Pexp_fun ((* Labelled *) s, _, _, _) } when s <> "" ->
+  | { pexp_desc = Pexp_fun (Labelled s, _, _, _) } when s <> "" ->
     Error.(syntax_error ~loc:exp.pexp_loc (Unknown_arg_option s))
 
   | { pexp_desc = Pexp_fun _ } ->

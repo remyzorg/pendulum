@@ -367,20 +367,24 @@ module Ocaml_gen = struct
   open Parsetree
 
 
-  let dumb = Exp.constant (Asttypes.Const_int 0)
+  (* let dumb = Exp.constant (Asttypes.Const_int 0) *)
 
-  let int_const i = Exp.constant (Asttypes.Const_int i)
-  let string_const s = Exp.constant (Asttypes.Const_string(s, None))
+  (* let int_const i = Exp.constant (Asttypes.Const_int i) *)
+  (* let string_const s = Exp.constant (Asttypes.Const_string(s, None)) *)
 
 
-  (* let dumb = Exp.constant (Ast_helper.Const.int 0) *)
-  (* let int_const i = Exp.constant (Ast_helper.Const.int i) *)
-  (* let string_const s = Exp.constant (Ast_helper.Const.string s) *)
+  let dumb = Exp.constant (Ast_helper.Const.int 0)
+  let int_const i = Exp.constant (Ast_helper.Const.int i)
+  let string_const s = Exp.constant (Ast_helper.Const.string s)
 
   let mk_pat_var ?t s =
     let pvar = Pat.(Asttypes.(var @@ Location.mkloc s.content s.loc)) in
     match t with None -> pvar | Some t ->
       Pat.(Asttypes.(constraint_ ~loc:s.loc pvar t))
+
+  let signaltype_of_type t =
+    [%type: ([%t t], _) Pendulum.Signal.signal]
+
 
   let mk_ident s = Exp.ident ~loc:s.loc
       Location.(mkloc (Longident.Lident s.content) s.loc)
@@ -475,23 +479,20 @@ module Ocaml_gen = struct
 
   let mk_machine_instantiation machine_ident inst_int_id args =
     let inst_ident = mk_mach_inst_ident machine_ident inst_int_id in (* usefull to name setters *)
-    let step_fun_ident = mk_mach_inst_step inst_ident in (* the actual reaction function *)
+    let prog_ident = mk_mach_inst_step inst_ident in (* the actual reaction function *)
     let idents =
-      (List.rev @@ step_fun_ident :: (snd @@ List.fold_left (fun (n, acc) arg ->
+      (List.rev @@ (snd @@ List.fold_left (fun (n, acc) arg ->
            let ident = mk_set_mach_arg_n n inst_ident.content in
            n + 1, ident :: acc
          ) (0, []) args))
     in
-    let idents_as_pat = Pat.tuple @@ List.map mk_pat_var idents in
-    let idents_as_ref = Exp.tuple @@ List.map (fun x -> [%expr ref [%e mk_ident x]]) idents in
-    let machine_fun = mk_ident @@ machine_ident in
+    let prog_ref = [%expr ref [%e mk_ident prog_ident]] in
+    let prog_create_call = mk_ident machine_ident in
     let args_init_tuple_exp = match args with
       | [] -> [%expr ()]
-      | [arg] -> [%expr [%e add_deref_local arg].value]
-      | l -> Exp.tuple @@ List.map (fun arg ->
-          [%expr [%e add_deref_local arg].value]
-        ) l
-    in idents_as_pat, machine_fun, args_init_tuple_exp, idents_as_ref, idents
+      | [arg] -> add_deref_local arg
+      | l -> Exp.tuple @@ List.map add_deref_local l
+    in prog_ident, prog_create_call, args_init_tuple_exp, prog_ref, idents
 
 
   let construct_local_signals_definitions env e = List.fold_left (fun acc vs ->
@@ -521,11 +522,6 @@ module Ocaml_gen = struct
       Option.casefv s.gatherer (fun g ->
           [%expr make_signal_gather ([%e init_val],[%e g])])
         [%expr make_signal [%e init_val]]
-
-  let signal_to_init env s =
-    if Hashtbl.mem env.Tagged.binders_env s.ident.content then
-      mk_ident s.ident
-    else signal_to_creation_expr (mk_ident s.ident) s
 
   let signal_to_definition rhs next_def s =
     [%expr let [%p mk_pat_var s.ident] = [%e rhs] in [%e next_def]]
@@ -603,18 +599,13 @@ module Ocaml_gen = struct
         [(mk_method api_react_function_name [%expr [%e stepfun] ()])] env.args_signals
     in Exp.object_ {pcstr_self = Pat.any (); pcstr_fields}
 
-  (* let construct_program_object env e = *)
-  (*   [%expr  *)
-
   let construct_machine_registers_definitions env e =
     IdentMap.fold (fun k (_, insts) acc ->
         List.fold_left (fun acc (inst_int_id, args) ->
-            let idents_as_pat, machine_fun, args_init_tuple_exp, idents_as_ref, _ =
+            let prog_ident, program, argument, prog_ref, _ =
               mk_machine_instantiation k inst_int_id args
             in
-            [%expr let [%p idents_as_pat] =
-                     let [%p idents_as_pat] = [%e machine_fun] [%e args_init_tuple_exp]
-                     in [%e idents_as_ref]
+            [%expr let [%p mk_pat_var prog_ident] = ref ([%e program]#create_run [%e argument])
                    in [%e acc]]
           ) acc (List.rev insts)
       ) !(env.Tagged.machine_runs) e
@@ -690,18 +681,29 @@ module Ocaml_gen = struct
     let open Selection_tree in
     let animate = StringSet.mem "animate" options in
     let debug = StringSet.mem "debug" options in
-    let asobject = StringSet.mem "obj" options in
-    let create_function_args_pat =
+    let build_tuple tuple mk init =
       match env.Tagged.args_signals with
-      | [] -> [%pat? ()]
-      | [s, t] -> mk_pat_var ?t s.ident
-      | l -> Pat.tuple @@ List.rev_map (fun (s, t) -> mk_pat_var ?t s.ident) l
+      | [] -> init
+      | [s, t] -> mk ?t s
+      | l -> tuple @@ List.rev_map (fun (s, t) -> mk ?t s) l
+    in
+    let mk_notbind mk mknb s =
+      if Hashtbl.mem env.Tagged.binders_env s.ident.content then
+        mk s.ident else mknb s.ident
+    in
+    let create_function_args_pat =
+      build_tuple Pat.tuple (fun ?t s -> mk_pat_var ?t s.ident) [%pat? ()] in
+    let create_function_run_args_pat =
+      build_tuple Pat.tuple
+        (fun ?t -> mk_notbind mk_pat_var
+            (mk_pat_var ?t:(Option.map signaltype_of_type t))
+        ) [%pat? ()]
     in
     let create_function_args_expr =
-      match env.Tagged.args_signals with
-      | [] -> [%expr ()]
-      | [s, t] -> signal_to_init env s
-      | l -> Exp.tuple @@ List.rev_map (fun (s, t) -> signal_to_init env s) l
+      build_tuple Exp.tuple (
+        fun ?t s -> mk_notbind mk_ident (
+            fun _ -> signal_to_creation_expr (mk_ident s.ident) s) s
+      ) [%expr ()]
     in
 
     let stepfun_lambda_expr =
@@ -728,9 +730,7 @@ module Ocaml_gen = struct
         Exp.let_ Asttypes.Nonrecursive [Vb.mk stepfun_pat_var stepfun_lambda_expr] e in
 
     let return_value_expr =
-      (if asobject then construct_input_setters_object
-       else construct_input_setters_tuple)
-        env returned_stepfun_ident in
+      construct_input_setters_object env returned_stepfun_ident in
     let body_expression =
       construct_running_env debug nstmts
       @@ construct_global_signals_definitions env
@@ -744,7 +744,7 @@ module Ocaml_gen = struct
       let open Pendulum.Runtime_misc in
       let open Pendulum.Program in
       let open Pendulum.Signal in
-      let f [%p create_function_args_pat] = [%e body_expression] in
+      let f [%p create_function_run_args_pat] = [%e body_expression] in
       object
         method create [%p create_function_args_pat] = f [%e create_function_args_expr]
         method create_run = f
@@ -765,17 +765,8 @@ module Ocaml_gen = struct
     | MLfinished -> [%expr Bitset.mem [%e select_env_ident] 0]
     | MLis_pause (MLcall (id, args, loc)) ->
       let step_ident = {id with content = Format.sprintf "%s~step" id.content} in
-      let step_eq_pause = [%expr ![%e mk_ident step_ident] () == Pause] in
-      let _, setters = List.fold_left (fun (nth, acc) arg ->
-          let exp_if_set = [%expr
-            if !? [%e add_deref_local arg] then
-              ![%e mk_ident @@ mk_set_mach_arg_n nth id.content]
-                [%e add_deref_local arg].value
-          ] in
-          nth + 1, [%expr [%e exp_if_set] ; [%e acc]]
-        ) (0, step_eq_pause) args
-      in
-      setters
+      let step_eq_pause = [%expr ![%e mk_ident step_ident]#react == Pause] in
+      step_eq_pause
     | MLis_pause e -> assert false
 
   and construct_sequence env depl mlseq =
@@ -822,28 +813,10 @@ module Ocaml_gen = struct
       end
 
     | MLassign_machine (inst_int_id, (machine_ident, sigs, loc)) ->
-      let _, machine_fun, args_init_tuple_exp, _, idents =
+      let prog_ident, machine_fun, args_init_tuple_exp, _, idents =
         mk_machine_instantiation machine_ident inst_int_id sigs
       in
-      let rename_with' =
-        List.map (fun x -> {x with content = x.content ^ "'"}) idents
-      in
-      let rec mk_seq = function
-        | [] -> [%expr ()]
-        | [e] -> e
-        | h::t -> [%expr [%e h]; [%e mk_seq t]]
-      in
-      let assigns =
-        rename_with'
-        |> List.combine idents
-        |> List.map (fun (x, y) -> [%expr [%e mk_ident x] := [%e mk_ident y]])
-        |> mk_seq
-      in
-      let renamed_pat = Pat.tuple @@ List.map mk_pat_var rename_with' in
-      [%expr let [%p renamed_pat] =
-               [%e machine_fun] [%e args_init_tuple_exp]
-             in [%e assigns]
-      ]
+      [%expr [%e mk_ident prog_ident] := [%e machine_fun]#create_run [%e args_init_tuple_exp]]
 
     | MLassign_signal (ident, mlast) ->
       let ocamlexpr = construct_ml_ast env depl mlast in

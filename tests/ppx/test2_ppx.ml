@@ -9,7 +9,7 @@ let%sync p1 =
   let s'' = !!s' + 1 in
   (loop (pause))
 
-let%sync p2 ~dsource a b =
+let%sync p2 a b =
   loop begin
     present a##onclick (
       emit a##.textContent Js.(some @@ string "lol")
@@ -212,22 +212,21 @@ let%sync loop_pause_pause ~print:pdf =
 
 
 let () =
-  let set_s, set_s2, r = gatherer_0 (0, []) in
-  set_s 1;
-  set_s 1;
-  set_s2 1;
-
-  ignore @@ r ()
+  let p = gatherer_0#create (0, []) in
+  p#s 1;
+  p#s 1;
+  p#s2 1;
+  ignore @@ p#react
 
 
 
 let p =
-  let%sync react_obj ~obj a =
+  let%sync react_obj a =
     loop begin
       !(Format.printf "%d\n" !!a)
     ; pause
-    end in react_obj (0)
+    end in react_obj#create 0
 
 let () =
   p#a 10;
-  ignore @@ p#react 
+  ignore @@ p#react
