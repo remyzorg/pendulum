@@ -145,6 +145,7 @@ module type S = sig
 
 
    type env = {
+      pname : ident;
       args_signals : (signal * core_type option) list;
       (** inputs and outputs signals *)
       labels : int IdentMap.t;
@@ -169,6 +170,7 @@ module type S = sig
     val of_ast :
       ?sigs:((signal * core_type option) list) ->
       ?binders:((string * signal_binder list) list) ->
+      ident ->
       Derived.statement -> t * env
 
     (** pretty printers *)

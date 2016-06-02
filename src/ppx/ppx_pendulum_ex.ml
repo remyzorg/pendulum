@@ -26,13 +26,13 @@ let parse_and_generate atom_mapper vb =
     let loc = vb.pvb_loc in
     let pat =
       match vb.pvb_pat.ppat_desc with
-      | Ppat_var id -> id.txt
-      | _ -> "unknown"
+      | Ppat_var id -> id
+      | _ -> { txt = "unknown"; loc = Ast.dummy_loc}
     in
+    let pname = Format.sprintf "%s_%s" (Pendulum_misc.filename loc) pat.txt in
     let ast = Pendulum_parse.ast_of_expr atom_mapper e in
-    let tast, env = Ast.Tagged.of_ast ~sigs ~binders ast in
+    let tast, env = Ast.Tagged.of_ast ~sigs ~binders Ast.{content = pname; loc = pat.loc} ast in
     let tast = Ast.Analysis.filter_dead_trees tast in
-    let pname = Format.sprintf "%s_%s" (Pendulum_misc.filename loc) pat in
     Pendulum_misc.print_to_dot env (StringSet.remove "debug" options)
       (has_opt "dot") (has_opt "pdf") (has_opt "png") pname tast;
     let ocaml_expr = Sync2ml.generate pname options env tast in
@@ -99,7 +99,7 @@ let pendulum_mapper argv =
        match exp with
        | { pexp_desc = Pexp_extension ({ txt = "sync"; loc }, e)} ->
          begin match e with
-           | PStr [{ pstr_desc = Pstr_eval (e, _)}] ->
+           | PStr [{ pstr_desc = Pstr_eval (e, _); pstr_loc}] ->
              begin match e.pexp_desc with
                | Pexp_let (Nonrecursive, vbl, e) ->
                  Exp.let_ Nonrecursive

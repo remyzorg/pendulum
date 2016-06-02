@@ -117,6 +117,7 @@ module type S = sig
     and tagged = (tagged_ast) location
 
     type env = {
+      pname : ident;
       args_signals : (signal * core_type option) list;
       labels : int IdentMap.t;
       global_occurences : int IdentMap.t ref;
@@ -132,7 +133,7 @@ module type S = sig
     val of_ast :
       ?sigs:((signal * core_type option) list) ->
       ?binders:((string * signal_binder list) list) ->
-      Derived.statement -> t * env
+      ident -> Derived.statement -> t * env
 
     val pp_st : Format.formatter -> t -> unit
     val pp_dot : Format.formatter -> t -> unit
@@ -280,6 +281,7 @@ module Make (E : Exp) = struct
       {id; st = {loc ; content}}
 
     type env = {
+      pname : ident;
       args_signals : (signal * core_type option) list;
       labels : int IdentMap.t;
       global_occurences : int IdentMap.t ref;
@@ -368,7 +370,8 @@ module Make (E : Exp) = struct
           origin; bind = No_binding; gatherer})
 
 
-    let create_env sigs binders = {
+    let create_env pname sigs binders = {
+      pname;
       args_signals = sigs;
       labels = IdentMap.empty;
       global_occurences = ref IdentMap.(List.fold_left (fun accmap (s, _) ->
@@ -389,9 +392,9 @@ module Make (E : Exp) = struct
       machine_runs = ref IdentMap.empty
     }
 
-    let rec of_ast ?(sigs=[]) ?(binders=[]) ast =
+    let rec of_ast ?(sigs=[]) ?(binders=[]) pname ast =
       let id = ref 0 in
-      let start_env = create_env sigs binders in
+      let start_env = create_env pname sigs binders in
       let rec visit : env -> Derived.statement -> t = fun env ast ->
         let loc = ast.loc in
         let mk_tagged tagged = mk_tagged ~loc tagged in

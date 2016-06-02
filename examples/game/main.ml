@@ -53,7 +53,7 @@ module Controles = struct
   let keycode e = e##.keyCode
 
   type key = Right | Run | Left | Up | Nope of int | Refresh
-  type direction = R | L [@@deriving yojson, show]
+  type direction = R | L (* [@@deriving yojson, show] *)
 
   let string_of_key = function
     | Right -> "Right" | Left -> "Left" | Refresh -> "Refresh"
@@ -88,11 +88,11 @@ type entity = {
   vy : float;
   dir : direction;
   vx_mod : bool;
-} [@@deriving yojson, show]
+} (* [@@deriving yojson, show] *)
 
-let pp_entity e =
-  let json = entity_to_yojson e in
-  Yojson.Safe.pretty_to_string ~std:true json
+(* let pp_entity e = *)
+(*   let json = entity_to_yojson e in *)
+(*   Yojson.Safe.pretty_to_string ~std:true json *)
 
 
 type model = {
@@ -156,6 +156,18 @@ let physics dt p =
   { p with x; y;}
 
 let player f ({player} as m) = { m with player = f player }
+
+
+let%sync plex keydowns keyups v out =
+  loop begin
+    present (keydowns & List.mem v !!keydowns) (
+      trap up (loop (
+          present (keyups & List.mem v !!keyups)
+            (exit up)
+        ; emit out
+        ; pause))
+    ) ; pause
+  end
 
 let%sync game w img ctx debuglb dt =
   input keydowns (fun acc k -> k :: acc);
@@ -231,7 +243,7 @@ let%sync game w img ctx debuglb dt =
   ||
   loop begin
     present redraw !(draw_model !!dt !!img !!frame !!ctx !!model)
-    ; emit debuglb##.textContent (to_jsstring @@ pp_entity (!!model).player)
+    (* ; emit debuglb##.textContent (to_jsstring @@ pp_entity (!!model).player) *)
     ; pause
   end
 

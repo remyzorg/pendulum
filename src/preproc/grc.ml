@@ -139,7 +139,7 @@ module Flowgraph = struct
 
     type error =
       | Unbound_label of string
-      | Cyclic_causality of t
+      | Cyclic_causality of t * Ast.signal list
       | Par_leads_to_finish of t
 
     val error : loc:Ast.loc -> error -> 'a
@@ -355,7 +355,7 @@ module Flowgraph = struct
 
     type error =
       | Unbound_label of string
-      | Cyclic_causality of t
+      | Cyclic_causality of t * Ast.signal list
       | Par_leads_to_finish of t
 
     exception Error of Ast.loc * error
@@ -365,8 +365,10 @@ module Flowgraph = struct
       fprintf fmt "Error: %s @\n"
         begin match e with
           | Unbound_label s -> "unbound label " ^ s
-          | Cyclic_causality fg -> "Cyclic causality"
-          | Par_leads_to_finish fg -> "Par leads to pause or exit"
+          | Cyclic_causality (fg, sigs) ->
+            Format.sprintf "Cyclic causality on [%s]"
+              (String.concat "; " @@ List.map Ast.(fun s -> s.ident.content) sigs)
+          | Par_leads_to_finish fg -> "Parallel leads to pause or exit"
         end
 
     let error ~loc e = raise (Error (loc, e))
@@ -640,7 +642,7 @@ module Schedule = struct
     val replace_join : Fg.t -> Fg.t -> (Fg.t -> Fg.t)
       -> Fg.t * Fg.t
     val children: Fg.t -> Fg.t -> Fg.t -> Fg.t
-    val interleave: Fg.t -> Fg.t
+    val interleave: Fg.Ast.Tagged.env -> Fg.t -> Fg.t
 
     module Stats : sig
       val size : Fg.t -> int
@@ -668,12 +670,10 @@ module Schedule = struct
       let rec visit m fg =
         match fg with
         | Test (Signal (s, _), t1, t2, _) ->
-          let prev = try find s m with
-            | Not_found -> []
-          in
-          let m = add s (fg :: prev) m in
+          let prev = try find s m with Not_found -> [] in
+          let m' = add s (fg :: prev) m in
           let m1 = visit m t1 in
-          let m2 = visit m t2 in
+          let m2 = visit m' t2 in
           merge (fun k v1 v2 ->
               match v1, v2 with
               | Some v1, Some v2 -> Some (v1 @ v2)
@@ -693,7 +693,8 @@ module Schedule = struct
 
         | Call(Emit s, t) ->
           begin match find s.signal m with
-            | h :: fgs -> Fg.error ~loc:Ast.dummy_loc @@ Fg.Cyclic_causality h
+            | h :: fgs ->
+              Fg.(error ~loc:s.signal.ident.loc @@ Cyclic_causality (h, [s.signal]))
             | [] -> m
             | exception Not_found -> m
           end
@@ -772,10 +773,15 @@ module Schedule = struct
           let emits, tests = aux (t, stop) in
           add s.signal emits, tests
 
-
-        | Call (Instantiate_run _, t) -> empty, empty (* TODO *)
-        | Test (Is_paused _, t1, t2, _) -> empty, empty (* TODO *)
-
+        | Call (Instantiate_run (_, sigs, _), t) ->
+          let emits, tests = aux (t, stop) in
+          List.fold_left (fun acc x -> add x acc) emits sigs,
+          List.fold_left (fun acc x -> add x acc) tests sigs
+        | Test (Is_paused (_, sigs, _), t1, t2, _) ->
+          let emits1, tests1 = aux (t1, stop) in
+          let emits2, tests2 = aux (t2, stop) in
+          List.fold_left (fun acc x -> add x acc) (union emits1 emits2) sigs,
+          List.fold_left (fun acc x -> add x acc) (union tests1 tests2) sigs
 
         | Call (_, t) -> aux (t, stop)
         | Test (Signal (s, atopt), t1, t2, _) ->
@@ -880,7 +886,7 @@ module Schedule = struct
       | (Fg.Test (Fg.Sync c, _, _, _)) -> c
       | _ -> 0, 0
 
-    let rec interleave fg =
+    let rec interleave env fg =
       let fork_tbl = Fgtbl2.create 17 in
       let visit_tbl = Fgtbl.create 17 in
       let rec sequence_of_fork (stop: Fg.t) fg1 fg2 =
@@ -907,7 +913,7 @@ module Schedule = struct
 
               | (Finish | Pause), fg
               | fg, (Finish | Pause) ->
-                Fg.error ~loc:Ast.dummy_loc (Par_leads_to_finish fg2)
+                Fg.error ~loc:Ast.Tagged.(env.pname.loc) (Par_leads_to_finish fg2)
 
               | Test (Signal (s, atopt), t1, t2, _), fg2 ->
                 if emits fg2 stop s then
@@ -941,14 +947,19 @@ module Schedule = struct
                 let fg1 = sequence_of_fork sync t1 t2 in
                 sequence_of_fork stop fg1 fg2
 
-              | Test (test, t1, t2, joinfg1), fg2 ->
+              | Test (test, t1, t2, joinfg1) as fg1, fg2 ->
 
+                let open SignalSet in
                 let fg1_emits, fg1_tests = extract_emits_tests_sets fg1 stop in
                 let fg2_emits, fg2_tests = extract_emits_tests_sets fg2 stop in
-                let open SignalSet in
-                if inter fg2_emits fg1_tests <> empty then
-                  if inter fg1_emits fg2_tests <> empty then
-                    assert false
+                let inter1 = inter fg2_emits fg1_tests in
+                let inter2 = inter fg1_emits fg2_tests in
+
+                if inter1 <> empty then
+                  if inter2 <> empty then
+                    Fg.(error ~loc:Ast.Tagged.(env.pname.loc)
+                        @@ Cyclic_causality
+                          (fg1, (SignalSet.fold List.cons (union inter1 inter2) [])))
                   else
                     sequence_of_fork stop fg2 fg1
                 else
