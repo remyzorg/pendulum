@@ -747,8 +747,12 @@ module Schedule = struct
         | fg when fg == stop -> false
 
 
-        | Call (Instantiate_run _ , t) -> assert false (* TODO *)
-        | Test (Is_paused _, t1, t2, _) -> assert false (* TODO *)
+        | Call (Instantiate_run (_, sigs, _) , t) ->
+          List.exists (fun s' -> s.ident.content = s'.ident.content) sigs || aux (t, stop, s)
+        | Test (Is_paused (_, sigs, _), t1, t2, _) ->
+          List.exists (fun s' -> s.ident.content = s'.ident.content) sigs
+          || aux (t1, stop, s)
+          || aux (t2, stop, s)
 
 
         | Call (_, t) -> aux (t, stop, s)
@@ -917,8 +921,6 @@ module Schedule = struct
                       )
                     in
                     Test(test, t1, t2, joinfg2)
-
-
                   | Fork (t1, t2, sync) ->
                     let fg2 = sequence_of_fork stop t1 t2 in
                     sequence_of_fork sync fg1 fg2
@@ -926,6 +928,10 @@ module Schedule = struct
                   let t1, t2 = replace_join t1 t2 (fun x -> sequence_of_fork stop x fg2) in
                   children fg1 t1 t2
                 )
+
+              | (Call (Instantiate_run _, _) as fg1), Call (action, t2)
+              | Call (action, t2), (Call (Instantiate_run _, _) as fg1) ->
+                Call (action, sequence_of_fork stop fg1 t2)
 
               | Call (action, t), fg2 ->
                 Call (action, sequence_of_fork stop fg2 t)
