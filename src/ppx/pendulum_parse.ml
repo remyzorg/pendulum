@@ -28,7 +28,7 @@ let check_run_param e =
   let open Error in
   match e with
   | {pexp_desc = Pexp_ident {txt = Lident content; loc}} -> Ast.(Sig_param {loc; content})
-  | [%expr ![%p? e]] -> Exp_param e
+  | [%expr ![%e? e]] -> Exp_param e
   | _ -> syntax_error ~loc:e.pexp_loc Signal_name
 
 let signal_tuple_to_list e =

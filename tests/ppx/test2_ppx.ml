@@ -23,14 +23,23 @@ let%sync incr =
   emit s (!!s + 1 + !!s2);
   atom (Format.printf "%d" !!s)
 
-(* let%sync m_loop_incr = *)
-(*   input zz; *)
-(*   let s1 = 5 in *)
-(*   let s2 = 5 in *)
-(*   loop ( *)
-(*     run incr (s2, s1); *)
-(*     pause *)
-(*   ) *)
+let%sync crazy s x =
+  loop (
+    !(Format.printf "%d" !!x)
+    ; pause
+  )
+
+let%sync ptest ~dsource s =
+  run crazy (s, !5)
+
+let%sync m_loop_incr =
+  input zz;
+  let s1 = 5 in
+  let s2 = 5 in
+  loop (
+    run incr (s2, s1);
+    pause
+  )
 (*   || *)
 (*   loop ( *)
 (*     run incr (s1, s2); *)

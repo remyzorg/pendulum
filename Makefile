@@ -39,3 +39,13 @@ configure:
 .PHONY: build doc test all install uninstall reinstall clean distclean configure
 
 # OASIS_STOP
+
+clean-test: test
+	@rm -rf _build/tests
+	@rm test_ppx.*
+
+pdfout: build
+	./main.native	
+	dot -Tpdf tagged.dot -o tagged.pdf;
+	dot -Tpdf flowgraph.dot -o flowgraph.pdf;
+	pdftk tagged.pdf flowgraph.pdf cat output out.pdf

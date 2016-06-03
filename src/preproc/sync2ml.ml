@@ -489,22 +489,23 @@ module Ocaml_gen = struct
     | Exp_param e -> e
 
   let mk_machine_instantiation machine_ident inst_int_id args =
-    let inst_ident = mk_mach_inst_ident machine_ident inst_int_id in (* usefull to name setters *)
+    (* usefull to name setters *)
+    let inst_ident = mk_mach_inst_ident machine_ident inst_int_id in
     let prog_ident = mk_mach_inst_step inst_ident in (* the actual reaction function *)
     let idents =
-      (List.rev @@ (snd @@ List.fold_left (
-           fun (n, acc) -> function
-             | Sig_param s ->
-               let ident = mk_set_mach_arg_n n inst_ident.content in
-               n + 1, Sig_param ident :: acc
-             | Exp_param e -> n + 1, Exp_param e :: acc
-         ) (0, []) args))
+      List.rev @@ (snd @@ List.fold_left (
+          fun (n, acc) -> function
+            | Sig_param s ->
+              let ident = mk_set_mach_arg_n n inst_ident.content in
+              n + 1, Sig_param ident :: acc
+            | Exp_param e -> n + 1, Exp_param e :: acc
+        ) (0, []) args)
     in
     let prog_ref = [%expr ref [%e mk_ident prog_ident]] in
     let prog_create_call = mk_ident machine_ident in
     let handle_param = function
       | Sig_param s -> add_deref_local s
-      | Exp_param e -> e
+      | Exp_param e -> [%expr make_signal [%e e]]
     in
     let args_init_tuple_exp = match args with
       | [] -> [%expr ()]

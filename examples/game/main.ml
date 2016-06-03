@@ -160,9 +160,9 @@ let player f ({player} as m) = { m with player = f player }
 
 let%sync plex keydowns keyups v out =
   loop begin
-    present (keydowns & List.mem v !!keydowns) (
+    present (keydowns & List.mem !!v !!keydowns) (
       trap up (loop (
-          present (keyups & List.mem v !!keyups)
+          present (keyups & List.mem !!v !!keyups)
             (exit up)
         ; emit out
         ; pause))
@@ -181,6 +181,7 @@ let%sync game w img ctx debuglb dt =
   let up = () in
   let run = () in
 
+
   loop begin
     present (keydowns & List.mem Left !!keydowns) (
       trap up (loop (
@@ -191,6 +192,12 @@ let%sync game w img ctx debuglb dt =
     ) ; pause
   end
   ||
+  (* run plex (keydowns, keyups, !Left, left) *)
+  (* || *)
+  (* run plex (keydowns, keyups, !Right, right) *)
+  (* || *)
+  (* run plex (keydowns, keyups, !Up, up) *)
+  (* || *)
   loop begin
     present (keydowns & List.mem Right !!keydowns) (
       trap up (loop (
