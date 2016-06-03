@@ -27,7 +27,7 @@ module type S = sig
 
   type ident = string location
 
-  type signal_origin = Local | Input | Output
+  type signal_origin = Local | Input | Output | Element
 
 
   type gatherer = exp option
@@ -173,7 +173,7 @@ module Make (E : Exp) = struct
     | Event of ident * gatherer
     | No_binding
 
-  type signal_origin = Local | Input | Output
+  type signal_origin = Local | Input | Output | Element
 
 
   type signal = { ident : ident; origin : signal_origin; bind : signal_binder; gatherer : gatherer}
@@ -349,12 +349,20 @@ module Make (E : Exp) = struct
             env := add s (succ i, (i, args) :: insts) !env ;
             {s with content = Format.sprintf "%s~%d" s.content i})
 
+
+    (** rename signals in tests or emits depending prevous signals (unique
+        names) if the signal is tagged, it concats the tag to the name *)
     let rename ~loc env bind s =
+      (* if the signal is known in the current scope *)
       SignalMap.(match find (mk_signal s) env.scope with
+      (* fail, it should have been defined *)
        | exception Not_found -> error ~loc @@ Unbound_identifier s.content
+       (* else, if its the first, it's probably a tagged signal *)
        | (0, origin, _, gatherer) ->
          begin match bind with
+           (* if it's not tagged just create the signal*)
            | No_binding -> {ident = s; origin; bind=No_binding; gatherer}
+           (* if it's tagged with an event, concat the event name with ## *)
            | Event (eident, gatherer) ->
              let tags = try Hashtbl.find env.binders_env s.content with Not_found -> [] in
              let is_binded = List.exists (function
@@ -365,6 +373,7 @@ module Make (E : Exp) = struct
                Hashtbl.replace env.binders_env s.content (bind :: tags);
              let ident = mk_loc ~loc:s.loc (Format.sprintf "%s##%s" s.content eident.content) in
              {ident; origin; bind; gatherer}
+           (* if it's an access, concat with a##.b##.c *)
            | Access (elt, fields) ->
              let fields_str = List.fold_left (fun acc field ->
                  Format.sprintf "%s##.%s" acc field.content) elt.content fields

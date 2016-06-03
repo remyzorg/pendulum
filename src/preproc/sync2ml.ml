@@ -574,27 +574,31 @@ module Ocaml_gen = struct
           [%expr set_absent [%e mk_ident @@ (append_tag s e).ident]; [%e acc]]
         | Event (e, Some g) ->
           [%expr set_absent [%e mk_ident @@ (append_tag s e).ident];
-                 [%e mk_ident @@ (append_tag s e).ident].value <- 
+                 [%e mk_ident @@ (append_tag s e).ident].value <-
                    [%e mk_ident @@ (append_tag s e).ident].default;
                  [%e acc]]
         | _ -> acc
       in List.fold_left (fun acc (s, _) ->
-          try Hashtbl.find env.Tagged.binders_env s.ident.content
-              |> List.fold_left (events_setabs s) acc
+          try
+            if s.origin = Element then acc
+            else Hashtbl.find env.Tagged.binders_env s.ident.content
+                 |> List.fold_left (events_setabs s) acc
           with Not_found ->
             let exp = Option.casefv s.gatherer (fun _ ->
-                 [%expr [%e mk_ident s.ident].value <- [%e mk_ident s.ident].default; [%e acc]]
+                [%expr [%e mk_ident s.ident].value <- [%e mk_ident s.ident].default; [%e acc]]
               ) acc
             in [%expr set_absent [%e mk_ident s.ident]; [%e exp]]
-      ) locals_setters env.args_signals
+        ) locals_setters env.args_signals
     in
     [%expr let set_absent () = [%e globals_absent_setters] in [%e e]]
+
+  let is_tagged env s =
+    Tagged.(s.origin = Element || Hashtbl.mem env.binders_env s.ident.content)
 
   let construct_input_setters_tuple env stepfun =
     let open Tagged in
     let globals =
-      List.filter (fun (s, _) -> not @@ Hashtbl.mem env.Tagged.binders_env s.ident.content)
-        env.args_signals
+      List.filter (fun (s, _) -> not @@ is_tagged env s) env.args_signals
     in
     match globals with
     | [] -> stepfun
@@ -606,15 +610,13 @@ module Ocaml_gen = struct
   let construct_input_setters_object env stepfun =
     let open Tagged in
     let pcf_loc = Ast.dummy_loc in
-    let filter_binded s = not @@ Hashtbl.mem
-        env.Tagged.binders_env s.ident.content in
     let mk_method str expr = Asttypes.(Cf.method_ {txt = str; loc = pcf_loc}
         Public (Cfk_concrete (Fresh, expr))) in
     let mk_field_setter s = mk_method s.ident.content
         [%expr set_present_value [%e mk_ident s.ident]] in
     let pcstr_fields =
       List.fold_left
-        (fun acc (s, _) -> if filter_binded s then mk_field_setter s :: acc else acc)
+        (fun acc (s, _) -> if not @@ is_tagged env s then mk_field_setter s :: acc else acc)
         [(mk_method api_react_function_name [%expr [%e stepfun] ()])] env.args_signals
     in Exp.object_ {pcstr_self = Pat.any (); pcstr_fields}
 
@@ -706,10 +708,7 @@ module Ocaml_gen = struct
       | [s, t] -> mk ?t s
       | l -> tuple @@ List.rev_map (fun (s, t) -> mk ?t s) l
     in
-    let mk_notbind mk mknb s =
-      if Hashtbl.mem env.Tagged.binders_env s.ident.content then
-        mk s.ident else mknb s.ident
-    in
+    let mk_notbind mk mknb s = if is_tagged env s then mk s.ident else mknb s.ident in
     let create_function_args_pat =
       build_tuple Pat.tuple (fun ?t s -> mk_pat_var ?t s.ident) [%pat? ()] in
     let create_function_run_args_pat =
@@ -724,7 +723,6 @@ module Ocaml_gen = struct
             fun _ -> signal_to_creation_expr (mk_ident s.ident) s) s
       ) [%expr ()]
     in
-
     let stepfun_lambda_expr =
       [%expr fun () -> try [%e stepfun_body] with
              | Pause_exc -> set_absent (); Pause

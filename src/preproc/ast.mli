@@ -42,7 +42,7 @@ module type S = sig
 
   type ident = string location
 
-  type signal_origin = Local | Input | Output
+  type signal_origin = Local | Input | Output | Element
 
   type gatherer = exp option
 

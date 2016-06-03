@@ -29,11 +29,13 @@ let check_run_param e =
   match e with
   | {pexp_desc = Pexp_ident {txt = Lident content; loc}} -> Ast.(Sig_param {loc; content})
   | [%expr ![%e? e]] -> Exp_param e
+  | [%expr !![%e? _]] as e -> Exp_param e
   | _ -> syntax_error ~loc:e.pexp_loc Signal_name
 
 let signal_tuple_to_list e =
   let open Ast in
   match e with
+  | [%expr ![%e? e]] | ([%expr !![%e? _]] as e) -> [Exp_param e]
   | { pexp_desc = Pexp_ident {txt = Lident content; loc }} -> [Sig_param {loc; content}]
   | { pexp_desc = Pexp_tuple exprs } -> List.map check_run_param exprs
   | _ -> Error.syntax_error ~loc:e.pexp_loc Error.Signal_tuple
@@ -78,7 +80,10 @@ let pop_signals_decl e =
   let open Ast in
   let mk ?gatherer origin var = mk_signal ~origin ?gatherer (check_expr_ident var) in
   let get_orig = function
-    | [%expr output] -> Output | [%expr input] -> Input | _ -> Input
+    | [%expr output] -> Output
+    | [%expr input] -> Input
+    | [%expr element] -> Element
+    | _ -> Input
   in
   let sig_of_expr ?gatherer orig = function
     | [%expr ([%e? e_var] : [%t? t])] -> mk (get_orig orig) e_var, Some t
@@ -93,10 +98,11 @@ let pop_signals_decl e =
           sig_of_expr orig e_var' :: acc
         ) (sig_of_expr orig e_var :: sigs) e_vars
 
-    | [%expr [%e? ([%expr input] | [%expr output]) as orig] [%e? e_var]; [%e? e2] ] ->
+    | [%expr [%e? ([%expr input] | [%expr output] | [%expr element]) as orig]
+               [%e? e_var]; [%e? e2] ] ->
       aux e2 binders @@ sig_of_expr orig e_var :: sigs
 
-    | [%expr [%e? ([%expr input] | [%expr output]) as orig]
+    | [%expr [%e? ([%expr input] | [%expr output] | [%expr element]) as orig]
                [%e? e_var] [%e? {pexp_desc = Pexp_record (gatherers, None)}];
              [%e? e2] ] ->
       let binder = List.map (fun ({txt; loc}, expr) ->
@@ -108,11 +114,10 @@ let pop_signals_decl e =
       let s, _ as st = sig_of_expr orig e_var in
       aux e2 ((s.ident.content, binder) :: binders) @@ st :: sigs
 
-    | [%expr [%e? ([%expr input] | [%expr output]) as orig] [%e? e_var] [%e? gatherer];
-             [%e? e2] ] ->
+    | [%expr [%e? ([%expr input] | [%expr output] | [%expr element]) as orig]
+               [%e? e_var] [%e? gatherer]; [%e? e2] ] ->
       let st = sig_of_expr ~gatherer orig e_var in
       aux e2 binders @@ st :: sigs
-
     | e -> e, binders, sigs
   in aux e [] []
 
