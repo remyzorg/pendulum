@@ -78,7 +78,7 @@ module type S = sig
       | Present of test * statement * statement
       | Atom of exp
       | Signal of valued_ident * statement
-      | Run of ident * ident run_param list * loc
+      | Run of ident * (ident * ident option) run_param list * loc
 
       | Halt
       | Sustain of valued_ident
@@ -215,7 +215,7 @@ module Make (E : Exp) = struct
       | Present of test * statement * statement
       | Atom of exp
       | Signal of valued_ident * statement
-      | Run of ident * ident run_param list * loc
+      | Run of ident * (ident * ident option) run_param list * loc
 
       | Halt
       | Sustain of valued_ident
@@ -479,7 +479,9 @@ module Make (E : Exp) = struct
         | Derived.Run (mident, ids, loc) ->
           let sigs = List.map (function
               | Exp_param exp -> Exp_param exp
-              | Sig_param s -> Sig_param (rename ~loc env No_binding s)
+              | Sig_param (s, tag) ->
+                let typ = match tag with Some e -> Event (e, None) | None -> No_binding in
+                Sig_param (rename ~loc env typ s)
             ) ids
           in
           let machine_id =

@@ -23,40 +23,37 @@ let check_pat_ident e =
   | Ppat_var {txt = content; loc} -> Ast.{loc; content}
   | _ -> syntax_error ~loc:e.ppat_loc Signal_name
 
-let check_run_param e =
-  let open Ast in
-  let open Error in
-  match e with
-  | {pexp_desc = Pexp_ident {txt = Lident content; loc}} -> Ast.(Sig_param {loc; content})
+
+let check_signal_expr exn =
+  let open Ast in function
+  | { pexp_desc = Pexp_ident {txt = Lident content; loc} } -> {loc; content}, None
+  | [%expr [%e? elt] ##
+             [%e? {pexp_desc = Pexp_ident {txt = Lident content; loc}} ]]
+  | {pexp_desc = Pexp_field (elt, {txt = Lident content; loc})} ->
+    check_expr_ident elt, Some {loc; content}
+
+  | [%expr [%e? elt] ## [%e? err]] ->
+    Error.(syntax_error ~loc:err.pexp_loc Event_name)
+  | e -> Error.(syntax_error ~loc:e.pexp_loc exn)
+
+let check_run_param exn =
+  let open Ast in function
   | [%expr ![%e? e]] -> Exp_param e
-  | [%expr !![%e? _]] as e -> Exp_param e
-  | _ -> syntax_error ~loc:e.pexp_loc Signal_name
+  | e -> Sig_param (check_signal_expr exn e)
 
 let signal_tuple_to_list e =
   let open Ast in
   match e with
-  | [%expr ![%e? e]] | ([%expr !![%e? _]] as e) -> [Exp_param e]
-  | { pexp_desc = Pexp_ident {txt = Lident content; loc }} -> [Sig_param {loc; content}]
-  | { pexp_desc = Pexp_tuple exprs } -> List.map check_run_param exprs
-  | _ -> Error.syntax_error ~loc:e.pexp_loc Error.Signal_tuple
+  | { pexp_desc = Pexp_tuple exprs } -> List.map (check_run_param Error.Signal_expr) exprs
+  | e -> [check_run_param Error.Run_params e]
 
 let rec check_signal_presence_expr atom_mapper e =
   let open Ast in
-  match e with
-  | { pexp_desc = Pexp_ident {txt = Lident content; loc} } -> {loc; content}, None, None
+  Tuple.tr_of_db @@ match e with
   | [%expr [%e? sigexpr] & ([%e? boolexpr])] ->
-    let ident, tag, _ = check_signal_presence_expr atom_mapper sigexpr in
-    ident, tag, Some (atom_mapper boolexpr)
+    check_signal_expr Error.Signal_test sigexpr, Some (atom_mapper boolexpr)
+  | e -> check_signal_expr Error.Signal_test e, None
 
-
-  | [%expr [%e? elt] ##
-             [%e? {pexp_desc = Pexp_ident {txt = Lident content; loc}} ]]
-  | {pexp_desc = Pexp_field (elt, {txt = Lident content; loc})} ->
-    check_expr_ident elt, Some {loc; content}, None
-
-  | [%expr [%e? elt] ## [%e? err]] ->
-    Error.(syntax_error ~loc:err.pexp_loc Event_name)
-  | _ -> Error.(syntax_error ~loc:e.pexp_loc Signal_test)
 
 let rec check_signal_emit_expr acc atom_mapper e =
   let open Ast in

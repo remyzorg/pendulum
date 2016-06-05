@@ -104,7 +104,7 @@ module type S = sig
       | Present of test * statement * statement
       | Atom of exp
       | Signal of valued_ident * statement
-      | Run of ident * ident run_param list * loc
+      | Run of ident * (ident * ident option) run_param list * loc
 
       (** Non-core statements *)
       | Halt

@@ -8,6 +8,12 @@ let fold_n f acc n =
       aux (f acc n) (n - 1)
   in aux acc n
 
+module Tuple = struct
+
+  let tr_of_db ((v1, v2), v3) = (v1, v2, v3)
+
+end
+
 module MList = struct
 
   let rec map_filter p f = function
@@ -153,10 +159,4 @@ module Bitset = struct
           Format.fprintf fmt "; "
       ) t;
     Format.fprintf fmt "|]"
-
-
-
-
-
-
 end
