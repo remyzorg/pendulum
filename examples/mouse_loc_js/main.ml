@@ -1,41 +1,34 @@
 open Dom_html
 open Format
 
+let error f = Printf.ksprintf
+    (fun s -> Firebug.console##error (Js.string s); failwith s) f
+let debug f = Printf.ksprintf
+    (fun s -> Firebug.console##log(Js.string s)) f
+let alert f = Printf.ksprintf
+    (fun s -> Dom_html.window##alert(Js.string s); failwith s) f
 
-let%sync print_lol s =
-  let n = 0 in
-  loop begin
-    emit n (!!n + 1)
-    ; emit s##.textContent Js.(some (string @@ string_of_int !!n))
-    ; pause
-  end
-
-let%sync print_lol s =
-  let n = 0 in
-  loop begin
-    emit n (!!n + 1)
-    ; emit s##.textContent Js.(some (string @@ string_of_int !!n))
-    ; pause
-  end
+let%sync debug s n = !(debug "%s : %d" !!s !!n)
 
 let%sync mouse =
   input s;
   element s2;
+
   input w {
     onmousemove =
       "",
       (fun x ev -> sprintf "%d,%d" ev##.clientX ev##.clientY);
   };
 
-
-  run print_lol s2
-  ||
+  let n = 0 in
   loop begin
     present w##onmousemove begin
       emit s##.textContent (Js.(some (string !!(w##onmousemove))))
-    end;
-    pause ;
+    ; emit n (!!n + 1)
+    end
+    ; pause
   end
+  (* || loop begin run debug (w##onmousemove, n); pause end *)
 ;;
 
 let onload _ =
