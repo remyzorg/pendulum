@@ -47,7 +47,7 @@ module type S = sig
   type valued_ident = {sname : ident ; fields : ident list; ivalue : exp}
 
   type 'a run_param = Sig_param of 'a | Exp_param of exp
-  val filter_param : ('a -> 'b) -> 'a run_param list -> 'b list
+  val filter_param : (signal -> 'b) -> signal run_param list -> 'b list
   val mk_signal : ?origin:signal_origin -> ?bind:signal_binder -> ?gatherer:exp -> ident -> signal
 
   val mk_vsig : signal -> signal list -> exp -> valued_signal
@@ -188,8 +188,9 @@ module Make (E : Exp) = struct
 
   type 'a run_param = Sig_param of 'a | Exp_param of exp
 
-  let filter_param f l = l
-    |> List.fold_left (fun acc -> function Sig_param x -> (f x) :: acc | _ -> acc) []
+  let filter_param f l =
+    l |> List.fold_left (fun acc ->
+        function Sig_param ({bind = No_binding} as x) -> (f x) :: acc | _ -> acc) []
     |> List.rev
 
   let mk_loc ?(loc=dummy_loc) content = {loc; content}

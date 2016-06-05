@@ -28,7 +28,7 @@ let%sync mouse =
     end
     ; pause
   end
-  (* || loop begin run debug (w##onmousemove, n); pause end *)
+  || loop begin run debug (w##onmousemove, n); pause end
 ;;
 
 let onload _ =

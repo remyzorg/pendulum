@@ -73,7 +73,7 @@ module type S = sig
 
   type 'a run_param = Sig_param of 'a | Exp_param of exp
 
-  val filter_param : ('a -> 'b) -> 'a run_param list -> 'b list
+  val filter_param : (signal -> 'b) -> signal run_param list -> 'b list
 
   val mk_signal : ?origin:signal_origin -> ?bind:signal_binder -> ?gatherer:exp -> ident -> signal
   val mk_vsig : signal -> signal list -> exp -> valued_signal

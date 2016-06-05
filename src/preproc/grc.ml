@@ -781,6 +781,7 @@ module Schedule = struct
           let emits, tests = aux (t, stop) in
           let sigs = Ast.filter_param (fun x -> x) sigs in
           fold_set emits sigs, fold_set tests sigs
+
         | Test (Is_paused (_, sigs, _), t1, t2, _) ->
           let emits1, tests1 = aux (t1, stop) in
           let emits2, tests2 = aux (t2, stop) in
@@ -960,10 +961,11 @@ module Schedule = struct
                 let inter2 = inter fg1_emits fg2_tests in
 
                 if inter1 <> empty then
-                  if inter2 <> empty then
+                  if inter2 <> empty then begin
                     Fg.(error ~loc:Ast.Tagged.(env.pname.loc)
                         @@ Cyclic_causality
                           (fg1, (SignalSet.fold List.cons (union inter1 inter2) [])))
+                  end
                   else
                     sequence_of_fork stop fg2 fg1
                 else
