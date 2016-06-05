@@ -595,18 +595,6 @@ module Ocaml_gen = struct
   let is_tagged env s =
     Tagged.(s.origin = Element || Hashtbl.mem env.binders_env s.ident.content)
 
-  let construct_input_setters_tuple env stepfun =
-    let open Tagged in
-    let globals =
-      List.filter (fun (s, _) -> not @@ is_tagged env s) env.args_signals
-    in
-    match globals with
-    | [] -> stepfun
-    | [(s, _)] -> [%expr set_present_value [%e mk_ident s.ident], [%e stepfun]]
-    | l -> Exp.tuple @@ List.fold_left (fun acc (s, _) ->
-        [%expr set_present_value [%e mk_ident s.ident]] :: acc
-      ) [stepfun] l
-
   let construct_input_setters_object env stepfun =
     let open Tagged in
     let pcf_loc = Ast.dummy_loc in
