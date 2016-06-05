@@ -29,7 +29,7 @@ let%sync crazy s x =
     ; pause
   )
 
-let%sync ptest ~dsource s =
+let%sync ptest s =
   run crazy (s, !5)
 
 let%sync m_loop_incr =
@@ -240,3 +240,9 @@ let p =
 let () =
   p#a 10;
   ignore @@ p#react
+
+
+let%sync p2 ~dsource =
+  loop begin
+    pause
+  end
