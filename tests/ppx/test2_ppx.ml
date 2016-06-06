@@ -248,6 +248,7 @@ open Signal
 
 let%sync p2 = loop pause
 
+
 let _ : < react : state > = p2#create
 let _ : < react : state > = p2#create_run
 let%sync p2' s = loop begin
