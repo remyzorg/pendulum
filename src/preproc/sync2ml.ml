@@ -550,8 +550,13 @@ module Ocaml_gen = struct
               signal_to_definition (signal_to_creation_expr [%expr None] s) acc s
             ) acc
         with Not_found ->
-          acc
-          (* signal_to_definition (mk_ident s.ident) acc s *)
+          if s.origin = Output then
+            [%expr let [%p mk_pat_var s.ident],
+                       [%p mk_pat_var @@ ident_app_str s.ident "~" "out" ] =
+                     fst [%e (mk_ident s.ident)], snd [%e (mk_ident s.ident)]
+                   in [%e acc]]
+          else acc
+
       ) (mk_local_signals_definitions env e) env.args_signals
 
   let mk_set_all_absent_definition env e =
@@ -598,7 +603,9 @@ module Ocaml_gen = struct
         [%expr set_present_value [%e mk_ident s.ident]] in
     let pcstr_fields =
       List.fold_left
-        (fun acc (s, _) -> if not @@ is_tagged env s then mk_field_setter s :: acc else acc)
+        (fun acc (s, _) ->
+           if not @@ is_tagged env s && s.origin <> Output then
+             mk_field_setter s :: acc else acc)
         [(mk_method env.pname.loc api_react_function_name
             [%expr [%e reactfun] ()])] env.args_signals
     in Exp.object_ {pcstr_self = Pat.any (); pcstr_fields}
@@ -717,7 +724,9 @@ module Ocaml_gen = struct
     let mk_createfun_outputs_expr =
       build_tuple Exp.tuple (
         fun ?t s -> mk_notbind mk_ident (fun _ ->
-            signal_to_creation_expr [%expr fst [%e (mk_ident s.ident) ]] s) s
+            [%expr [%e signal_to_creation_expr
+                         [%expr fst [%e (mk_ident s.ident)]] s],
+                   snd [%e (mk_ident s.ident)]]) s
       ) [%expr ()]
     in
     let mk_createfun_inputs_expr =
