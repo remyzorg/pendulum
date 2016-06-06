@@ -538,39 +538,40 @@ module Ocaml_gen = struct
     [%expr let [%p mk_pat_var s.ident] = [%e rhs] in [%e next_def]]
 
 
-  let mk_global_signals_definitions env e = Tagged.(
-      List.fold_left (fun acc (s, _) ->
-          try
-            Hashtbl.find env.binders_env s.ident.content
-            |> MList.map_filter has_tobe_defined (function
-                | Event (e, gatherer) as bind -> { (append_tag s e) with gatherer; bind}
-                | _ -> s)
-            |> List.fold_left (fun acc s ->
-                signal_to_definition (signal_to_creation_expr [%expr None] s) acc s
-              ) acc
-          with Not_found ->
-            signal_to_definition (mk_ident s.ident) acc s
-        ) (mk_local_signals_definitions env e) env.args_signals)
+  let mk_args_signals_definitions env e =
+    let open Tagged in
+    List.fold_left (fun acc (s, _) ->
+        try
+          Hashtbl.find env.binders_env s.ident.content
+          |> MList.map_filter has_tobe_defined (function
+              | Event (e, gatherer) as bind -> { (append_tag s e) with gatherer; bind}
+              | _ -> s)
+          |> List.fold_left (fun acc s ->
+              signal_to_definition (signal_to_creation_expr [%expr None] s) acc s
+            ) acc
+        with Not_found ->
+          acc
+          (* signal_to_definition (mk_ident s.ident) acc s *)
+      ) (mk_local_signals_definitions env e) env.args_signals
 
   let mk_set_all_absent_definition env e =
     let open Tagged in
+    (* let set_absent_expr ident = *)
     let locals_setters =
       (List.fold_left (fun acc vs ->
            [%expr set_absent ![%e mk_ident vs.signal.ident]; [%e acc]]
          ) [%expr ()] !(env.local_only_env))
     in
-    let globals_absent_setters =
+    let absent_setters =
       let events_setabs s acc bind =
+        let mk s e = mk_ident @@ (append_tag s e).ident in
         match bind with
-        | Event (e, None) ->
-          [%expr set_absent [%e mk_ident @@ (append_tag s e).ident]; [%e acc]]
-        | Event (e, Some g) ->
-          [%expr set_absent [%e mk_ident @@ (append_tag s e).ident];
-                 [%e mk_ident @@ (append_tag s e).ident].value <-
-                   [%e mk_ident @@ (append_tag s e).ident].default;
-                 [%e acc]]
-        | _ -> acc
-      in List.fold_left (fun acc (s, _) ->
+        | Event (e, ev) ->
+          let acc = if ev = None then acc else
+              [%expr [%e mk s e].value <- [%e mk s e].default; [%e acc]]
+          in [%expr set_absent [%e mk s e]; [%e acc]]
+        | _ -> acc in
+      List.fold_left (fun acc (s, _) ->
           try
             if s.origin = Element then acc
             else Hashtbl.find env.Tagged.binders_env s.ident.content
@@ -582,7 +583,7 @@ module Ocaml_gen = struct
             in [%expr set_absent [%e mk_ident s.ident]; [%e exp]]
         ) locals_setters env.args_signals
     in
-    [%expr let set_absent () = [%e globals_absent_setters] in [%e e]]
+    [%expr let set_absent () = [%e absent_setters] in [%e e]]
 
   let is_tagged env s =
     Tagged.(s.origin = Element || Hashtbl.mem env.binders_env s.ident.content)
@@ -679,70 +680,106 @@ module Ocaml_gen = struct
                ref 0 in [%e body]]
     else body
 
+  let mk_constructor_reactfun env animate d body =
+    let reactfun = [%expr
+      fun () -> try [%e body] with
+        | Pause_exc -> set_absent (); Pause
+        | Finish_exc -> set_absent ();
+          Bitset.add [%e select_env_ident] 0; Finish] in
+    let reactfun_ident = mk_loc reactfun_name in
+    let reactfun_expr = mk_ident reactfun_ident in
+    let recparam, anim, id =
+      if animate then
+        let animate_ident = mk_loc animate_name in
+        Asttypes.Recursive
+      , [Vb.mk (mk_pat_var animate_ident) (mk_raf_call d reactfun_expr)]
+      , mk_ident animate_ident
+      else Asttypes.Nonrecursive, [], reactfun_expr
+    in
+    Exp.let_ recparam (Vb.mk (mk_pat_var reactfun_ident) reactfun :: anim), id
+
+
+  let mk_constructor_create_fun env =
+    let open Tagged in
+    let inputs, outputs =
+      List.partition (fun (x, _) -> x.origin <> Output) env.args_signals in
+    let mk_notbind mk mknb s = if is_tagged env s then mk s.ident else mknb s.ident in
+    let mk_createfun_args_pat =
+      build_tuple Pat.tuple (fun ?t s -> mk_pat_var ?t s.ident) [%pat? ()] in
+    let createfun_inputs_pat = mk_createfun_args_pat inputs in
+    let createfun_outputs_pat = mk_createfun_args_pat outputs in
+    let mk_createfun_run_args_pat =
+      build_tuple Pat.tuple
+        (fun ?t -> mk_notbind mk_pat_var
+            (mk_pat_var ?t:(Option.map signaltype_of_type t))) [%pat? ()] in
+    let createfun_run_inputs_pat = mk_createfun_run_args_pat inputs in
+    let createfun_run_outputs_pat = mk_createfun_run_args_pat outputs in
+    let mk_createfun_outputs_expr =
+      build_tuple Exp.tuple (
+        fun ?t s -> mk_notbind mk_ident (fun _ ->
+            signal_to_creation_expr [%expr fst [%e (mk_ident s.ident) ]] s) s
+      ) [%expr ()]
+    in
+    let mk_createfun_inputs_expr =
+      build_tuple Exp.tuple (
+        fun ?t s -> mk_notbind mk_ident (fun _ ->
+            signal_to_creation_expr (mk_ident s.ident) s) s
+      ) [%expr ()]
+    in
+    let createfun_expr, createfun_run_expr =
+      if inputs <> [] then
+        let ins = mk_createfun_inputs_expr inputs in
+        if outputs <> [] then
+          let outs = mk_createfun_outputs_expr outputs in
+          [%expr fun [%p createfun_inputs_pat] [%p createfun_outputs_pat]
+                   -> create_local [%e ins] [%e outs]],
+          [%expr create_local]
+        else
+          [%expr fun [%p createfun_inputs_pat] -> create_local [%e ins] ()],
+          [%expr fun ins -> create_local ins ()]
+      else if outputs <> [] then
+        let outs = mk_createfun_outputs_expr outputs in
+        [%expr fun [%p createfun_outputs_pat] -> create_local () [%e outs]],
+        [%expr fun outs -> create_local]
+      else
+        [%expr create_local () ()], [%expr create_local () ()] in
+
+    createfun_run_inputs_pat, createfun_run_outputs_pat,
+    createfun_expr, createfun_run_expr
+
+
   let mk_constructor options nstmts env sel reactfun_body =
     let open Tagged in
     let animate = StringSet.mem "animate" options in
     let d = StringSet.mem "debug" options in
-    let mk_notbind mk mknb s = if is_tagged env s then mk s.ident else mknb s.ident in
-
-    let create_function_args_pat =
-      build_tuple Pat.tuple (fun ?t s -> mk_pat_var ?t s.ident) [%pat? ()]
-        env.args_signals
+    let mk_reactfun_let, reactfun_ident =
+      mk_constructor_reactfun env animate d reactfun_body
     in
-    let create_function_run_args_pat =
-      build_tuple Pat.tuple
-        (fun ?t -> mk_notbind mk_pat_var
-            (mk_pat_var ?t:(Option.map signaltype_of_type t))
-        ) [%pat? ()] env.args_signals
-    in
-    let create_function_expr, create_run_expr =
-      if env.args_signals = [] then
-        [%expr create_local ()], [%expr create_local ()] (* method with no args*)
-      else [%expr fun [%p create_function_args_pat] ->
-             create_local [%e
-               build_tuple Exp.tuple (
-                 fun ?t s -> mk_notbind mk_ident (
-                     fun _ -> signal_to_creation_expr (mk_ident s.ident) s) s
-               ) [%expr ()] env.args_signals
-             ]] , [%expr create_local]
-    in
-    let reactfun = [%expr
-      fun () -> try [%e reactfun_body] with
-        | Pause_exc -> set_absent (); Pause
-        | Finish_exc -> set_absent ();
-          Bitset.add [%e select_env_ident] 0; Finish] in
-
-    let reactfun_let_expr, reactfun_ident =
-      let reactfun_ident = mk_loc reactfun_name in
-      let reactfun_expr = mk_ident reactfun_ident in
-      let recparam, anim, id =
-        if animate then
-          let animate_ident = mk_loc animate_name in
-          Asttypes.Recursive
-        , [Vb.mk (mk_pat_var animate_ident) (mk_raf_call d reactfun_expr)]
-        , mk_ident animate_ident
-        else Asttypes.Nonrecursive, [], reactfun_expr
-      in
-      Exp.let_ recparam (Vb.mk (mk_pat_var reactfun_ident) reactfun :: anim)
-    , id
+    let createfun_run_inputs_pat,
+        createfun_run_outputs_pat,
+        createfun_expr,
+        createfun_run_expr
+      = mk_constructor_create_fun env
     in
     [%expr
       let open Pendulum.Runtime_misc in
       let open Pendulum.Program in
       let open Pendulum.Signal in
-      let create_local [%p create_function_run_args_pat] = [%e
+      let create_local
+          [%p createfun_run_inputs_pat]
+          [%p createfun_run_outputs_pat] = [%e
         mk_running_env d nstmts
-        @@ mk_global_signals_definitions env
+        @@ mk_args_signals_definitions env
         @@ mk_set_all_absent_definition env
         @@ mk_machine_registers_definitions env
         @@ mk_animate_mutex animate
-        @@ reactfun_let_expr
+        @@ mk_reactfun_let
         @@ mk_callbacks_assigns animate env
         @@ mk_program_object env reactfun_ident
       ] in
       object
-        method create = [%e create_function_expr]
-        method create_run = [%e create_run_expr]
+        method create = [%e createfun_expr]
+        method create_run = [%e createfun_run_expr]
       end
 
     ]
