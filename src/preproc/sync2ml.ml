@@ -674,15 +674,15 @@ module Ocaml_gen = struct
         Bitset.make [%e int_const (1 + nstmts)]
       in [%e body ]]
     in
-    if debug then [%expr let [%p mk_pat_var debug_instant_cnt_name] =
-                           ref 0 in [%e body]]
+    if debug then
+      [%expr let [%p mk_pat_var debug_instant_cnt_name] =
+               ref 0 in [%e body]]
     else body
 
   let mk_constructor options nstmts env sel reactfun_body =
-    let open Selection_tree in
     let open Tagged in
     let animate = StringSet.mem "animate" options in
-    let debug = StringSet.mem "debug" options in
+    let d = StringSet.mem "debug" options in
     let mk_notbind mk mknb s = if is_tagged env s then mk s.ident else mknb s.ident in
 
     let create_function_args_pat =
@@ -695,45 +695,43 @@ module Ocaml_gen = struct
             (mk_pat_var ?t:(Option.map signaltype_of_type t))
         ) [%pat? ()] env.args_signals
     in
-    let create_function_expr =
-      match env.args_signals with
-      | [] -> [%expr create_local ()]
-      | l ->
-        let args = build_tuple Exp.tuple (
-            fun ?t s -> mk_notbind mk_ident (
-                fun _ -> signal_to_creation_expr (mk_ident s.ident) s) s
-          ) [%expr ()] env.args_signals
-        in [%expr fun [%p create_function_args_pat] -> create_local [%e args]]
+    let create_function_expr, create_run_expr =
+      if env.args_signals = [] then
+        [%expr create_local ()], [%expr create_local ()] (* method with no args*)
+      else [%expr fun [%p create_function_args_pat] ->
+             create_local [%e
+               build_tuple Exp.tuple (
+                 fun ?t s -> mk_notbind mk_ident (
+                     fun _ -> signal_to_creation_expr (mk_ident s.ident) s) s
+               ) [%expr ()] env.args_signals
+             ]] , [%expr create_local]
     in
-    let create_run_expr =
-      if env.args_signals = []
-      then [%expr create_local ()]
-      else [%expr create_local]
-    in
-    let reactfun_lambda_expr =
-      [%expr fun () -> try [%e reactfun_body] with
-             | Pause_exc -> set_absent (); Pause
-             | Finish_exc -> set_absent (); Bitset.add [%e select_env_ident] 0; Finish]
-    in
-    let reactfun_ident_expr = mk_ident @@ mk_loc reactfun_name in
-    let reactfun_pat_var = mk_pat_var @@ mk_loc reactfun_name in
-    let animate_pat_var = mk_pat_var @@ mk_loc animate_name in
-    let animate_ident_expr = mk_ident @@ mk_loc animate_name in
-    let reactfun_ident = if animate then animate_ident_expr else
-        reactfun_ident_expr in
-    let reactfun_let_expr =
-      let recparam, anim =
+    let reactfun = [%expr
+      fun () -> try [%e reactfun_body] with
+        | Pause_exc -> set_absent (); Pause
+        | Finish_exc -> set_absent ();
+          Bitset.add [%e select_env_ident] 0; Finish] in
+
+    let reactfun_let_expr, reactfun_ident =
+      let reactfun_ident = mk_loc reactfun_name in
+      let reactfun_expr = mk_ident reactfun_ident in
+      let recparam, anim, id =
         if animate then
-          Asttypes.Recursive, [
-            Vb.mk animate_pat_var (mk_raf_call debug reactfun_ident_expr)]
-        else Asttypes.Nonrecursive, [] in
-      Exp.let_ recparam (Vb.mk reactfun_pat_var reactfun_lambda_expr :: anim) in
+          let animate_ident = mk_loc animate_name in
+          Asttypes.Recursive
+        , [Vb.mk (mk_pat_var animate_ident) (mk_raf_call d reactfun_expr)]
+        , mk_ident animate_ident
+        else Asttypes.Nonrecursive, [], reactfun_expr
+      in
+      Exp.let_ recparam (Vb.mk (mk_pat_var reactfun_ident) reactfun :: anim)
+    , id
+    in
     [%expr
       let open Pendulum.Runtime_misc in
       let open Pendulum.Program in
       let open Pendulum.Signal in
       let create_local [%p create_function_run_args_pat] = [%e
-        mk_running_env debug nstmts
+        mk_running_env d nstmts
         @@ mk_global_signals_definitions env
         @@ mk_set_all_absent_definition env
         @@ mk_machine_registers_definitions env
