@@ -256,14 +256,14 @@ let%sync p3 s = loop begin run p2' !("test" ^ !!s); pause end
 let _ : string -> < react : state; s : string -> unit > = p2'#create
 let _ : (string, string) signal -> < react : state; s : string -> unit > = p2'#create_run
 
-let%sync p_out ~dsource = input s; output o;
+let%sync p_out = input s; output o;
   loop begin
     emit o
   ; pause
   end
 let _ : 'a -> unit * ('b -> unit) -> < react : state; s : 'a -> unit > = p_out#create
 let _ :
-  ('a, 'c) Pendulum.Signal.signal ->
-  unit * ('b -> unit) ->
-  < react : Pendulum.Program.state; s : ('a, 'c) Pendulum.Signal.signal -> unit >
+  ('a, 'c) signal ->
+  (unit, unit) signal * (unit -> unit) ->
+  < react : state; s : 'a -> unit >
   = p_out#create_run
