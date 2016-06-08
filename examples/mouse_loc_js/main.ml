@@ -10,34 +10,32 @@ let alert f = Printf.ksprintf
 
 let%sync debug s n = !(debug "%s : %d" !!s !!n)
 
-let%sync mouse =
-  input s;
-  element s2;
-
-  input w {
+let%sync mouse ~print:dot =
+  element sp;
+  element w {
     onmousemove =
       "",
       (fun x ev -> sprintf "%d,%d" ev##.clientX ev##.clientY);
   };
-
-  let n = 0 in
   loop begin
-    present w##onmousemove begin
-      emit s##.textContent (Js.(some (string !!(w##onmousemove))))
-    ; emit n (!!n + 1)
-    end
-    ; pause
+    present w##onmousemove !begin sp##.textContent := Js.(some (string !!(w##onmousemove))) end;
+    pause
   end
-  || loop begin run debug (w##onmousemove, n); pause end
-;;
+
+
+
+
+(*
+   val mouse :
+     < create : element Js.t * window Js.t ->
+       < react : machine_state >
+     >
+   *)
 
 let onload _ =
   let s = createSpan document in
-  let s2 = createSpan document in
   Dom.appendChild document##.body s;
-  Dom.appendChild document##.body (createBr document);
-  Dom.appendChild document##.body s2;
-  mouse#create (s, s2, window);
+  mouse#create (s, window);
   Js._false
 ;;
 
