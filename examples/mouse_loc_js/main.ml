@@ -10,7 +10,7 @@ let alert f = Printf.ksprintf
 
 let%sync debug s n = !(debug "%s : %d" !!s !!n)
 
-let%sync mouse ~print:dot =
+let%sync mouse ~print:(dot, pdf) =
   element sp;
   element w {
     onmousemove =
