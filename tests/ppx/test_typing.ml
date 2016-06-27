@@ -1,0 +1,39 @@
+
+open Pendulum
+open Program
+open Signal
+
+let p =
+  let%sync react_obj a =
+    loop begin
+      !(Format.printf "%d\n" !!a)
+    ; pause
+    end in react_obj#create 0
+let () = p#a 10; ignore @@ p#react
+(* 'a -> < react : Pendulum.Program.state; x : 'a -> unit > *)
+
+let%sync p2 = loop pause
+let _ : < react : state > = p2#create
+let _ : < react : state > = p2#create_run
+let%sync p2' s = loop begin
+    run p2
+  ; pause
+  end
+let _ : 'a -> < react : state; s : 'a -> unit > = p2'#create
+let _ : ('a, 'b) signal -> < react : state; s : 'a -> unit > = p2'#create_run
+let%sync p3 s = loop begin run p2' !("test" ^ !!s); pause end
+let _ : string -> < react : state; s : string -> unit > = p2'#create
+let _ : (string, string) signal -> < react : state; s : string -> unit > = p2'#create_run
+
+
+let%sync p_out = input s; output o;
+  loop begin
+    emit o
+  ; pause
+  end
+let _ : 'a -> unit * ('b -> unit) -> < react : state; s : 'a -> unit > = p_out#create
+let _ :
+  ('a, 'c) signal ->
+  (unit, unit) signal * (unit -> unit) ->
+  < react : state; s : 'a -> unit >
+  = p_out#create_run
