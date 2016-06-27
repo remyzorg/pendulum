@@ -10,34 +10,25 @@ let alert f = Printf.ksprintf
 
 let%sync debug s n = !(debug "%s : %d" !!s !!n)
 
-let%sync mouse ~print:(dot, pdf) =
-  element sp;
+let%sync mouse =
   element w {
-    onmousemove =
-      "",
-      (fun x ev -> sprintf "%d,%d" ev##.clientX ev##.clientY);
+    onmousemove = "", (fun x ev -> sprintf "%d,%d" ev##.clientX ev##.clientY);
   };
+  output write;
   loop begin
-    present w##onmousemove !begin sp##.textContent := Js.(some (string !!(w##onmousemove))) end;
-    pause
+    present w##onmousemove
+      (emit write !!(w##onmousemove))
+  ; pause
   end
 
-
-
-
-(*
-   val mouse :
-     < create : element Js.t * window Js.t ->
-       < react : machine_state >
-     >
-   *)
-
 let onload _ =
-  let s = createSpan document in
-  Dom.appendChild document##.body s;
-  mouse#create (s, window);
+  let sp = createSpan document in
+  Dom.appendChild document##.body sp;
+  let write_f v = sp##.textContent := Js.(some (string v)) in
+  let _m = mouse#create window ("", write_f) in
   Js._false
 ;;
 
 window##.onload := handler onload;;
+
 

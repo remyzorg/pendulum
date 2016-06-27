@@ -831,8 +831,15 @@ module Ocaml_gen = struct
       let rebinded_expr = rebind_locals_let vs.svalue.locals vs.svalue.exp in
       begin match vs.signal.bind with
         | No_binding | Event _ ->
-          [%expr set_present_value [%e add_deref_local vs.signal]
+          let setval_expr = [%expr set_present_value [%e add_deref_local vs.signal]
                    [%e rebinded_expr]]
+          in
+          if vs.signal.origin = Output then
+            Exp.sequence setval_expr
+              ([%expr [%e mk_ident @@ ident_app_str vs.signal.ident "~" "out"]
+                        [%e mk_ident vs.signal.ident].value])
+          else setval_expr
+
         | Access (elt, fields) ->
           let lhs = List.fold_left (fun acc field ->
               [%expr [%e acc] ##. [%e mk_ident field]]
