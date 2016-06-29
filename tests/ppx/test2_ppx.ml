@@ -226,4 +226,4 @@ let () =
   p#s 1;
   p#s 1;
   p#s2 1;
-  ignore @@ p#react
+  p#react

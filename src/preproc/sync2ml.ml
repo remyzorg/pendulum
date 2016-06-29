@@ -425,6 +425,8 @@ module Ocaml_gen = struct
   let animate_name = "animate"
   let gather_str = "gather"
   let api_react_function_name = "react"
+  let api_status_function_name = "status"
+  let api_present_signals_function_name = "present_signals"
   let animated_state_var_name = "animated_next_raf"
   let select_env_name = "pendulum~state"
   let select_env_var = Location.(mkloc select_env_name !Ast_helper.default_loc)
@@ -537,6 +539,16 @@ module Ocaml_gen = struct
   let signal_to_definition rhs next_def s =
     [%expr let [%p mk_pat_var s.ident] = [%e rhs] in [%e next_def]]
 
+  (* let args_signals_list env = *)
+  (*   let open Tagged in *)
+  (*   List.fold_left (fun acc (s, _) -> *)
+  (*       try *)
+  (*         Hashtbl.find env.binders_env s.ident.content *)
+  (*         |> MList.map_filter has_tobe_defined (function *)
+  (*             | Event (e, gatherer) as bind -> { (append_tag s e) with gatherer; bind} *)
+  (*             | _ -> s) *)
+  (*       with Not_found -> s *)
+  (*     ) [] env.args_signals *)
 
   let mk_args_signals_definitions env e =
     let open Tagged in
@@ -597,6 +609,34 @@ module Ocaml_gen = struct
     Asttypes.(Cf.method_ {txt = str; loc}
                 Public (Cfk_concrete (Fresh, expr)))
 
+  let mk_basic_methods env reactfun =
+    let open Ast.Tagged in
+    [   (* React *)
+      (mk_method env.pname.loc
+         api_react_function_name
+         [%expr [%e reactfun] ()])
+
+      ; (* Status *)
+      (mk_method env.pname.loc
+         api_status_function_name
+         [%expr
+           if Bitset.mem [%e select_env_ident] 0 then
+             Finish else Pause
+         ])
+      ; (* Signal status *)
+      (* let args = args_signals_list env in *)
+
+      (* List.map  *)
+
+      (* (mk_method env.pname.loc *)
+      (*    api_present_signals_function_name begin *)
+      (*    (\* env.Ast.Tagged.args_signals *\) *)
+      (*    [%expr []] *)
+      (*    end *)
+      (* ) *)
+
+    ]
+
   let mk_program_object env reactfun =
     let open Tagged in
     let mk_field_setter s = mk_method s.ident.loc s.ident.content
@@ -606,8 +646,8 @@ module Ocaml_gen = struct
         (fun acc (s, _) ->
            if not @@ is_tagged env s && s.origin <> Output then
              mk_field_setter s :: acc else acc)
-        [(mk_method env.pname.loc api_react_function_name
-            [%expr [%e reactfun] ()])] env.args_signals
+        (mk_basic_methods env reactfun)
+        env.args_signals
     in Exp.object_ {pcstr_self = Pat.any (); pcstr_fields}
 
   let mk_machine_registers_definitions env e =
@@ -690,9 +730,9 @@ module Ocaml_gen = struct
   let mk_constructor_reactfun env animate d body =
     let reactfun = [%expr
       fun () -> try [%e body] with
-        | Pause_exc -> set_absent (); Pause
+        | Pause_exc -> set_absent ()
         | Finish_exc -> set_absent ();
-          Bitset.add [%e select_env_ident] 0; Finish] in
+          Bitset.add [%e select_env_ident] 0] in
     let reactfun_ident = mk_loc reactfun_name in
     let reactfun_expr = mk_ident reactfun_ident in
     let recparam, anim, id =
@@ -807,7 +847,8 @@ module Ocaml_gen = struct
     | MLfinished -> [%expr Bitset.mem [%e select_env_ident] 0]
     | MLis_pause (MLcall (id, args, loc)) ->
       let step_ident = {id with content = Format.sprintf "%s~step" id.content} in
-      let step_eq_pause = [%expr ![%e mk_ident step_ident]#react == Pause] in
+      let step_eq_pause = [%expr ![%e mk_ident step_ident]#react;
+                                 ![%e mk_ident step_ident]#status == Pause] in
       step_eq_pause
     | MLis_pause e -> assert false
 
