@@ -61,7 +61,3 @@ Executable "test_ppx"
  BuildTools: ppx_pendulum
  # BuildDepends: oUnit, pendulum
  BuildDepends: js_of_ocaml.ppx, oUnit, js_of_ocaml, pendulum
-
-
-
-    
