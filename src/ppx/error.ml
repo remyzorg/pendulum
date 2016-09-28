@@ -26,7 +26,7 @@ let print_syntax_rsn fmt rsn =
   let open Format in
   match rsn with
   | Forgot_sem -> fprintf fmt "maybe you forgot a `;`"
-  | Keyword -> fprintf fmt "keyword expected"
+  | Keyword -> fprintf fmt "reactive statement expected"
   | Signal_name -> fprintf fmt "signal name expected"
   | Signal_test -> fprintf fmt "signal test expected"
   | Event_name -> fprintf fmt "event name expected"

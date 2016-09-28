@@ -2,7 +2,6 @@
 open OUnit
 open Pendulum.Runtime_ast
 
-open Test2_ppx
 open Js_events_test
 
 
@@ -220,3 +219,7 @@ let suite =
     "seq">:: test_seq;
     "cyclic">:: cyclic_grc;
   ] |> run_test_tt_main
+
+
+open Test2_ppx
+open Test_typing

@@ -29,17 +29,17 @@ let%sync crazy s x =
     ; pause
   )
 
-let%sync ptest ~dsource s =
-  run crazy (s, !5)
+(* let%sync ptest s = *)
+(*   run crazy (s, !5) *)
 
-let%sync m_loop_incr =
-  input zz;
-  let s1 = 5 in
-  let s2 = 5 in
-  loop (
-    run incr (s2, s1);
-    pause
-  )
+(* let%sync m_loop_incr = *)
+(*   input zz; *)
+(*   let s1 = 5 in *)
+(*   let s2 = 5 in *)
+(*   loop ( *)
+(*     run incr (s2, s1); *)
+(*     pause *)
+(*   ) *)
 (*   || *)
 (*   loop ( *)
 (*     run incr (s1, s2); *)
@@ -165,20 +165,6 @@ let%sync emit_basic0 elt0 elt1 elt2 =
   loop pause
 
 
-let%sync gatherer_0 =
-  input s (fun acc s -> s + acc);
-  input s2 (fun acc s -> s :: acc) ;
-  loop begin
-    emit s 1;
-    emit s2 1;
-    pause
-  end
-  ||
-  loop begin
-    present s !(Format.printf "s %d" !!s);
-    pause
-  end
-
 let%sync reincarnation1 o1 o2 =
   loop begin
     let s = () in
@@ -220,23 +206,24 @@ let%sync loop_pause_pause ~print:pdf =
     pause;
   )
 
+let%sync gatherer_0 =
+  input s (fun acc s -> s + acc);
+  input s2 (fun acc s -> s :: acc) ;
+  loop begin
+    emit s 1;
+    emit s2 1;
+    pause
+  end
+  ||
+  loop begin
+    present s !(Format.printf "s %d" !!s);
+    pause
+  end
+
 
 let () =
   let p = gatherer_0#create (0, []) in
   p#s 1;
   p#s 1;
   p#s2 1;
-  ignore @@ p#react
-
-
-
-let p =
-  let%sync react_obj a =
-    loop begin
-      !(Format.printf "%d\n" !!a)
-    ; pause
-    end in react_obj#create 0
-
-let () =
-  p#a 10;
   ignore @@ p#react

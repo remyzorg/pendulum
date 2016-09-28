@@ -190,6 +190,8 @@ let ast_of_expr atom_mapper e =
 
     | [%expr run [%e? ident] [%e? tupl]] ->
       Run (check_expr_ident ident, signal_tuple_to_list tupl, tupl.pexp_loc)
+    | [%expr run [%e? ident]] ->
+      Run (check_expr_ident ident, [], Ast.dummy_loc)
 
     | [%expr halt ] ->
       Halt
@@ -235,7 +237,6 @@ let compiler_options =
   [ "animate"
   ; "dsource"
   ; "ast"
-  ; "print"
   ; "debug"
   ; "nooptim"
   ; "obj"
@@ -245,10 +246,6 @@ let compiler_options =
 let rec parse_args options inputs exp =
   let addopt opt = StringSet.add opt options in
   match exp with
-
-  | {pexp_desc = Pexp_fun (Labelled s, None, _, exp')}
-    when s <> "" && List.mem s compiler_options ->
-    parse_args (addopt s) inputs exp'
 
   | [%expr fun ~print:[%p? pp_params] -> [%e? exp']] as prt_param ->
     let check_param opts = function
@@ -265,6 +262,10 @@ let rec parse_args options inputs exp =
       | _ -> Error.(error ~loc:prt_param.pexp_loc Wrong_argument_values)
     in
     parse_args opts inputs exp'
+
+  | {pexp_desc = Pexp_fun (Labelled s, None, _, exp')}
+    when s <> "" && List.mem s compiler_options ->
+    parse_args (addopt s) inputs exp'
 
   | [%expr fun [%p? {ppat_desc = Ppat_var ident}] -> [%e? exp']] ->
     parse_args options (Ast.({content = ident.txt; loc = ident.loc}, None) :: inputs) exp'
