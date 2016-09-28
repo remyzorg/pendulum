@@ -373,7 +373,7 @@ module Make (E : Exp) = struct
              if not is_binded then
                Hashtbl.replace env.binders_env s.content (bind :: tags);
              let ident = mk_loc ~loc:s.loc (Format.sprintf "%s##%s" s.content eident.content) in
-             {ident; origin; bind; gatherer}
+             {ident; origin = Input; bind; gatherer}
            (* if it's an access, concat with a##.b##.c *)
            | Access (elt, fields) ->
              let fields_str = List.fold_left (fun acc field ->

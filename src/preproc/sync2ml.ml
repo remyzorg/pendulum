@@ -560,6 +560,9 @@ module Ocaml_gen = struct
             signal_to_definition (mk_ident s.ident) acc s
         ) (construct_local_signals_definitions env e) env.args_signals)
 
+  let is_tagged env s =
+    Tagged.(s.origin = Element || Hashtbl.mem env.binders_env s.ident.content)
+
   let construct_set_all_absent_definition env e =
     let open Tagged in
     let locals_setters =
@@ -592,8 +595,6 @@ module Ocaml_gen = struct
     in
     [%expr let set_absent () = [%e globals_absent_setters] in [%e e]]
 
-  let is_tagged env s =
-    Tagged.(s.origin = Element || Hashtbl.mem env.binders_env s.ident.content)
 
   let construct_input_setters_tuple env stepfun =
     let open Tagged in
