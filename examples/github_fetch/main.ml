@@ -16,7 +16,20 @@ let model : (string, (bool * string) list) Hashtbl.t = Hashtbl.create 45
 let add_model repo (files : string list) =
   Hashtbl.add model repo []
 
+
+
+
+
+
 module Github_api = struct
+
+  type file_ref = { url : string; name : string }
+
+  type contents =
+    | File of file_ref
+    | Dir of string list
+    | Content of file_ref * string
+    | Undefined
 
   let token = ref ""
   
@@ -24,58 +37,138 @@ module Github_api = struct
   let at = "?access_token="
   let github_url = "/repos"
 
-  let repo_list user =
+  let repos user =
     Format.sprintf "%s/users/%s/repos?access_token=%s"
       base user !token
 
+  let trees ?(sha="master") user repos =
+    Format.sprintf
+      "%s/repos/%s/%s/git/trees/%s?access_token=%s"
+      base    user repos       sha           !token
+
+  let contents user repos path =
+    Format.sprintf
+      "%s/repos/%s/%s/contents/%s?access_token=%s"
+      base    user repos     path           !token
+
+  let file s = s.url
+
+  module Json = Yojson.Basic.Util
+
+  module Extract = struct
+
+    open Yojson.Basic
+    open Yojson.Basic.Util
+
+
+    let members str json =
+      [json] |> flatten |> filter_member str |> filter_string
+
+    let paths = members "path"
+    let names = members "name"
+
+    let repos s = Dir (names @@ from_string s)
+
+    let trees s =
+      let json = from_string s in
+      Dir (json |> member "tree" |> paths)
+
+    let file file s = Content (file, s)
+
+    let contents s =
+      let json = Yojson.Basic.from_string s in
+      match json with
+      | `List _ -> Dir (names json)
+      | `Assoc _ ->
+        let url = json |> member "download_url" |> to_string in
+        let name = json |> member "name" |> to_string in
+        File { url; name }
+      | _ -> debug "undefined"; Undefined
+  end
+
+  let mk_req react signal extract =
+    let rq = XmlHttpRequest.create () in
+    rq##.onreadystatechange := Js.wrap_callback (fun _ ->
+        let open XmlHttpRequest in
+        begin match rq##.readyState with
+          | DONE when rq##.status == 200 ->
+            begin try
+                let res = extract @@ Js.to_string rq##.responseText in
+                Signal.set_present_value signal res; react ()
+              with _ -> debug "parsing error"
+            end
+          | DONE ->
+            Signal.set_present_value signal Undefined; react ()
+          | _ -> ()
+        end); rq
+
+  let get rq url =
+    rq##_open (Js.string "GET") url Js._true;
+    rq##send Js.null
 
 end
 
-module Json = Yojson.Basic.Util
+let get_repos react req_sig name =
+  let open Github_api in
+  let rq = mk_req react req_sig Extract.repos in
+  get rq (Js.string (repos name))
 
-let insert_dom repolist repos =
+let get_trees react req_sig user repo =
+  let open Github_api in
+  let rq = mk_req react req_sig Extract.trees in
+  get rq (Js.string @@ trees user repo)
+
+let get_contents react req_sig user repo path =
+  let open Github_api in
+  let rq = mk_req react req_sig Extract.contents in
+  get rq (Js.string @@ contents user repo path)
+
+let get_file react req_sig f =
+  let open Github_api in
+  let rq = mk_req react req_sig (Extract.file f) in
+  get rq (Js.string @@ file f)
+
+let extract_infos animate req s =
+  let path = Re.(split (compile @@ str "/") (Js.to_string s)) in
+  match path with
+  | [] -> ()
+  | [user] ->
+    get_repos animate req user
+  | [user; repo] ->
+    (* debug "trees : %s %s" user repo *)
+    get_trees animate req user repo
+  | user :: repo :: path ->
+    (* debug "contents : %s %s '%s'" user repo (String.concat "/" path) *)
+    get_contents animate req user repo (String.concat "/" path)
+
+let insert_dom animate req repolist =
   let open Html5 in
-  let repos_div = div @@ List.map (fun repo ->
-      div ~a:[a_onclick (fun x -> false)] [
-        pcdata repo
-      ]
-    ) repos
+  let result_div =
+    let open Github_api in
+    match req.Pendulum.Signal.value with
+    | Undefined -> (); div []
+    | Content (fr, s) ->
+      div [pre [code ~a:[a_class ["OCaml"]] [pcdata s]]]
+    | File f -> get_file animate req f; div []
+    | Dir names ->
+      div @@ List.map (fun name ->
+          div ~a:[a_onclick (fun x -> false)]
+            [pcdata name]
+        ) names
   in
   Js.Opt.iter (repolist##.firstChild)
-    (Dom.replaceChild repolist (To_dom.of_element repos_div))
-
-let create_open react err_sig name =
-  let rq = XmlHttpRequest.create () in
-  let url = Github_api.repo_list (Js.to_string name) in
-  rq##.onreadystatechange := Js.wrap_callback (fun _ ->
-      let open XmlHttpRequest in
-      begin match rq##.readyState with
-        | DONE when rq##.status == 200 ->
-          let res = Js.to_string rq##.responseText in
-          let json = Yojson.Basic.from_string res in
-          let repos = Json.(
-              [json]
-              |> flatten
-              |> filter_member "full_name"
-              |> filter_string)
-          in
-          Signal.set_present_value err_sig repos; react ()
-        | DONE ->
-          Signal.set_present_value err_sig []; react ()
-        | _ -> ()
-      end);
-  let () = rq##_open (Js.string "GET") (Js.string url) Js._true in
-  rq##send Js.null; ()
-
+    (Dom.replaceChild repolist (To_dom.of_element result_div));
+  let hljs = (Js.Unsafe.js_expr "hljs") in
+  hljs##highlightBlock repolist
 
 let%sync github_fetch_sync ~animate =
-  element namefield;
+  input namefield;
   element repos;
   input request_result;
 
   loop begin
     present namefield##onkeyup (
-      !(create_open animate request_result namefield##.value)
+      !(extract_infos animate request_result namefield##.value)
     ); pause
   end
   ||
@@ -83,17 +176,16 @@ let%sync github_fetch_sync ~animate =
     trap reset (
       loop (
         present request_result (
-          !(insert_dom repos !!request_result);
+          !(insert_dom animate request_result repos);
           exit reset
         )
       ; pause)
       ||
       loop (present namefield##onkeyup (exit reset) ; pause)
     )
-    ; pause
-  )
+    ; pause)
 
-
+(* remyzorg/pendulum/src/preproc/grc.ml *)
 
 let run _ =
   let url_args = Url.Current.arguments in
@@ -104,13 +196,12 @@ let run _ =
         let token = List.assoc "access_token" url_args in
         debug "%s" token;
         Github_api.token := token
-        (* username_field##.value := Js.string user; *)
-        (* run_fetch user *)
       with Not_found -> ()
     end;
 
     let syncfetcher = github_fetch_sync#create
-        (username_field, repos, []) in
+        (username_field, repos, Github_api.Undefined)
+    in
 
 
 

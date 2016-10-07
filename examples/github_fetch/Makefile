@@ -3,6 +3,7 @@ all: main.ml
 		-cflags "-ppx ppx_pendulum" \
 		-package js_of_ocaml.ppx \
 		-package pendulum \
+		-package re \
 		-package js_of_ocaml \
 		-package js_of_ocaml.tyxml \
 		-package cohttp.js \
