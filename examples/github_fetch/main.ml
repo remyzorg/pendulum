@@ -17,10 +17,6 @@ let add_model repo (files : string list) =
   Hashtbl.add model repo []
 
 
-
-
-
-
 module Github_api = struct
 
   type file_ref = { url : string; name : string }
@@ -32,7 +28,6 @@ module Github_api = struct
     | Undefined
 
   let token = ref ""
-  
   let base = "https://api.github.com"
   let at = "?access_token="
   let github_url = "/repos"
@@ -143,23 +138,24 @@ let extract_infos animate req s =
 
 let insert_dom animate req repolist =
   let open Html5 in
-  let result_div =
-    let open Github_api in
-    match req.Pendulum.Signal.value with
-    | Undefined -> (); div []
-    | Content (fr, s) ->
-      div [pre [code ~a:[a_class ["OCaml"]] [pcdata s]]]
-    | File f -> get_file animate req f; div []
-    | Dir names ->
-      div @@ List.map (fun name ->
-          div ~a:[a_onclick (fun x -> false)]
-            [pcdata name]
-        ) names
+  let replace_div result_div =
+    Js.Opt.iter (repolist##.firstChild)
+      (Dom.replaceChild repolist (To_dom.of_element result_div))
   in
-  Js.Opt.iter (repolist##.firstChild)
-    (Dom.replaceChild repolist (To_dom.of_element result_div));
-  let hljs = (Js.Unsafe.js_expr "hljs") in
-  hljs##highlightBlock repolist
+  let open Github_api in
+  match req.Pendulum.Signal.value with
+  | Undefined -> replace_div (div [])
+  | Content (fr, s) ->
+    replace_div @@
+    div [pre [code ~a:[a_class ["OCaml"]] [pcdata s]]];
+    let hljs = (Js.Unsafe.js_expr "hljs") in
+    let () = hljs##highlightBlock repolist in ()
+  | File f -> get_file animate req f; replace_div (div [])
+  | Dir names ->
+    replace_div @@ div @@ List.map (fun name ->
+        div ~a:[a_onclick (fun x -> false)]
+          [pcdata name]
+      ) names
 
 let%sync github_fetch_sync ~animate =
   input namefield;
@@ -199,7 +195,7 @@ let run _ =
       with Not_found -> ()
     end;
 
-    let syncfetcher = github_fetch_sync#create
+    let _syncfetcher = github_fetch_sync#create
         (username_field, repos, Github_api.Undefined)
     in
 
