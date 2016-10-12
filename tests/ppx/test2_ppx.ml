@@ -227,3 +227,25 @@ let () =
   p#s 1;
   p#s2 1;
   ignore @@ p#react
+
+
+let%sync trap_remove_interleaving =
+  input a;
+  input b;
+
+  loop begin
+    present b
+      !(Format.printf "b");
+    pause
+  end
+  ||
+  loop begin
+    trap reset (
+      loop (present a (exit reset) ; pause)
+    );
+    pause
+  end
+  ||
+  loop begin
+    present b !(Format.printf "b"); pause
+  end

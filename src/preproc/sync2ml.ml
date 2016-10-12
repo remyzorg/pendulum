@@ -559,14 +559,10 @@ module Ocaml_gen = struct
 
       ) (mk_local_signals_definitions env e) env.args_signals
 
-<<<<<<< HEAD
   let is_tagged env s =
     Tagged.(s.origin = Element || Hashtbl.mem env.binders_env s.ident.content)
 
-  let construct_set_all_absent_definition env e =
-=======
   let mk_set_all_absent_definition env e =
->>>>>>> 6f92f46dbe7baa7ca4ac3a671deb5ea5d321b511
     let open Tagged in
     (* let set_absent_expr ident = *)
     let locals_setters =

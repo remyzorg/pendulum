@@ -19,11 +19,13 @@ let add_model repo (files : string list) =
 
 module Github_api = struct
 
-  type file_ref = { url : string; name : string }
+  type ftype = Subdir of string | Blob of string
+  type file_ref = { ty : ftype; name : string }
+  let mk_file (name, ty) = {name; ty}
 
   type contents =
     | File of file_ref
-    | Dir of string list
+    | Dir of file_ref list
     | Content of file_ref * string
     | Undefined
 
@@ -46,7 +48,7 @@ module Github_api = struct
       "%s/repos/%s/%s/contents/%s?access_token=%s"
       base    user repos     path           !token
 
-  let file s = s.url
+  let file s = match s.ty with Blob s -> s | Subdir url -> url
 
   module Json = Yojson.Basic.Util
 
@@ -61,23 +63,47 @@ module Github_api = struct
 
     let paths = members "path"
     let names = members "name"
+    let urls = members "download_url"
+    let types = members "type"
 
-    let repos s = Dir (names @@ from_string s)
+    (* let repos s = Dir (names @@ from_string s) *)
+
+    let repos s =
+      let json = from_string s in
+      Dir List.(
+        combine (names json) (members "html_url" json)
+        |> map (fun (name, url) -> mk_file (name, Subdir url)))
 
     let trees s =
       let json = from_string s in
-      Dir (json |> member "tree" |> paths)
+      let tree = json |> member "tree" in
+      Dir List.(
+          combine (paths tree)
+            (combine (urls tree) (types tree))
+          |> map (fun (name, (url, type_)) ->
+              {name; ty = if type_ = "blob" then
+                         Blob url else Subdir url }
+            )
+        )
 
     let file file s = Content (file, s)
 
     let contents s =
       let json = Yojson.Basic.from_string s in
       match json with
-      | `List _ -> Dir (names json)
+      | `List _ ->
+        Dir List.(
+            combine (paths json)
+              (combine (urls json) (types json))
+            |> map (fun (name, (url, type_)) ->
+                {name; ty = if type_ = "file" then
+                           Blob url else Subdir url }
+              )
+          )
       | `Assoc _ ->
         let url = json |> member "download_url" |> to_string in
         let name = json |> member "name" |> to_string in
-        File { url; name }
+        File { ty = Blob url; name }
       | _ -> debug "undefined"; Undefined
   end
 
@@ -136,7 +162,13 @@ let extract_infos animate req s =
     (* debug "contents : %s %s '%s'" user repo (String.concat "/" path) *)
     get_contents animate req user repo (String.concat "/" path)
 
-let insert_dom animate req repolist =
+
+
+let highlight (elt : Dom_html.element Js.t) : unit =
+  let hljs = (Js.Unsafe.js_expr "hljs") in
+  let () = hljs##highlightBlock elt in ()
+
+let insert_dom animate req click_sig repolist =
   let open Html5 in
   let replace_div result_div =
     Js.Opt.iter (repolist##.firstChild)
@@ -148,38 +180,55 @@ let insert_dom animate req repolist =
   | Content (fr, s) ->
     replace_div @@
     div [pre [code ~a:[a_class ["OCaml"]] [pcdata s]]];
-    let hljs = (Js.Unsafe.js_expr "hljs") in
-    let () = hljs##highlightBlock repolist in ()
+    highlight repolist
   | File f -> get_file animate req f; replace_div (div [])
-  | Dir names ->
-    replace_div @@ div @@ List.map (fun name ->
-        div ~a:[a_onclick (fun x -> false)]
-          [pcdata name]
-      ) names
+  | Dir files ->
+    replace_div @@ div @@ List.map (fun file ->
+        div ~a:[
+          a_onclick (fun e ->
+              Pendulum.Signal.set_present_value click_sig file.name;
+              animate ();
+              false);
+        ] [ pcdata file.name ]
+      ) files
 
-let%sync github_fetch_sync ~animate =
+let%sync github_fetch_sync ~print:pdf ~animate =
   input namefield;
   element repos;
   input request_result;
+  input clickitem;
 
+  loop begin
+    present clickitem
+      !(debug "%s" !!clickitem);
+    pause
+  end
+  ||
   loop begin
     present namefield##onkeyup (
       !(extract_infos animate request_result namefield##.value)
     ); pause
   end
   ||
-  loop (
+  loop begin
     trap reset (
       loop (
         present request_result (
-          !(insert_dom animate request_result repos);
+          !(insert_dom animate request_result clickitem repos);
           exit reset
         )
       ; pause)
       ||
       loop (present namefield##onkeyup (exit reset) ; pause)
-    )
-    ; pause)
+    );
+    pause
+  end
+  ||
+  loop begin
+    present clickitem
+      !(debug "%s" !!clickitem);
+    pause
+  end
 
 (* remyzorg/pendulum/src/preproc/grc.ml *)
 
@@ -196,7 +245,7 @@ let run _ =
     end;
 
     let _syncfetcher = github_fetch_sync#create
-        (username_field, repos, Github_api.Undefined)
+        (username_field, repos, Github_api.Undefined, "")
     in
 
 
