@@ -223,12 +223,6 @@ let%sync github_fetch_sync ~print:pdf ~animate =
     );
     pause
   end
-  ||
-  loop begin
-    present clickitem
-      !(debug "%s" !!clickitem);
-    pause
-  end
 
 (* remyzorg/pendulum/src/preproc/grc.ml *)
 
