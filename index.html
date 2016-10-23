@@ -1,0 +1,188 @@
+<!doctype html>
+<!-- The Time Machine GitHub pages theme was designed and developed by Jon Rohan, on Feb 7, 2012. -->
+<!-- Follow him for fun. http://twitter.com/jonrohan. Tail his code on https://github.com/jonrohan -->
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
+
+  <link rel="stylesheet" href="stylesheets/stylesheet.css" media="screen">
+  <link rel="stylesheet" href="stylesheets/github-dark.css">
+  <script type="text/javascript" src="https://ajax.googleapis.com/ajax/libs/jquery/1.7.1/jquery.min.js"></script>
+  <script type="text/javascript" src="javascripts/script.js"></script>
+
+  <title>Pendulum</title>
+  <meta name="description" content=" OCaml syntax extension dedicated to the programming of reactive systems on the Web.">
+
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+
+</head>
+
+<body>
+
+  <div class="wrapper">
+    <header>
+      <h1 class="title">Pendulum</h1>
+    </header>
+    <div id="container">
+      <p class="tagline"> OCaml syntax extension dedicated to the programming of reactive systems on the Web.</p>
+      <div id="main" role="main">
+        <div class="download-bar">
+        <div class="inner">
+          <a href="https://github.com/remyzorg/pendulum/tarball/master" class="download-button tar"><span>Download</span></a>
+          <a href="https://github.com/remyzorg/pendulum/zipball/master" class="download-button zip"><span>Download</span></a>
+          <a href="https://github.com/remyzorg/pendulum" class="code">View Pendulum on GitHub</a>
+        </div>
+        <span class="blc"></span><span class="trc"></span>
+        </div>
+        <article class="markdown-body">
+          <h1>
+<a id="readme" class="anchor" href="#readme" aria-hidden="true"><span aria-hidden="true" class="octicon octicon-link"></span></a>Readme</h1>
+
+<h1>
+<a id="description" class="anchor" href="#description" aria-hidden="true"><span aria-hidden="true" class="octicon octicon-link"></span></a>Description</h1>
+
+<p><strong>pendulum</strong> is a language dedicated to the programming of reactive systems on the
+ Web. It has a powerful expressivity to describe synchronous concurrent systems
+ communicating with broadcasted signals. Its constructions and implementation
+ are mostly based on Esterel. The language is embedded in OCaml as a syntax
+ extension. It allows the programmer to describe <strong>reactive machines</strong> as OCaml
+ values, and run them on signals arguments. The execution of concurrency in pendulum is
+ completely sequential and the scheduling is static.
+ (<a href="https://github.com/remyzorg/pendulum/wiki/Similar-works-and-inspiration">similar work and inspiration</a>)</p>
+
+<p>The core language is completely compatible with vanilla OCaml compiler.</p>
+
+<p><strong>We would be grateful for any feedback on this implementation,
+but beware that this prototype is still in active developpement</strong></p>
+
+<h1>
+<a id="documentation" class="anchor" href="#documentation" aria-hidden="true"><span aria-hidden="true" class="octicon octicon-link"></span></a>Documentation</h1>
+
+<p>see a slight <a href="https://www.github.com/remyzorg/pendulum/wiki">documentation</a> and <a href="examples/">examples</a></p>
+
+<h2>
+<a id="examples-and-benchmark" class="anchor" href="#examples-and-benchmark" aria-hidden="true"><span aria-hidden="true" class="octicon octicon-link"></span></a>Examples and benchmark</h2>
+
+<h3>
+<a id="reactive-player-example" class="anchor" href="#reactive-player-example" aria-hidden="true"><span aria-hidden="true" class="octicon octicon-link"></span></a>Reactive player example</h3>
+
+<p>A UI for playing video with customs controls: play/pause, seek, display time</p>
+
+<div class="highlight highlight-source-ocaml"><pre><span class="pl-k">let</span><span class="pl-k">%</span>sync reactive_player <span class="pl-k">=</span>
+  input play_pause; <span class="pl-c">(* the button *)</span>
+  input progress_bar; <span class="pl-c">(* the progress element *)</span>
+  input media; <span class="pl-c">(* the video element *)</span>
+  input time_a; <span class="pl-c">(* the a elt displaying time*)</span>
+
+  <span class="pl-k">let</span> no_update <span class="pl-k">=</span> <span class="pl-c1">()</span> <span class="pl-k">in</span>
+  <span class="pl-k">let</span> state <span class="pl-k">=</span> <span class="pl-c1">Js.</span>to_bool media##.paused <span class="pl-k">in</span>
+
+  <span class="pl-c">(* when the video starts or restarts playing,</span>
+<span class="pl-c">     switch the display of the button*)</span>
+  loop (
+    present media#<span class="pl-k">#onplay</span>
+      <span class="pl-k">!</span>(play_pause##.textContent <span class="pl-k">:=</span> <span class="pl-c1">Js.</span>some <span class="pl-k">@@</span> <span class="pl-c1">Js.</span><span class="pl-k">string</span> <span class="pl-s"><span class="pl-pds">"</span>Pause<span class="pl-pds">"</span></span>); pause)
+
+  <span class="pl-c">(* switch state when the button is clicked *)</span>
+  <span class="pl-k">||</span> loop (present play_pause#<span class="pl-k">#onclick</span> (emit state (<span class="pl-k">not</span> <span class="pl-k">!!</span>state)); pause)
+
+  <span class="pl-c">(* when the state changes, update the media and the button *)</span>
+  <span class="pl-k">||</span> loop (present state <span class="pl-k">!</span>(update_state (<span class="pl-k">!!</span>state) media play_pause); pause)
+
+  <span class="pl-c">(* when mouse is down on the progress bar, start emit `no_update` every instants</span>
+<span class="pl-c">     until mouse is up to block the following task. When mouse ups,</span>
+<span class="pl-c">     update the media in consequence *)</span>
+  <span class="pl-k">||</span> loop (
+    await progress_bar#<span class="pl-k">#onmousedown</span>;
+    trap t' (loop (
+        emit no_update <span class="pl-c1">()</span>;
+        present progress_bar#<span class="pl-k">#onmouseup</span>
+          (<span class="pl-k">!</span>(update_media media progress_bar); exit t');
+        pause)
+      ); pause)
+
+  <span class="pl-c">(* Each progression steps of the video, update the progress bar</span>
+<span class="pl-c">     with the right value. Except if no_update is present. *)</span>
+  <span class="pl-k">||</span> loop (
+    present media#<span class="pl-k">#onprogress</span> (
+      present no_update nothing <span class="pl-k">!</span>(update_slider progress_bar media)
+      <span class="pl-k">||</span>
+      <span class="pl-k">!</span>(update_time_a media (<span class="pl-k">!!</span>time_a))
+    ); pause)</pre></div>
+
+<p>see <a href="examples/player">this example</a> for the full code</p>
+
+<h3>
+<a id="todomvc-benchmark" class="anchor" href="#todomvc-benchmark" aria-hidden="true"><span aria-hidden="true" class="octicon octicon-link"></span></a>TodoMVC benchmark</h3>
+
+<p>Check out <a href="examples/todomvc">example</a> and the 
+<a href="https://github.com/remyzorg/todomvc-perf-comparison">benchmark results</a></p>
+
+<p><img src="https://raw.githubusercontent.com/remyzorg/pendulum/master/examples/todomvc/sample.png" alt="Sample of pendulum execution in Chrome, Fedora 19"></p>
+
+<ol>
+<li>Add 100 items</li>
+<li>Select 100 items (one by one)</li>
+<li>Remove 100 items (one by one)</li>
+</ol>
+
+<p>The reason why it's so fast, is that adding 100 items runs between two request
+animation frames. Ids of items are gathered in signals as lists and 
+the instant function just apply the action to all elements of the list
+in the following requestAnimationFrame. So it takes only one logical instant
+which is basically the execution of a list iterator.</p>
+
+<h1>
+<a id="install" class="anchor" href="#install" aria-hidden="true"><span aria-hidden="true" class="octicon octicon-link"></span></a>Install</h1>
+
+<h3>
+<a id="with-opam-easier" class="anchor" href="#with-opam-easier" aria-hidden="true"><span aria-hidden="true" class="octicon octicon-link"></span></a>with opam (easier)</h3>
+
+<p>opam <code>1.2</code> with <code>switch 4.02.2</code> (minimum) is required</p>
+
+<ul>
+<li><p><code>opam pin add pendulum git://github.com/remyzorg/pendulum.git</code></p></li>
+<li><p>an example to use pendulum as syntax extension with ocamlbuild</p></li>
+</ul>
+
+<p><code>ocamlbuild -package pendulum -cflags "-ppx ppx_pendulum" &lt;file-without-ext&gt;.byte</code></p>
+
+<h3>
+<a id="without-opam" class="anchor" href="#without-opam" aria-hidden="true"><span aria-hidden="true" class="octicon octicon-link"></span></a>without opam</h3>
+
+<ol>
+<li><code>git clone git://github.com/remyzorg/pendulum.git</code></li>
+<li><code>cd pendulum</code></li>
+<li><code>./configure</code></li>
+<li><code>make</code></li>
+<li><code>make install</code></li>
+</ol>
+
+<h3>
+<a id="licensing-and-context" class="anchor" href="#licensing-and-context" aria-hidden="true"><span aria-hidden="true" class="octicon octicon-link"></span></a>Licensing and context</h3>
+
+<p>This project is under MIT public license. It started in the context of UCF project.</p>
+        </article>
+      </div>
+    </div>
+    <footer>
+      <div class="owner">
+      <p><a href="https://github.com/remyzorg" class="avatar"><img src="https://avatars3.githubusercontent.com/u/1394537?v=3&amp;s=60" width="48" height="48"></a> <a href="https://github.com/remyzorg">remyzorg</a> maintains <a href="https://github.com/remyzorg/pendulum">Pendulum</a></p>
+
+
+      </div>
+      <div class="creds">
+        <small>This page generated using <a href="https://pages.github.com/">GitHub Pages</a><br>theme by <a href="https://twitter.com/jonrohan/">Jon Rohan</a></small>
+      </div>
+    </footer>
+  </div>
+  <div class="current-section">
+    <a href="#top">Scroll to top</a>
+    <a href="https://github.com/remyzorg/pendulum/tarball/master" class="tar">tar</a><a href="https://github.com/remyzorg/pendulum/zipball/master" class="zip">zip</a><a href="" class="code">source code</a>
+    <p class="name"></p>
+  </div>
+
+  
+</body>
+</html>
