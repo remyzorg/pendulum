@@ -95,15 +95,14 @@ let update_content elt b =
 open Dom_html
 
 (* The reactive program of the player *)
-let%sync reactive_player ~animate ~obj
-    (play_pause : buttonElement Js.t)
-    (progress_bar : inputElement Js.t)
-    (media : _mediaElement Js.t)
-    (time_a : anchorElement Js.t)
-    (slider_value : anchorElement Js.t)(* the a elt displaying time*)
-  =
+let%sync reactive_player ~animate ~obj =
+  element (play_pause : buttonElement Js.t);
+  element (progress_bar : inputElement Js.t);
+  element (media : _mediaElement Js.t);
+  element (time_a : anchorElement Js.t);
+  element (slider_value : anchorElement Js.t);
 
-  let no_update = () in
+  let seeking = () in
   let state = Js.to_bool media##.autoplay in (* carry the state of the video (true if playing) *)
 
   !(update_content play_pause (pre state)); (* update the button at start-up *)
@@ -116,7 +115,7 @@ let%sync reactive_player ~animate ~obj
 
   || loop ( (* while the user moves the cursor, display the time over it *)
     present progress_bar##oninput
-      !(update_slider_value !!slider_value media progress_bar);
+      !(update_slider_value slider_value media progress_bar);
     pause
   )
 
@@ -124,19 +123,19 @@ let%sync reactive_player ~animate ~obj
     await progress_bar##onmousedown;              (* When mouse button is down *)
     trap t' (                                       (* open an escape block with exception t' *)
       loop (                                          (* every instant,  *)
-        emit no_update;                                 (* emits the blocking signal *)
+        emit seeking;                                 (* emits the blocking signal *)
         present progress_bar##onmouseup (               (* if the button is released*)
-          !(set_visible false !!slider_value;         (* stop displaying the time over the cursor *)
+          !(set_visible false slider_value;         (* stop displaying the time over the cursor *)
             update_media media progress_bar);             (* set the current time of the video *)
           exit t'                                         (* leave the escape block and stop this behavior *)
           ); pause)); pause)
 
   || loop (
     present media##ontimeupdate (                 (* everying instants the video updates *)
-      present no_update nothing                     (* if the blocking signal is present, do nothing *)
+      present seeking nothing                     (* if the blocking signal is present, do nothing *)
         !(update_slider progress_bar media)         (* else, update the progress bar with the current time of the video*)
       ||
-      !(update_time_a media !!time_a)           (* update the display of the current time *)
+      !(update_time_a media time_a)           (* update the display of the current time *)
     ); pause)
 
 
