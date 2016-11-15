@@ -8,7 +8,7 @@ open Longident
 open Pendulum_compiler
 
 
-module Ast = Sync2ml.Ast
+module Ast = Grc2ml.Ast
 
 let string_const ident =
   let open Ast in
@@ -109,8 +109,8 @@ let print_to_dot env options todot topdf topng name e =
   if not (topng || topdf || todot) then () else
     let pr tag f t = print_to_dot_one todot topdf topng name tag f t in
     pr "_tagged" Ast.Tagged.pp_dot e;
-    let sel, fg = Sync2ml.Of_ast.construct env options e in
-    pr "_sel" Sync2ml.Selection_tree.print_to_dot sel;
-    pr "_fg" Sync2ml.Flowgraph.print_to_dot fg;
-    let fg = Sync2ml.Schedule.interleave env fg in
-    pr "_interfg" Sync2ml.Flowgraph.print_to_dot fg
+    let sel, fg = Grc2ml.Of_ast.construct env options e in
+    pr "_sel" Grc2ml.Selection_tree.print_to_dot sel;
+    pr "_fg" Grc2ml.Flowgraph.print_to_dot fg;
+    let fg = Grc2ml.Schedule.interleave env fg in
+    pr "_interfg" Grc2ml.Flowgraph.print_to_dot fg

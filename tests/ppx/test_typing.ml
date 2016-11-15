@@ -37,3 +37,54 @@ let _ :
   (unit, unit) signal * (unit -> unit) ->
   < react : state; s : 'a -> unit >
   = p_out#create_run
+
+
+let mouse =
+  let open Pendulum.Runtime_misc in
+  let open Pendulum.Program in
+  let open Pendulum.Signal in
+  let create_local i write =
+    let pendulum_state = Bitset.make 7  in
+    let (write,write_out) = ((fst write), (snd write))  in
+    let set_absent () =
+      set_absent i; set_absent write; write.value <- write.default; ()
+    in
+    let p_react () =
+      try
+        if Bitset.mem pendulum_state 0
+        then raise Finish_exc
+        else
+        if Bitset.mem pendulum_state 6
+        then
+          (Bitset.inter_union pendulum_state [|2147483631|] [|40|];
+           if !? i
+           then (set_present_value write ""; write_out write.value);
+           Bitset.inter_union pendulum_state [|2147483639|] [|16|];
+           raise Pause_exc)
+        else
+          (Bitset.union pendulum_state [|104|];
+           if !? i
+           then (set_present_value write ""; write_out write.value);
+           Bitset.inter_union pendulum_state [|2147483639|] [|16|];
+           raise Pause_exc)
+      with | Pause_exc  -> (set_absent (); Pause)
+           | Finish_exc  ->
+             (set_absent (); Bitset.add pendulum_state 0; Finish)
+    in
+    object method i = set_present_value i method react = p_react () end
+  in
+  object
+    method create i write =
+      create_local (make_signal i)
+        ((make_signal_gather ((fst write), (^))), (snd write))
+    method create_run = create_local
+  end
+
+let%sync mouse =
+  input i;
+  output write (^);
+  loop begin
+    present i
+      (emit write "")
+  ; pause
+  end

@@ -8,7 +8,7 @@ open Pendulum_compiler
 
 open Utils
 
-module Ast = Sync2ml.Ast
+module Ast = Grc2ml.Ast
 
 
 let check_expr_ident e =
@@ -89,7 +89,7 @@ let pop_signals_decl e =
   let rec aux p binders sigs =
     match p with
     | [%expr [%e? {pexp_desc = Pexp_tuple (
-                    [%expr [%e? ([%expr input] | [%expr output]) as orig]
+                    [%expr [%e? ([%expr input] | [%expr output] | [%expr element]) as orig]
                              [%e? e_var]] :: e_vars)}]; [%e? e2]] ->
       aux e2 binders @@ List.fold_left (fun acc e_var' ->
           sig_of_expr orig e_var' :: acc

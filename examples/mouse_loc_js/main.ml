@@ -12,11 +12,13 @@ let alert f = Printf.ksprintf
 
 let%sync debug s n = !(debug "%s : %d" !!s !!n)
 
+let react = (^)
+
 let%sync mouse =
   element w {
     onmousemove = "", (fun x ev -> sprintf "%d,%d" ev##.clientX ev##.clientY);
   };
-  output write;
+  output write react;
   loop begin
     present w##onmousemove
       (emit write !!(w##onmousemove))

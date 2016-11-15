@@ -7,9 +7,10 @@ open Longident
 
 open Pendulum_compiler
 
+module Utils = Pendulum_compiler.Utils
 open Utils
 
-module Ast = Sync2ml.Ast
+module Ast = Ml2ocaml.Ast
 
 
 let parse_and_generate atom_mapper vb =
@@ -35,7 +36,7 @@ let parse_and_generate atom_mapper vb =
     let tast = Ast.Analysis.filter_dead_trees tast in
     Pendulum_misc.print_to_dot env (StringSet.remove "debug" options)
       (has_opt "dot") (has_opt "pdf") (has_opt "png") pname tast;
-    let ocaml_expr = Sync2ml.generate pname options env tast in
+    let ocaml_expr = Ml2ocaml.generate pname options env tast in
     if has_opt "dsource" then Format.printf "%a@." Pprintast.expression ocaml_expr;
     [%expr [%e ocaml_expr]]
 
@@ -46,12 +47,12 @@ let gen_bindings atom_mapper vbl =
     ) vbl
 
 let try_compile_error f mapper str =
-  let open Sync2ml in
+  let open Grc2ml in
   try f mapper str with
   | Ast.Error (loc, e) ->
     Error.(error ~loc (Other_err (e, Ast.print_error)))
-  | Sync2ml.Error (loc, e) ->
-    Error.(error ~loc (Other_err (e, Sync2ml.print_error)))
+  | Grc2ml.Error (loc, e) ->
+    Error.(error ~loc (Other_err (e, Grc2ml.print_error)))
   | Flowgraph.Error (loc, e) ->
     Error.(error ~loc (Other_err (e, Flowgraph.print_error)))
   | Location.Error _ as e -> raise e
@@ -70,7 +71,7 @@ let tagged_signals_mapper =
            {Ast.content = Format.sprintf "%s##%s" content tag_content; loc}
          in
          let e' =
-           [%expr !![%e Sync2ml.Ocaml_gen.mk_ident ident]][@metaloc exp.pexp_loc]
+           [%expr !![%e Ml2ocaml.mk_ident ident]][@metaloc exp.pexp_loc]
          in
          mapper.expr mapper e'
        | x ->
@@ -79,7 +80,7 @@ let tagged_signals_mapper =
   }
 
 let pendulum_mapper argv =
-  let open Sync2ml in
+  let open Grc2ml in
   {default_mapper with
    structure_item = try_compile_error (fun mapper stri ->
        match stri with

@@ -27,7 +27,7 @@ Library "pendulum_compiler"
   Install: true
   FindlibParent: pendulum
   FindlibName: compiler 
-  Modules: Utils, Ast, Grc, Sync2ml
+  Modules: Utils, Ast, Grc, Grc2ml, Ml2ocaml
   BuildDepends:
     unix,
     ppx_tools.metaquot

@@ -249,3 +249,9 @@ let%sync trap_remove_interleaving =
   loop begin
     present b !(Format.printf "b"); pause
   end
+
+
+let%sync elements =
+  element e1, e2;
+  element e3;
+  loop pause
