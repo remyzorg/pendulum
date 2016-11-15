@@ -110,9 +110,6 @@ let run _ =
     let _syncfetcher = github_fetch_sync#create
         (username_field, repos, Api.Undefined, "")
     in
-
-
-
     Js._true
   with
   | Not_found -> Js._true
