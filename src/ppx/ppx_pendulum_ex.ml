@@ -6,9 +6,7 @@ open Parsetree
 open Longident
 
 open Pendulum_compiler
-
-module Utils = Pendulum_compiler.Utils
-open Utils
+open Pendulum_compiler.Utils
 
 module Ast = Ml2ocaml.Ast
 
