@@ -27,7 +27,7 @@ module type S = sig
 
   type ident = string location
 
-  type signal_origin = Local | Input | Output | Element
+  type signal_origin = Local | Input | Output | Element | React
 
 
   type gatherer = exp option
@@ -173,7 +173,7 @@ module Make (E : Exp) = struct
     | Event of ident * gatherer
     | No_binding
 
-  type signal_origin = Local | Input | Output | Element
+  type signal_origin = Local | Input | Output | Element | React
 
 
   type signal = { ident : ident; origin : signal_origin; bind : signal_binder; gatherer : gatherer}

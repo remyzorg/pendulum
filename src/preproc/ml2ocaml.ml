@@ -63,11 +63,17 @@ let reactfun_name = "p~react"
 let animate_name = "animate"
 let gather_str = "gather"
 let api_react_function_name = "react"
+let api_React_output_signal= "~React"
 let animated_state_var_name = "animated_next_raf"
 let select_env_name = "pendulum~state"
 let select_env_var = Location.(mkloc select_env_name !Ast_helper.default_loc)
 let select_env_ident = mk_ident (Ast.mk_loc select_env_name)
 let gather_val_arg_name = Ast.mk_loc "arg~~"
+let api_output_signal_callback = "~out"
+
+let ident_app_str ident str =
+  Ast.mk_loc ~loc:ident.loc
+    (Format.sprintf "%s%s" ident.content str)
 
 let debug_instant_cnt_name = Ast.mk_loc "instant~cnt"
 
@@ -82,9 +88,6 @@ let mk_mach_inst_ident mch k =
 let mk_set_mach_arg_n n mch = Ast.mk_loc ~loc:Ast.dummy_loc
     (Format.sprintf "%s~set~arg~%d" mch n)
 
-let ident_app_str ident sep str =
-  Ast.mk_loc ~loc:ident.loc
-    (Format.sprintf "%s%s%s" ident.content sep str)
 
 let remove_signal_renaming s =
   try Ast.({s with content = String.sub s.content 0
@@ -161,6 +164,10 @@ let has_tobe_defined s = match s with
   | No_binding | Event _ -> true
   | Access _ -> false
 
+let is_input s = match s.origin with
+  | Local | Input | Element -> true
+  | Output | React -> false
+
 let signal_to_creation_expr init_val s =
   match s.bind with
   | Event (e, gopt) ->
@@ -191,13 +198,24 @@ let mk_args_signals_definitions env e =
             ) acc s
           ) acc
       with Not_found ->
-        if s.origin = Output then
-          [%expr let [%p mk_pat_var s.ident],
-                     [%p mk_pat_var @@ ident_app_str s.ident "~" "out" ] =
-                   fst [%e (mk_ident s.ident)], snd [%e (mk_ident s.ident)]
-            in [%e acc]]
-        else acc
-
+        begin match s.origin with
+          | Output ->
+            [%expr let [%p mk_pat_var s.ident],
+                       [%p mk_pat_var @@ ident_app_str
+                           s.ident api_output_signal_callback ] =
+                     fst [%e (mk_ident s.ident)], snd [%e (mk_ident s.ident)]
+              in [%e acc]]
+          | React ->
+            [%expr let [%p mk_pat_var s.ident],
+                       [%p mk_pat_var @@ ident_app_str s.ident api_React_output_signal],
+                       [%p mk_pat_var @@ ident_app_str
+                           s.ident api_output_signal_callback ] =
+                     fst [%e (mk_ident s.ident)],
+                     fst (snd [%e (mk_ident s.ident)]),
+                     snd (snd [%e (mk_ident s.ident)]) ?step:None
+              in [%e acc]]
+          | Local | Input | Element -> acc
+        end
     ) (mk_local_signals_definitions env e) env.args_signals
 
 let is_tagged env s =
@@ -246,11 +264,18 @@ let mk_program_object env reactfun =
   let pcstr_fields =
     List.fold_left
       (fun acc (s, _) ->
-         if not @@ is_tagged env s && s.origin <> Output then
-           mk_field_setter s :: acc else acc)
-      [(mk_method env.pname.loc api_react_function_name
+         match s.origin with
+         | Input when not @@ is_tagged env s -> mk_field_setter s :: acc
+         | React ->
+           (mk_method s.ident.loc s.ident.content
+            @@ (mk_ident @@ ident_app_str s.ident api_React_output_signal)
+           ) :: acc
+         | Input | Local | Output | Element -> acc
+      ) [(mk_method env.pname.loc api_react_function_name
           [%expr [%e reactfun] ()])] env.args_signals
   in Exp.object_ {pcstr_self = Pat.any (); pcstr_fields}
+
+
 
 let mk_machine_registers_definitions env e =
   IdentMap.fold (fun k (_, insts) acc ->
@@ -347,12 +372,38 @@ let mk_constructor_reactfun env animate d body =
   in
   Exp.let_ recparam (Vb.mk (mk_pat_var reactfun_ident) reactfun :: anim), id
 
+let mk_notbind env mk mknb s =
+  if is_tagged env s then mk s.ident
+  else mknb s.ident
+
+let mk_createfun_outputs_expr env =
+  build_tuple Exp.tuple (
+    fun ?t s ->
+      let initexpr, output =
+        match s.origin with
+        | Output ->
+          [%expr fst [%e (mk_ident s.ident)]],
+          [%expr snd [%e (mk_ident s.ident)]]
+        | React ->
+          (mk_ident s.ident),
+          [%expr React.S.create [%e (mk_ident s.ident)]][@metaloc s.ident.loc]
+        | _ -> assert false
+      in
+      mk_notbind env mk_ident (fun _ ->
+          [%expr [%e signal_to_creation_expr initexpr s], [%e output ]]) s
+  ) [%expr ()]
+
+let mk_createfun_inputs_expr env =
+  build_tuple Exp.tuple (
+    fun ?t s -> mk_notbind env mk_ident (fun _ ->
+        signal_to_creation_expr (mk_ident s.ident) s) s
+  ) [%expr ()]
 
 let mk_constructor_create_fun env =
   let open Tagged in
   let inputs, outputs =
-    List.partition (fun (x, _) -> x.origin <> Output) env.args_signals in
-  let mk_notbind mk mknb s = if is_tagged env s then mk s.ident else mknb s.ident in
+    List.partition (fun (x, _) -> is_input x) env.args_signals in
+  let mk_notbind mk mknb s = mk_notbind env mk mknb s in
   let mk_createfun_args_pat =
     build_tuple Pat.tuple (fun ?t s -> mk_pat_var ?t s.ident) [%pat? ()] in
   let createfun_inputs_pat = mk_createfun_args_pat inputs in
@@ -363,25 +414,11 @@ let mk_constructor_create_fun env =
           (mk_pat_var ?t:(Option.map signaltype_of_type t))) [%pat? ()] in
   let createfun_run_inputs_pat = mk_createfun_run_args_pat inputs in
   let createfun_run_outputs_pat = mk_createfun_run_args_pat outputs in
-  let mk_createfun_outputs_expr =
-    build_tuple Exp.tuple (
-      fun ?t s -> mk_notbind mk_ident (fun _ ->
-          [%expr [%e signal_to_creation_expr
-              [%expr fst [%e (mk_ident s.ident)]] s],
-                 snd [%e (mk_ident s.ident)]]) s
-    ) [%expr ()]
-  in
-  let mk_createfun_inputs_expr =
-    build_tuple Exp.tuple (
-      fun ?t s -> mk_notbind mk_ident (fun _ ->
-          signal_to_creation_expr (mk_ident s.ident) s) s
-    ) [%expr ()]
-  in
   let createfun_expr, createfun_run_expr =
     if inputs <> [] then
-      let ins = mk_createfun_inputs_expr inputs in
+      let ins = mk_createfun_inputs_expr env inputs in
       if outputs <> [] then
-        let outs = mk_createfun_outputs_expr outputs in
+        let outs = mk_createfun_outputs_expr env outputs in
         [%expr fun [%p createfun_inputs_pat] [%p createfun_outputs_pat]
           -> create_local [%e ins] [%e outs]],
         [%expr create_local]
@@ -389,7 +426,7 @@ let mk_constructor_create_fun env =
         [%expr fun [%p createfun_inputs_pat] -> create_local [%e ins] ()],
         [%expr fun ins -> create_local ins ()]
     else if outputs <> [] then
-      let outs = mk_createfun_outputs_expr outputs in
+      let outs = mk_createfun_outputs_expr env outputs in
       [%expr fun [%p createfun_outputs_pat] -> create_local () [%e outs]],
       [%expr fun outs -> create_local]
     else
@@ -416,18 +453,18 @@ let mk_constructor options nstmts env sel reactfun_body =
     let open Pendulum.Runtime_misc in
     let open Pendulum.Program in
     let open Pendulum.Signal in
-    let create_local
-        [%p createfun_run_inputs_pat]
-        [%p createfun_run_outputs_pat] = [%e
-      mk_running_env d nstmts
-      @@ mk_args_signals_definitions env
-      @@ mk_set_all_absent_definition env
-      @@ mk_machine_registers_definitions env
-      @@ mk_animate_mutex animate
-      @@ mk_reactfun_let
-      @@ mk_callbacks_assigns animate env
-      @@ mk_program_object env reactfun_ident
-    ] in
+    let create_local [%p createfun_run_inputs_pat]
+        [%p createfun_run_outputs_pat] =
+      [%e
+        mk_running_env d nstmts
+        @@ mk_args_signals_definitions env
+        @@ mk_set_all_absent_definition env
+        @@ mk_machine_registers_definitions env
+        @@ mk_animate_mutex animate
+        @@ mk_reactfun_let
+        @@ mk_callbacks_assigns animate env
+        @@ mk_program_object env reactfun_ident
+      ] in
     object
       method create = [%e createfun_expr]
       method create_run = [%e createfun_run_expr]
@@ -478,12 +515,14 @@ and mk_ml_ast env depl ast =
       | No_binding | Event _ ->
         let setval_expr = [%expr set_present_value [%e add_deref_local vs.signal]
             [%e rebinded_expr]]
-        in
-        if vs.signal.origin = Output then
-          Exp.sequence setval_expr
-            ([%expr [%e mk_ident @@ ident_app_str vs.signal.ident "~" "out"]
-                [%e mk_ident vs.signal.ident].value])
-        else setval_expr
+        in begin match vs.signal.origin with
+          | Output | React ->
+            Exp.sequence setval_expr
+              ([%expr [%e mk_ident @@ ident_app_str vs.signal.ident
+                  api_output_signal_callback]
+                  [%e mk_ident vs.signal.ident].value])
+          | Local | Input | Element -> setval_expr
+        end
 
       | Access (elt, fields) ->
         let lhs = List.fold_left (fun acc field ->

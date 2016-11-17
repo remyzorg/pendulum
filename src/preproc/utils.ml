@@ -39,10 +39,21 @@ module MList = struct
 
 end
 
-module StringMap = Map.Make(struct
+module StringMap =struct
+  include Map.Make(struct
     type t = string
     let compare = compare
   end)
+
+  let of_assoc l =
+    List.fold_left (fun acc (k, v) ->
+        add k v acc
+      ) empty l
+
+
+end
+
+
 
 module StringSet = Set.Make(struct
     type t = string

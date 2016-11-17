@@ -8,6 +8,7 @@ type syntax =
   | Signal_test
   | Signal_expr
   | Run_params
+  | Signal_decl
   | Signal_decl_at_start
   | Event_name
   | Unknown_arg_option of string
@@ -31,6 +32,7 @@ let print_syntax_rsn fmt rsn =
   | Signal_test -> fprintf fmt "signal test expected"
   | Event_name -> fprintf fmt "event name expected"
   | Signal_expr -> fprintf fmt "signal expression expected"
+  | Signal_decl -> fprintf fmt "signal declaration exprected"
   | Run_params -> fprintf fmt "run parameters expected"
   | Signal_decl_at_start -> fprintf fmt "signal declarations must be on the top"
   | Unknown_arg_option s -> fprintf fmt "unknown option %s" s
