@@ -415,24 +415,21 @@ let mk_constructor_create_fun env =
   let createfun_run_inputs_pat = mk_createfun_run_args_pat inputs in
   let createfun_run_outputs_pat = mk_createfun_run_args_pat outputs in
   let createfun_expr, createfun_run_expr =
-    if inputs <> [] then
-      let ins = mk_createfun_inputs_expr env inputs in
-      if outputs <> [] then
-        let outs = mk_createfun_outputs_expr env outputs in
-        [%expr fun [%p createfun_inputs_pat] [%p createfun_outputs_pat]
-          -> create_local [%e ins] [%e outs]],
-        [%expr create_local]
-      else
-        [%expr fun [%p createfun_inputs_pat] -> create_local [%e ins] ()],
-        [%expr fun ins -> create_local ins ()]
-    else if outputs <> [] then
-      let outs = mk_createfun_outputs_expr env outputs in
+    let ins = mk_createfun_inputs_expr env inputs in
+    let outs = mk_createfun_outputs_expr env outputs in
+    match inputs, outputs with
+    | [], [] ->
+      [%expr create_local () ()], [%expr create_local () ()]
+    | inputs, [] ->
+      [%expr fun [%p createfun_inputs_pat] -> create_local [%e ins] ()],
+      [%expr fun ins -> create_local ins ()]
+    | [], outputs ->
       [%expr fun [%p createfun_outputs_pat] -> create_local () [%e outs]],
       [%expr fun outs -> create_local]
-    else
-      [%expr create_local () ()], [%expr create_local () ()] in
-
-  createfun_run_inputs_pat, createfun_run_outputs_pat,
+    | inputs, outputs ->
+      [%expr fun [%p createfun_inputs_pat] [%p createfun_outputs_pat]
+        -> create_local [%e ins] [%e outs]], [%expr create_local]
+  in createfun_run_inputs_pat, createfun_run_outputs_pat,
   createfun_expr, createfun_run_expr
 
 

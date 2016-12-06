@@ -1,14 +1,9 @@
 let process main =
   print_endline "Hello world!"
 
-let () = run main
-
-
-let process main2 =
-  signal s in
+let process main2 s w =
   signal x in
   signal y in
-  signal w in
   loop
     emit s 5;
     pause
@@ -20,3 +15,17 @@ let process main2 =
         pause
     end
   with w done
+
+
+let process my_loop input =
+  loop
+    print_endline "Hello world";
+    emit input;
+    pause
+  end
+
+let _ =
+  signal s in
+  run my_loop s
+
+
