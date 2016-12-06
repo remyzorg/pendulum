@@ -1,0 +1,22 @@
+let process main =
+  print_endline "Hello world!"
+
+let () = run main
+
+
+let process main2 =
+  signal s in
+  signal x in
+  signal y in
+  signal w in
+  loop
+    emit s 5;
+    pause
+  end
+  ||
+  control
+    loop
+        present s then emit x else emit y;
+        pause
+    end
+  with w done
