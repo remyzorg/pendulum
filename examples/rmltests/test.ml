@@ -63,31 +63,38 @@ let my_loop =
                | ()  ->
                    Lco_ctrl_tree_record.rml_loop
                      (Lco_ctrl_tree_record.rml_seq
-                       (Lco_ctrl_tree_record.rml_compute
-                         (function
-                           | ()  ->
-                               Pervasives.print_endline "Hello world";
-                                 Lco_ctrl_tree_record.rml_expr_emit
-                                   input__val_rml_8
-                           ))
+                       (Lco_ctrl_tree_record.rml_present'
+                         input__val_rml_8
+                         (Lco_ctrl_tree_record.rml_compute
+                           (function
+                             | ()  -> Pervasives.print_endline "Hello world"
+                             ))
+                         Lco_ctrl_tree_record.rml_nothing)
                        Lco_ctrl_tree_record.rml_pause)
                ):
               (_) Lco_ctrl_tree_record.process)
         )
 ;;
-let my_loop' = ((function
-     | ()  ->
-         Lco_ctrl_tree_record.rml_signal
-           (function
-             | s__sig_9  ->
-                 Lco_ctrl_tree_record.rml_run
-                   (function | ()  -> my_loop s__sig_9 )
-             )
-     ):
-    (_) Lco_ctrl_tree_record.process);;
+(* Rml_machine.rml_exec *)
+(*   ([]) *)
+(*   ((function *)
+(*      | ()  -> *)
+(*          Lco_ctrl_tree_record.rml_signal *)
+(*            (function *)
+(*              | s__sig_9  -> *)
+(*                  Lco_ctrl_tree_record.rml_run *)
+(*                    (function | ()  -> my_loop s__sig_9 ) *)
+(*              ) *)
+(*      ): *)
+(*     (_) Lco_ctrl_tree_record.process);; *)
+
+
 
 let _ =
-  let react = Lco_ctrl_tree_record.rml_make my_loop' in
-  for i = 0 to 9 do
-    ignore @@ react ()
-  done
+  let open Lco_ctrl_tree_record in
+  let s = rml_global_signal_combine "" (fun acc x -> x) in
+  let react = rml_make (my_loop s) in
+  ignore @@ react ();
+  ignore @@ (rml_make (fun () -> rml_emit (fun () -> s))) ();
+  ignore @@ react ();
+  ignore @@ react ()

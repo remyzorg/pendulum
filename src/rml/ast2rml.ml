@@ -65,32 +65,94 @@ let rec compile ast =
 
   | Run (ident, params, loc) -> raise (Error (Rml_undefined))
 
+let rml_signal_to_creation_expr init_val s =
+  match s.bind with
+  | Event (e, gopt) -> assert false
+  | _ ->
+    Option.casefv s.gatherer (fun g -> assert false)
+      [%expr Lco_ctrl_tree_record.rml_global_signal_combine
+          create [%e init_val] (fun acc x -> x)]
 
-let rml_mk_args_signals_definitions env = assert false
-let rml_mk_constructor_reactfun env animate d reactfun_body = assert false
-let rml_mk_callbacks_assigns animate env = assert false
+
+let rml_mk_args_signals_definitions env e =
+  let open Tagged in
+  let open Ml2ocaml in
+  List.fold_left (fun acc (s, _) ->
+      try
+        Hashtbl.find env.binders_env s.ident.content
+        |> MList.map_filter has_tobe_defined (function
+            | Event (e, gatherer) as bind -> { (append_tag s e) with gatherer; bind}
+            | _ -> s)
+        |> List.fold_left (fun acc s ->
+            signal_to_definition (
+              rml_signal_to_creation_expr [%expr None] s
+            ) acc s
+          ) acc
+      with Not_found -> acc
+    ) e env.args_signals
+
+
+let rml_mk_constructor_reactfun env animate d body =
+  let open Ml2ocaml in
+  let reactfun = [%expr
+    Lco_ctrl_tree_record.rml_make [%e body]
+  ] in
+  let reactfun_ident = mk_loc reactfun_name in
+  let reactfun_expr = mk_ident reactfun_ident in
+  let recparam, anim, id =
+    if animate then
+      let animate_ident = mk_loc animate_name in
+      Asttypes.Recursive
+    , [Vb.mk (mk_pat_var animate_ident) (mk_raf_call d reactfun_expr)]
+    , mk_ident animate_ident
+    else Asttypes.Nonrecursive, [], reactfun_expr
+  in
+  Exp.let_ recparam (Vb.mk (mk_pat_var reactfun_ident) reactfun :: anim), id
 
 let rml_mk_program_object env reactfun =
   let open Tagged in
   let open Ml2ocaml in
   let mk_field_setter s = mk_method s.ident.loc s.ident.content
-      [%expr set_present_value [%e mk_ident s.ident]] in
-  let pcstr_fields =
-    List.fold_left
-      (fun acc (s, _) ->
-         match s.origin with
-         | Input when not @@ is_tagged env s -> mk_field_setter s :: acc
-         | React ->
-           (mk_method s.ident.loc s.ident.content
-            @@ (mk_ident @@ ident_app_str s.ident api_React_output_signal)
-           ) :: acc
-         | Input | Local | Output | Element -> acc
-      ) [(mk_method env.pname.loc api_react_function_name
-          [%expr [%e reactfun] ()])] env.args_signals
-  in Exp.object_ {pcstr_self = Pat.any (); pcstr_fields}
+      [%expr Sig_env.Record.emit [%e mk_ident s.ident] ] in
+  let pcstr_fields = pcstr_fields mk_field_setter env reactfun in
+  Exp.object_ {pcstr_self = Pat.any (); pcstr_fields}
 
+let rml_mk_callbacks_assigns animate env e =
+  let open Ml2ocaml in
+  let opexpr loc = mk_ident @@ Ast.mk_loc ~loc "##." in
+  let mk_lhs s tag =
+    [%expr [%e opexpr tag.loc] [%e mk_ident s.ident] [%e mk_ident tag]]
+  in
+  let step_call =
+    if animate then
+      [%expr [%e mk_ident @@ Ast.mk_loc animate_name] ()]
+    else
+      [%expr ignore @@ [%e mk_ident @@ Ast.mk_loc reactfun_name] ()]
+  in
+  let mk_rhs s tag =
+    [%expr Dom_html.handler (
+        fun ev ->
+          set_present_value [%e mk_ident (append_tag s tag).ident] ev;
+          [%e step_call];
+          Js._true)]
+  in
+  let mk_assign s acc typ =
+    match typ with | No_binding -> acc | Access _ -> acc
+                   | Event (tag, _) ->
+                     [%expr [%e mk_lhs s tag] := [%e mk_rhs s tag]; [%e acc]]
+  in List.fold_left (
+    fun acc (s, _) -> try
+        Hashtbl.find env.Tagged.binders_env s.ident.content
+        |> List.fold_left (mk_assign s) acc
+      with Not_found -> acc
+  ) e env.Tagged.args_signals
 
-
+let rml_mk_createfun_inputs_expr env =
+  let open Ml2ocaml in
+  build_tuple Exp.tuple (
+    fun ?t s -> mk_notbind env mk_ident (fun _ ->
+        rml_signal_to_creation_expr (mk_ident s.ident) s) s
+  ) [%expr ()]
 
 let mk_constructor_create_fun env =
   let open Tagged in
@@ -108,7 +170,7 @@ let mk_constructor_create_fun env =
   let createfun_run_inputs_pat = mk_createfun_run_args_pat inputs in
   let createfun_expr =
     if inputs <> [] then
-      let ins = mk_createfun_inputs_expr env inputs in
+      let ins = rml_mk_createfun_inputs_expr env inputs in
       [%expr fun [%p createfun_inputs_pat] -> create_local [%e ins] ()]
     else
       [%expr create_local ()] in
@@ -127,9 +189,6 @@ let mk_constructor options nstmts env reactfun_body =
     = mk_constructor_create_fun env
   in
   [%expr
-    let open Pendulum.Runtime_misc in
-    let open Pendulum.Program in
-    let open Pendulum.Signal in
     let create_local [%p createfun_run_inputs_pat] =
       [%e
         rml_mk_args_signals_definitions env

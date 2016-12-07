@@ -19,8 +19,7 @@ let process main2 s w =
 
 let process my_loop input =
   loop
-    print_endline "Hello world";
-    emit input;
+    present input then print_endline "Hello world";
     pause
   end
 

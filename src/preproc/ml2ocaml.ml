@@ -257,24 +257,25 @@ let mk_method loc str expr =
   Asttypes.(Cf.method_ {txt = str; loc}
               Public (Cfk_concrete (Fresh, expr)))
 
-let mk_program_object env reactfun =
+let pcstr_fields mk_field env reactfun =
   let open Tagged in
+  List.fold_left
+    (fun acc (s, _) ->
+       match s.origin with
+       | Input when not @@ is_tagged env s -> mk_field s :: acc
+       | React ->
+         (mk_method s.ident.loc s.ident.content
+          @@ (mk_ident @@ ident_app_str s.ident api_React_output_signal)
+         ) :: acc
+       | Input | Local | Output | Element -> acc
+    ) [(mk_method env.pname.loc api_react_function_name
+          [%expr [%e reactfun] ()])] env.args_signals
+
+let mk_program_object env reactfun =
   let mk_field_setter s = mk_method s.ident.loc s.ident.content
       [%expr set_present_value [%e mk_ident s.ident]] in
-  let pcstr_fields =
-    List.fold_left
-      (fun acc (s, _) ->
-         match s.origin with
-         | Input when not @@ is_tagged env s -> mk_field_setter s :: acc
-         | React ->
-           (mk_method s.ident.loc s.ident.content
-            @@ (mk_ident @@ ident_app_str s.ident api_React_output_signal)
-           ) :: acc
-         | Input | Local | Output | Element -> acc
-      ) [(mk_method env.pname.loc api_react_function_name
-          [%expr [%e reactfun] ()])] env.args_signals
+  let pcstr_fields = pcstr_fields mk_field_setter env reactfun
   in Exp.object_ {pcstr_self = Pat.any (); pcstr_fields}
-
 
 
 let mk_machine_registers_definitions env e =
@@ -286,7 +287,14 @@ let mk_machine_registers_definitions env e =
         ) acc (List.rev insts)
     ) !(env.Tagged.machine_runs) e
 
-let mk_callbacks_assigns animate env e =
+let mk_callbacks_assigns_rhs step_call s tag =
+  [%expr Dom_html.handler (
+      fun ev ->
+        set_present_value [%e mk_ident (append_tag s tag).ident] ev;
+        [%e step_call];
+        Js._true)]
+
+let mk_callbacks_assigns mk_rhs animate env e =
   let opexpr loc = mk_ident @@ Ast.mk_loc ~loc "##." in
   let mk_lhs s tag =
     [%expr [%e opexpr tag.loc] [%e mk_ident s.ident] [%e mk_ident tag]]
@@ -297,13 +305,7 @@ let mk_callbacks_assigns animate env e =
     else
       [%expr ignore @@ [%e mk_ident @@ Ast.mk_loc reactfun_name] ()]
   in
-  let mk_rhs s tag =
-    [%expr Dom_html.handler (
-        fun ev ->
-          set_present_value [%e mk_ident (append_tag s tag).ident] ev;
-          [%e step_call];
-          Js._true)]
-  in
+  let mk_rhs = mk_rhs step_call in
   let mk_assign s acc typ =
     match typ with | No_binding -> acc | Access _ -> acc
                    | Event (tag, _) ->
@@ -338,6 +340,8 @@ let mk_raf_call debug reactfun_ident =
         in ()) else
         [%e Debug.(seqif ~debug (print (str "Already in next frame...")) [%expr ()])]
   ]
+
+let mk_callbacks = mk_callbacks_assigns mk_callbacks_assigns_rhs
 
 let mk_animate_mutex animate body =
   if not animate then body else
@@ -459,7 +463,7 @@ let mk_constructor options nstmts env sel reactfun_body =
         @@ mk_machine_registers_definitions env
         @@ mk_animate_mutex animate
         @@ mk_reactfun_let
-        @@ mk_callbacks_assigns animate env
+        @@ mk_callbacks animate env
         @@ mk_program_object env reactfun_ident
       ] in
     object
