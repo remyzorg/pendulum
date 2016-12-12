@@ -52,6 +52,16 @@ Executable ppx_pendulum
   MainIs:         ppx_pendulum_ex.ml
   CompiledObject: best
 
+Executable ppx_pendulum_rml
+  Path:           src/rml/
+  Install: true
+  BuildDepends:
+    compiler-libs.common,
+    ppx_tools.metaquot,
+    pendulum.compiler
+  MainIs:         ppx_pendulum_rml.ml
+  CompiledObject: best
+
 Executable "test_ppx"
  Path: tests/ppx
  Build$: flag(tests) || flag(ppx)

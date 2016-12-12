@@ -257,24 +257,25 @@ let mk_method loc str expr =
   Asttypes.(Cf.method_ {txt = str; loc}
               Public (Cfk_concrete (Fresh, expr)))
 
-let mk_program_object env reactfun =
+let pcstr_fields mk_field env reactfun =
   let open Tagged in
+  List.fold_left
+    (fun acc (s, _) ->
+       match s.origin with
+       | Input when not @@ is_tagged env s -> mk_field s :: acc
+       | React ->
+         (mk_method s.ident.loc s.ident.content
+          @@ (mk_ident @@ ident_app_str s.ident api_React_output_signal)
+         ) :: acc
+       | Input | Local | Output | Element -> acc
+    ) [(mk_method env.pname.loc api_react_function_name
+          [%expr [%e reactfun] ()])] env.args_signals
+
+let mk_program_object env reactfun =
   let mk_field_setter s = mk_method s.ident.loc s.ident.content
       [%expr set_present_value [%e mk_ident s.ident]] in
-  let pcstr_fields =
-    List.fold_left
-      (fun acc (s, _) ->
-         match s.origin with
-         | Input when not @@ is_tagged env s -> mk_field_setter s :: acc
-         | React ->
-           (mk_method s.ident.loc s.ident.content
-            @@ (mk_ident @@ ident_app_str s.ident api_React_output_signal)
-           ) :: acc
-         | Input | Local | Output | Element -> acc
-      ) [(mk_method env.pname.loc api_react_function_name
-          [%expr [%e reactfun] ()])] env.args_signals
+  let pcstr_fields = pcstr_fields mk_field_setter env reactfun
   in Exp.object_ {pcstr_self = Pat.any (); pcstr_fields}
-
 
 
 let mk_machine_registers_definitions env e =
@@ -286,7 +287,14 @@ let mk_machine_registers_definitions env e =
         ) acc (List.rev insts)
     ) !(env.Tagged.machine_runs) e
 
-let mk_callbacks_assigns animate env e =
+let mk_callbacks_assigns_rhs step_call s tag =
+  [%expr Dom_html.handler (
+      fun ev ->
+        set_present_value [%e mk_ident (append_tag s tag).ident] ev;
+        [%e step_call];
+        Js._true)]
+
+let mk_callbacks_assigns mk_rhs animate env e =
   let opexpr loc = mk_ident @@ Ast.mk_loc ~loc "##." in
   let mk_lhs s tag =
     [%expr [%e opexpr tag.loc] [%e mk_ident s.ident] [%e mk_ident tag]]
@@ -297,13 +305,7 @@ let mk_callbacks_assigns animate env e =
     else
       [%expr ignore @@ [%e mk_ident @@ Ast.mk_loc reactfun_name] ()]
   in
-  let mk_rhs s tag =
-    [%expr Dom_html.handler (
-        fun ev ->
-          set_present_value [%e mk_ident (append_tag s tag).ident] ev;
-          [%e step_call];
-          Js._true)]
-  in
+  let mk_rhs = mk_rhs step_call in
   let mk_assign s acc typ =
     match typ with | No_binding -> acc | Access _ -> acc
                    | Event (tag, _) ->
@@ -339,6 +341,8 @@ let mk_raf_call debug reactfun_ident =
         [%e Debug.(seqif ~debug (print (str "Already in next frame...")) [%expr ()])]
   ]
 
+let mk_callbacks = mk_callbacks_assigns mk_callbacks_assigns_rhs
+
 let mk_animate_mutex animate body =
   if not animate then body else
     [%expr let [%p mk_pat_var @@ Ast.mk_loc animated_state_var_name] = ref false in [%e body]]
@@ -361,16 +365,16 @@ let mk_constructor_reactfun env animate d body =
       | Finish_exc -> set_absent ();
         Bitset.add [%e select_env_ident] 0; Finish] in
   let reactfun_ident = mk_loc reactfun_name in
-  let reactfun_expr = mk_ident reactfun_ident in
-  let recparam, anim, id =
+  let reactfun_var_expr = mk_ident reactfun_ident in
+  let recparam, anim, reactfun_var =
     if animate then
       let animate_ident = mk_loc animate_name in
       Asttypes.Recursive
-    , [Vb.mk (mk_pat_var animate_ident) (mk_raf_call d reactfun_expr)]
+    , [Vb.mk (mk_pat_var animate_ident) (mk_raf_call d reactfun_var_expr)]
     , mk_ident animate_ident
-    else Asttypes.Nonrecursive, [], reactfun_expr
+    else Asttypes.Nonrecursive, [], reactfun_var_expr
   in
-  Exp.let_ recparam (Vb.mk (mk_pat_var reactfun_ident) reactfun :: anim), id
+  Exp.let_ recparam (Vb.mk (mk_pat_var reactfun_ident) reactfun :: anim), reactfun_var
 
 let mk_notbind env mk mknb s =
   if is_tagged env s then mk s.ident
@@ -415,24 +419,21 @@ let mk_constructor_create_fun env =
   let createfun_run_inputs_pat = mk_createfun_run_args_pat inputs in
   let createfun_run_outputs_pat = mk_createfun_run_args_pat outputs in
   let createfun_expr, createfun_run_expr =
-    if inputs <> [] then
-      let ins = mk_createfun_inputs_expr env inputs in
-      if outputs <> [] then
-        let outs = mk_createfun_outputs_expr env outputs in
-        [%expr fun [%p createfun_inputs_pat] [%p createfun_outputs_pat]
-          -> create_local [%e ins] [%e outs]],
-        [%expr create_local]
-      else
-        [%expr fun [%p createfun_inputs_pat] -> create_local [%e ins] ()],
-        [%expr fun ins -> create_local ins ()]
-    else if outputs <> [] then
-      let outs = mk_createfun_outputs_expr env outputs in
+    let ins = mk_createfun_inputs_expr env inputs in
+    let outs = mk_createfun_outputs_expr env outputs in
+    match inputs, outputs with
+    | [], [] ->
+      [%expr create_local () ()], [%expr create_local () ()]
+    | inputs, [] ->
+      [%expr fun [%p createfun_inputs_pat] -> create_local [%e ins] ()],
+      [%expr fun ins -> create_local ins ()]
+    | [], outputs ->
       [%expr fun [%p createfun_outputs_pat] -> create_local () [%e outs]],
       [%expr fun outs -> create_local]
-    else
-      [%expr create_local () ()], [%expr create_local () ()] in
-
-  createfun_run_inputs_pat, createfun_run_outputs_pat,
+    | inputs, outputs ->
+      [%expr fun [%p createfun_inputs_pat] [%p createfun_outputs_pat]
+        -> create_local [%e ins] [%e outs]], [%expr create_local]
+  in createfun_run_inputs_pat, createfun_run_outputs_pat,
   createfun_expr, createfun_run_expr
 
 
@@ -462,7 +463,7 @@ let mk_constructor options nstmts env sel reactfun_body =
         @@ mk_machine_registers_definitions env
         @@ mk_animate_mutex animate
         @@ mk_reactfun_let
-        @@ mk_callbacks_assigns animate env
+        @@ mk_callbacks animate env
         @@ mk_program_object env reactfun_ident
       ] in
     object
