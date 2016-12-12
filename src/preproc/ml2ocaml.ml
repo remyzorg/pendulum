@@ -365,16 +365,16 @@ let mk_constructor_reactfun env animate d body =
       | Finish_exc -> set_absent ();
         Bitset.add [%e select_env_ident] 0; Finish] in
   let reactfun_ident = mk_loc reactfun_name in
-  let reactfun_expr = mk_ident reactfun_ident in
-  let recparam, anim, id =
+  let reactfun_var_expr = mk_ident reactfun_ident in
+  let recparam, anim, reactfun_var =
     if animate then
       let animate_ident = mk_loc animate_name in
       Asttypes.Recursive
-    , [Vb.mk (mk_pat_var animate_ident) (mk_raf_call d reactfun_expr)]
+    , [Vb.mk (mk_pat_var animate_ident) (mk_raf_call d reactfun_var_expr)]
     , mk_ident animate_ident
-    else Asttypes.Nonrecursive, [], reactfun_expr
+    else Asttypes.Nonrecursive, [], reactfun_var_expr
   in
-  Exp.let_ recparam (Vb.mk (mk_pat_var reactfun_ident) reactfun :: anim), id
+  Exp.let_ recparam (Vb.mk (mk_pat_var reactfun_ident) reactfun :: anim), reactfun_var
 
 let mk_notbind env mk mknb s =
   if is_tagged env s then mk s.ident

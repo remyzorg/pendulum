@@ -19,12 +19,8 @@ let process main2 s w =
 
 let process my_loop input =
   loop
-    present input then print_endline "Hello world";
+    (present input then
+      print_endline (">" ^ (String.concat "; " (pre ?input))));
     pause
   end
-
-let _ =
-  signal s in
-  run my_loop s
-
 

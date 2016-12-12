@@ -3,6 +3,7 @@
 module Ast = Ml2ocaml.Ast
 open Ast
 
+module P2O = Prog2ocaml
 
 open Utils
 

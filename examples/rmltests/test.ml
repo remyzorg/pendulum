@@ -1,5 +1,5 @@
 (* THIS FILE IS GENERATED. *)
-(* rmlc test.rml  *)
+(* rmlc -thread test.rml  *)
 
 open Implem_lco_ctrl_tree_record;;
 let main =
@@ -67,34 +67,18 @@ let my_loop =
                          input__val_rml_8
                          (Lco_ctrl_tree_record.rml_compute
                            (function
-                             | ()  -> Pervasives.print_endline "Hello world"
+                             | ()  ->
+                                 Pervasives.print_endline
+                                   (Pervasives.(^)
+                                     ">"
+                                     (String.concat
+                                       "; "
+                                       (Lco_ctrl_tree_record.rml_pre_value
+                                         input__val_rml_8)))
                              ))
                          Lco_ctrl_tree_record.rml_nothing)
                        Lco_ctrl_tree_record.rml_pause)
                ):
               (_) Lco_ctrl_tree_record.process)
-        )
+        ) 
 ;;
-(* Rml_machine.rml_exec *)
-(*   ([]) *)
-(*   ((function *)
-(*      | ()  -> *)
-(*          Lco_ctrl_tree_record.rml_signal *)
-(*            (function *)
-(*              | s__sig_9  -> *)
-(*                  Lco_ctrl_tree_record.rml_run *)
-(*                    (function | ()  -> my_loop s__sig_9 ) *)
-(*              ) *)
-(*      ): *)
-(*     (_) Lco_ctrl_tree_record.process);; *)
-
-
-
-let _ =
-  let open Lco_ctrl_tree_record in
-  let s = rml_global_signal_combine "" (fun acc x -> x) in
-  let react = rml_make (my_loop s) in
-  ignore @@ react ();
-  ignore @@ (rml_make (fun () -> rml_emit (fun () -> s))) ();
-  ignore @@ react ();
-  ignore @@ react ()
