@@ -28,16 +28,18 @@ module type S = sig
     bool -> Ast.Tagged.env -> Expression.t -> Expression.t
 
   val mk_createfun_inputs_expr :
-    Ast.Tagged.env -> Expression.t
+    Ast.Tagged.env -> (Ast.signal * Parsetree.core_type option) list -> Expression.t
 
   val mk_constructor_create_fun :
-    Ast.Tagged.env -> Expression.t
+    Ast.Tagged.env -> Parsetree.pattern * Expression.t
+
 
   val mk_constructor :
-    StringSet.t -> int -> Ast.Tagged.t -> Expression.t -> Expression.t
+    StringSet.t -> int -> Ast.Tagged.env -> Expression.t -> Expression.t
+
+  val generate : string -> StringSet.t -> Ast.Tagged.env -> Ast.Tagged.t -> Expression.t
 
 end
-
 
 
 module Make (Schema : S) = struct
@@ -558,42 +560,6 @@ module Make (Schema : S) = struct
                                   List.map (fun s -> [%expr [%e handle_param s].value]) l
       in [%expr [%e mk_ident ident] [%e tuple]]
 
-
-  let generate pname options env tast =
-    let t0 = Sys.time () in
-
-    let selection_tree, flowgraph as grc = Of_ast.construct env options tast in
-    let t_cons = Sys.time () -. t0 in
-
-    Schedule.tag_tested_stmts selection_tree flowgraph;
-
-    let _deps = Schedule.check_causality_cycles grc in
-    let t_check = Sys.time () -. t_cons in
-
-    let interleaved_cfg = Schedule.interleave env flowgraph in
-    let t_inter = Sys.time () -. t_check in
-    let maxid, deps = Grc2ml.deplist selection_tree in
-    let dep_array = Array.make (maxid + 1) [] in
-    let ml_ast = Grc2ml.grc2ml dep_array interleaved_cfg in
-    let t_ml = Sys.time () -. t_inter in
-
-    if StringSet.mem "stats" options then Schedule.Stats.(
-        Format.printf "======> %s\nfg:\t%a\nfg_sched:\t%a\n"
-          pname pp flowgraph pp interleaved_cfg
-      ; Format.printf "time: cons(%f); check (%f); inter(%f); ml(%f)\n"
-          t_cons t_check t_inter t_ml
-      ; Format.printf "<======\n"
-
-      );
-
-    let ml_ast' =
-      if not @@ StringSet.mem "nooptim" options then
-        Grc2ml.ML_optimize.gather_enter_exits ml_ast maxid
-        |> Grc2ml.ML_optimize.rm_useless_let_bindings
-      else ml_ast
-    in
-    mk_constructor options maxid env selection_tree
-    @@ mk_sequence env dep_array ml_ast'
 
 end
 

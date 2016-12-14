@@ -69,7 +69,7 @@ let tagged_signals_mapper =
            {Ast.content = Format.sprintf "%s##%s" content tag_content; loc}
          in
          let e' =
-           [%expr !![%e Ml2ocaml.mk_ident ident]][@metaloc exp.pexp_loc]
+           [%expr !![%e Gen_utils.mk_ident ident]][@metaloc exp.pexp_loc]
          in
          mapper.expr mapper e'
        | x ->

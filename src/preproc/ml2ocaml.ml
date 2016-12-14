@@ -7,41 +7,36 @@ module Selection_tree = Grc2ml.Selection_tree
 module Schedule = Grc2ml.Schedule
 module Of_ast = Grc2ml.Of_ast
 
+
+
 open Ast_helper
 open Parsetree
 open Utils
 open Ast
 
-let build_tuple tuple mk init exprs =
-  match exprs with
-  | [] -> init
-  | [s, t] -> mk ?t s
-  | l -> tuple @@ List.rev_map (fun (s, t) -> mk ?t s) l
+open Gen_names
+open Gen_utils
 
-let dumb = Exp.constant (Ast_helper.Const.int 0)
-let int_const i = Exp.constant (Ast_helper.Const.int i)
-let string_const s = Exp.constant (Ast_helper.Const.string s)
+module Debug = struct
+  open Utils
+  let str = string_const
+  let print expr =
+    [%expr Firebug.console##debug (Js.string [%e expr])]
+  let letin ~debug patvar value expr =
+    if debug then [%expr let [%p patvar] = [%e value] in
+      [%e expr]]
+    else expr
+  let (++) a b = [%expr [%e a] ^ [%e b]]
+  let seqif ~debug debug_expr expr =
+    if debug then [%expr [%e debug_expr ]; [%e expr]] else expr
+end
 
-let mk_pat_var ?t s =
-  let pvar = Pat.(Asttypes.(var @@ Location.mkloc s.content s.loc)) in
-  match t with None -> pvar | Some t ->
-    Pat.(Asttypes.(constraint_ ~loc:s.loc pvar t))
 
-let signaltype_of_type t =
-  [%type: ([%t t], _) Pendulum.Signal.signal]
+let expr_of_bitset bs =
+  bs |> Array.to_list
+  |> List.map int_const
+  |> Exp.array
 
-
-let mk_ident s = Exp.ident ~loc:s.loc
-    Location.(mkloc (Longident.Lident s.content) s.loc)
-
-let mk_value_binding ?(pvb_loc=Location.none)
-    ?(pvb_attributes=[]) pvb_pat pvb_expr =
-  { pvb_pat; pvb_expr; pvb_attributes; pvb_loc; }
-
-let expr_of_bitset bs = bs
-                        |> Array.to_list
-                        |> List.map int_const
-                        |> Exp.array
 
 let deplist sel =
   let open Selection_tree in
@@ -58,25 +53,6 @@ let deplist sel =
       env := (sel.label, l) :: !env; sel.label :: l
   in ignore (visit sel); !env
 
-let setter_arg = Ast.mk_loc "set~arg" (* argument name for the returned setter *)
-let reactfun_name = "p~react"
-let animate_name = "animate"
-let gather_str = "gather"
-let api_react_function_name = "react"
-let api_React_output_signal= "~React"
-let animated_state_var_name = "animated_next_raf"
-let select_env_name = "pendulum~state"
-let select_env_var = Location.(mkloc select_env_name !Ast_helper.default_loc)
-let select_env_ident = mk_ident (Ast.mk_loc select_env_name)
-let gather_val_arg_name = Ast.mk_loc "arg~~"
-let api_output_signal_callback = "~out"
-
-let ident_app_str ident str =
-  Ast.mk_loc ~loc:ident.loc
-    (Format.sprintf "%s%s" ident.content str)
-
-let debug_instant_cnt_name = Ast.mk_loc "instant~cnt"
-
 let mk_mach_inst_step mch =
   {mch with content = Format.sprintf "%s~step" mch.content}
 
@@ -87,47 +63,6 @@ let mk_mach_inst_ident mch k =
 
 let mk_set_mach_arg_n n mch = Ast.mk_loc ~loc:Ast.dummy_loc
     (Format.sprintf "%s~set~arg~%d" mch n)
-
-
-let remove_signal_renaming s =
-  try Ast.({s with content = String.sub s.content 0
-                       ((String.rindex s.content '~'))})
-  with Not_found -> s
-
-
-module Debug = struct
-  let str = string_const
-
-  let print expr =
-    [%expr Firebug.console##debug (Js.string [%e expr])]
-
-  let letin ~debug patvar value expr =
-    if debug then [%expr let [%p patvar] = [%e value] in
-      [%e expr]]
-    else expr
-
-  let (++) a b = [%expr [%e a] ^ [%e b]]
-
-  let seqif ~debug debug_expr expr =
-    if debug then [%expr [%e debug_expr ]; [%e expr]] else expr
-end
-
-let add_deref_local s =
-  let open Ast in
-  match s.origin with
-  | Local -> [%expr ![%e mk_ident s.ident]]
-  | _ -> mk_ident s.ident
-
-let rebind_locals_let locals e =
-  (List.fold_left (fun acc x ->
-       [%expr let [%p mk_pat_var @@ remove_signal_renaming x.ident] =
-                ![%e mk_ident x.ident]
-         in [%e acc]]
-     ) e locals)
-
-let handle_param = function
-  | Sig_param s -> add_deref_local s
-  | Exp_param e -> e
 
 let mk_machine_instantiation machine_ident inst_int_id args =
   (* used to name setters *)
@@ -318,7 +253,7 @@ let mk_callbacks_assigns mk_rhs animate env e =
   ) e env.Tagged.args_signals
 
 let mk_raf_call debug reactfun_ident =
-  let debug_cnt = mk_ident debug_instant_cnt_name in
+  let debug_cnt = mk_ident @@ Ast.mk_loc debug_instant_cnt_name in
   let debug_cnt_str = [%expr string_of_int ![%e debug_cnt]] in
   [%expr
     fun () ->
@@ -347,6 +282,9 @@ let mk_animate_mutex animate body =
   if not animate then body else
     [%expr let [%p mk_pat_var @@ Ast.mk_loc animated_state_var_name] = ref false in [%e body]]
 
+let select_env_var = Location.(mkloc select_env_name !Ast_helper.default_loc)
+let select_env_ident = mk_ident (Ast.mk_loc select_env_name)
+
 let mk_running_env debug nstmts body =
   let body = [%expr
     let [%p Pat.var select_env_var] =
@@ -354,7 +292,7 @@ let mk_running_env debug nstmts body =
     in [%e body ]]
   in
   if debug then
-    [%expr let [%p mk_pat_var debug_instant_cnt_name] =
+    [%expr let [%p mk_pat_var @@ Ast.mk_loc debug_instant_cnt_name] =
              ref 0 in [%e body]]
   else body
 
