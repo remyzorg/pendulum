@@ -7,6 +7,7 @@ open Parsetree
 open Utils
 open Ast
 
+
 let build_tuple tuple mk init exprs =
   match exprs with
   | [] -> init
@@ -60,3 +61,21 @@ let rebind_locals_let locals e =
 let handle_param = function
   | Sig_param s -> add_deref_local s
   | Exp_param e -> e
+
+
+module Debug = struct
+  let str = string_const
+
+  let print expr =
+    [%expr Firebug.console##debug (Js.string [%e expr])]
+
+  let letin ~debug patvar value expr =
+    if debug then [%expr let [%p patvar] = [%e value] in
+      [%e expr]]
+    else expr
+
+  let (++) a b = [%expr [%e a] ^ [%e b]]
+
+  let seqif ~debug debug_expr expr =
+    if debug then [%expr [%e debug_expr ]; [%e expr]] else expr
+end
