@@ -7,8 +7,6 @@ module Selection_tree = Grc2ml.Selection_tree
 module Schedule = Grc2ml.Schedule
 module Of_ast = Grc2ml.Of_ast
 
-
-
 open Ast_helper
 open Parsetree
 open Utils
@@ -16,8 +14,6 @@ open Ast
 
 open Gen_names
 open Gen_utils
-open Prog2ocaml
-
 
 let expr_of_bitset bs =
   bs |> Array.to_list

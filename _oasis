@@ -15,22 +15,30 @@ Flag ppx
   Description: Build the ppx syntax extension
   Default$: flag(all)
 
-Library "pendulum"
+Library pendulum
   Path: src/runtime/
   Pack: true
   Install: true
   Modules: Runtime_ast, Runtime_misc, Signal, Program
 
-Library "pendulum_compiler"
+Library pendulum_compiler
   Path: src/preproc/
   Pack: true
   Install: true
   FindlibParent: pendulum
   FindlibName: compiler 
-  Modules: Utils, Ast, Grc, Grc2ml, Ml2ocaml, Gen_names, Gen_utils, Prog2ocaml
+  Modules: Utils, Ast, Grc, Grc2ml, Ml2ocaml, Gen_names, Gen_utils
   BuildDepends:
     unix,
     ppx_tools.metaquot
+
+Library rml_backend
+  Path: src/rml/
+  Install: true
+  Pack: true
+  Modules: Ast2rml
+  FindlibName: rml_backend 
+  BuildDepends: pendulum.compiler
 
 Library ppx
    Path: src/ppx
@@ -48,19 +56,11 @@ Executable ppx_pendulum
   BuildDepends:
     compiler-libs.common,
     ppx_tools.metaquot,
+    rml_backend,
     pendulum.compiler
   MainIs:         ppx_pendulum_ex.ml
   CompiledObject: best
 
-Executable ppx_pendulum_rml
-  Path:           src/rml/
-  Install: true
-  BuildDepends:
-    compiler-libs.common,
-    ppx_tools.metaquot,
-    pendulum.compiler
-  MainIs:         ppx_pendulum_rml.ml
-  CompiledObject: best
 
 Executable "test_ppx"
  Path: tests/ppx
