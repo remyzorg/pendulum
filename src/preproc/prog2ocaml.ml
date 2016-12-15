@@ -8,6 +8,27 @@ module Of_ast = Grc2ml.Of_ast
 
 open Utils
 
+open Gen_utils
+open Gen_names
+
+
+module Debug = struct
+  let str = string_const
+
+  let print expr =
+    [%expr Firebug.console##debug (Js.string [%e expr])]
+
+  let letin ~debug patvar value expr =
+    if debug then [%expr let [%p patvar] = [%e value] in
+      [%e expr]]
+    else expr
+
+  let (++) a b = [%expr [%e a] ^ [%e b]]
+
+  let seqif ~debug debug_expr expr =
+    if debug then [%expr [%e debug_expr ]; [%e expr]] else expr
+end
+
 
 module type S = sig
 
@@ -30,10 +51,6 @@ module type S = sig
   val mk_createfun_inputs_expr :
     Ast.Tagged.env -> (Ast.signal * Parsetree.core_type option) list -> Expression.t
 
-  val mk_constructor_create_fun :
-    Ast.Tagged.env -> Parsetree.pattern * Expression.t
-
-
   val mk_constructor :
     StringSet.t -> int -> Ast.Tagged.env -> Expression.t -> Expression.t
 
@@ -49,105 +66,7 @@ module Make (Schema : S) = struct
   open Utils
   open Ast
 
-  let build_tuple tuple mk init exprs =
-    match exprs with
-    | [] -> init
-    | [s, t] -> mk ?t s
-    | l -> tuple @@ List.rev_map (fun (s, t) -> mk ?t s) l
 
-  let dumb = Exp.constant (Ast_helper.Const.int 0)
-  let int_const i = Exp.constant (Ast_helper.Const.int i)
-  let string_const s = Exp.constant (Ast_helper.Const.string s)
-
-  let mk_pat_var ?t s =
-    let pvar = Pat.(Asttypes.(var @@ Location.mkloc s.content s.loc)) in
-    match t with None -> pvar | Some t ->
-      Pat.(Asttypes.(constraint_ ~loc:s.loc pvar t))
-
-  let signaltype_of_type t =
-    [%type: ([%t t], _) Pendulum.Signal.signal]
-
-
-  let mk_ident s = Exp.ident ~loc:s.loc
-      Location.(mkloc (Longident.Lident s.content) s.loc)
-
-  let mk_value_binding ?(pvb_loc=Location.none)
-      ?(pvb_attributes=[]) pvb_pat pvb_expr =
-    { pvb_pat; pvb_expr; pvb_attributes; pvb_loc; }
-
-  let expr_of_bitset bs = bs
-                          |> Array.to_list
-                          |> List.map int_const
-                          |> Exp.array
-
-  let deplist sel =
-    let open Selection_tree in
-    let env = ref [] in
-    let rec visit sel =
-      match sel.t with
-      | Bottom -> env := (sel.label, []) :: !env; [sel.label]
-      | Pause -> env := (sel.label, []) :: !env; [sel.label]
-      | Par sels | Excl sels ->
-        let l = List.fold_left (fun acc sel -> acc @ (visit sel)) [] sels in
-        env := (sel.label, l) :: !env; sel.label :: l
-      | Ref st ->
-        let l = visit st in
-        env := (sel.label, l) :: !env; sel.label :: l
-    in ignore (visit sel); !env
-
-  let setter_arg = Ast.mk_loc "set~arg" (* argument name for the returned setter *)
-  let reactfun_name = "p~react"
-  let animate_name = "animate"
-  let gather_str = "gather"
-  let api_react_function_name = "react"
-  let api_React_output_signal= "~React"
-  let animated_state_var_name = "animated_next_raf"
-  let select_env_name = "pendulum~state"
-  let select_env_var = Location.(mkloc select_env_name !Ast_helper.default_loc)
-  let select_env_ident = mk_ident (Ast.mk_loc select_env_name)
-  let gather_val_arg_name = Ast.mk_loc "arg~~"
-  let api_output_signal_callback = "~out"
-
-  let ident_app_str ident str =
-    Ast.mk_loc ~loc:ident.loc
-      (Format.sprintf "%s%s" ident.content str)
-
-  let debug_instant_cnt_name = Ast.mk_loc "instant~cnt"
-
-  let mk_mach_inst_step mch =
-    {mch with content = Format.sprintf "%s~step" mch.content}
-
-  let mk_mach_inst_ident mch k =
-    {mch with content = Format.sprintf "%s%s" mch.content
-                  (if k != 0 then Format.sprintf "~%d" k else "")
-    }
-
-  let mk_set_mach_arg_n n mch = Ast.mk_loc ~loc:Ast.dummy_loc
-      (Format.sprintf "%s~set~arg~%d" mch n)
-
-
-  let remove_signal_renaming s =
-    try Ast.({s with content = String.sub s.content 0
-                         ((String.rindex s.content '~'))})
-    with Not_found -> s
-
-
-  module Debug = struct
-    let str = string_const
-
-    let print expr =
-      [%expr Firebug.console##debug (Js.string [%e expr])]
-
-    let letin ~debug patvar value expr =
-      if debug then [%expr let [%p patvar] = [%e value] in
-        [%e expr]]
-      else expr
-
-    let (++) a b = [%expr [%e a] ^ [%e b]]
-
-    let seqif ~debug debug_expr expr =
-      if debug then [%expr [%e debug_expr ]; [%e expr]] else expr
-  end
 
   let add_deref_local s =
     let open Ast in
@@ -166,22 +85,6 @@ module Make (Schema : S) = struct
     | Sig_param s -> add_deref_local s
     | Exp_param e -> e
 
-  let mk_machine_instantiation machine_ident inst_int_id args =
-    (* used to name setters *)
-    let inst_ident = mk_mach_inst_ident machine_ident inst_int_id in
-    let prog_ident = mk_mach_inst_step inst_ident in (* the actual reaction function *)
-    let handle_param = function
-      | Sig_param s -> add_deref_local s
-      | Exp_param e -> [%expr make_signal [%e e]] in
-    let args_init_tuple_exp = match args with
-      | [] -> [%expr ()]
-      | [arg] -> handle_param arg
-      | l -> Exp.tuple @@ List.map handle_param l in
-    let prog_create_call =
-      let id = mk_ident machine_ident in
-      if args = [] then [%expr [%e id]#create_run]
-      else [%expr [%e id]#create_run [%e args_init_tuple_exp]] in
-    prog_ident, prog_create_call
 
 
   let mk_local_signals_definitions env e = List.fold_left (fun acc vs ->
@@ -263,15 +166,6 @@ module Make (Schema : S) = struct
       ) [(mk_method env.pname.loc api_react_function_name
             [%expr [%e reactfun] ()])] env.args_signals
 
-  let mk_machine_registers_definitions env e =
-    IdentMap.fold (fun k (_, insts) acc ->
-        List.fold_left (fun acc (inst_int_id, args) ->
-            let prog_ident, program_call = mk_machine_instantiation k inst_int_id args in
-            [%expr let [%p mk_pat_var prog_ident] = ref ([%e program_call])
-              in [%e acc]]
-          ) acc (List.rev insts)
-      ) !(env.Tagged.machine_runs) e
-
   let mk_callbacks_assigns_rhs step_call s tag =
     [%expr Dom_html.handler (
         fun ev ->
@@ -303,7 +197,7 @@ module Make (Schema : S) = struct
     ) e env.Tagged.args_signals
 
   let mk_raf_call debug reactfun_ident =
-    let debug_cnt = mk_ident debug_instant_cnt_name in
+    let debug_cnt = mk_ident @@ Ast.mk_loc debug_instant_cnt_name in
     let debug_cnt_str = [%expr string_of_int ![%e debug_cnt]] in
     [%expr
       fun () ->
@@ -332,17 +226,6 @@ module Make (Schema : S) = struct
     if not animate then body else
       [%expr let [%p mk_pat_var @@ Ast.mk_loc animated_state_var_name] = ref false in [%e body]]
 
-  let mk_running_env debug nstmts body =
-    let body = [%expr
-      let [%p Pat.var select_env_var] =
-        Bitset.make [%e int_const (1 + nstmts)]
-      in [%e body ]]
-    in
-    if debug then
-      [%expr let [%p mk_pat_var debug_instant_cnt_name] =
-               ref 0 in [%e body]]
-    else body
-
   let mk_notbind env mk mknb s =
     if is_tagged env s then mk s.ident
     else mknb s.ident
@@ -370,195 +253,7 @@ module Make (Schema : S) = struct
           Schema.signal_to_creation_expr (mk_ident s.ident) s) s
     ) [%expr ()]
 
-  let mk_constructor_create_fun env =
-    let open Tagged in
-    let inputs, outputs =
-      List.partition (fun (x, _) -> is_input x) env.args_signals in
-    let mk_notbind mk mknb s = mk_notbind env mk mknb s in
-    let mk_createfun_args_pat =
-      build_tuple Pat.tuple (fun ?t s -> mk_pat_var ?t s.ident) [%pat? ()] in
-    let createfun_inputs_pat = mk_createfun_args_pat inputs in
-    let createfun_outputs_pat = mk_createfun_args_pat outputs in
-    let mk_createfun_run_args_pat =
-      build_tuple Pat.tuple
-        (fun ?t -> mk_notbind mk_pat_var
-            (mk_pat_var ?t:(Option.map signaltype_of_type t))) [%pat? ()] in
-    let createfun_run_inputs_pat = mk_createfun_run_args_pat inputs in
-    let createfun_run_outputs_pat = mk_createfun_run_args_pat outputs in
-    let createfun_expr, createfun_run_expr =
-      let ins = mk_createfun_inputs_expr env inputs in
-      let outs = mk_createfun_outputs_expr env outputs in
-      match inputs, outputs with
-      | [], [] ->
-        [%expr create_local () ()], [%expr create_local () ()]
-      | inputs, [] ->
-        [%expr fun [%p createfun_inputs_pat] -> create_local [%e ins] ()],
-        [%expr fun ins -> create_local ins ()]
-      | [], outputs ->
-        [%expr fun [%p createfun_outputs_pat] -> create_local () [%e outs]],
-        [%expr fun outs -> create_local]
-      | inputs, outputs ->
-        [%expr fun [%p createfun_inputs_pat] [%p createfun_outputs_pat]
-          -> create_local [%e ins] [%e outs]], [%expr create_local]
-    in createfun_run_inputs_pat, createfun_run_outputs_pat,
-       createfun_expr, createfun_run_expr
-
-
-  let mk_constructor options nstmts env sel reactfun_body =
-    let open Tagged in
-    let animate = StringSet.mem "animate" options in
-    let d = StringSet.mem "debug" options in
-    let mk_reactfun_let, reactfun_ident =
-      Schema.mk_constructor_reactfun env animate d reactfun_body
-    in
-    let createfun_run_inputs_pat,
-        createfun_run_outputs_pat,
-        createfun_expr,
-        createfun_run_expr
-      = mk_constructor_create_fun env
-    in
-    [%expr
-      let open Pendulum.Runtime_misc in
-      let open Pendulum.Program in
-      let open Pendulum.Signal in
-      let create_local [%p createfun_run_inputs_pat]
-          [%p createfun_run_outputs_pat] =
-        [%e
-          mk_running_env d nstmts
-          @@ Schema.mk_args_signals_definitions env
-          @@ mk_set_all_absent_definition env
-          @@ mk_machine_registers_definitions env
-          @@ mk_animate_mutex animate
-          @@ mk_reactfun_let
-          @@ mk_callbacks animate env
-          @@ Schema.mk_program_object env reactfun_ident
-        ] in
-      object
-        method create = [%e createfun_expr]
-        method create_run = [%e createfun_run_expr]
-      end
-
-    ]
-
-
-  let rec mk_test env depl test =
-    let open Grc2ml in
-    match test with
-    | MLsig s -> [%expr !?[%e add_deref_local s]]
-    | MLselect i -> [%expr Bitset.mem [%e select_env_ident] [%e int_const i]]
-    | MLor (mlte1, mlte2) ->
-      [%expr [%e mk_test env depl mlte1 ] || [%e mk_test env depl mlte2]]
-    | MLand (mlte1, mlte2) ->
-      [%expr [%e mk_test env depl mlte1 ] && [%e mk_test env depl mlte2]]
-    | MLboolexpr pexpr ->
-      rebind_locals_let pexpr.locals pexpr.exp
-    | MLfinished -> [%expr Bitset.mem [%e select_env_ident] 0]
-    | MLis_pause (MLcall (id, args, loc)) ->
-      let step_ident = {id with content = Format.sprintf "%s~step" id.content} in
-      let step_eq_pause = [%expr ![%e mk_ident step_ident]#react == Pause] in
-      step_eq_pause
-    | MLis_pause e -> assert false
-
-  and mk_sequence env depl mlseq =
-    let open Grc2ml in
-    match mlseq with
-    | Seq (Seqlist [], Seqlist []) | Seqlist [] -> assert false
-    | Seq (mlseq, Seqlist []) | Seq (Seqlist [], mlseq) ->
-      mk_sequence env depl mlseq
-    | Seqlist ml_asts ->
-      List.fold_left (fun acc x ->
-          if acc = dumb then mk_ml_ast env depl x
-          else Exp.sequence acc (mk_ml_ast env depl x)
-        ) dumb ml_asts
-    | Seq (mlseq1, mlseq2) ->
-      Exp.sequence (mk_sequence env depl mlseq1)
-        (mk_sequence env depl mlseq2)
-
-  and mk_ml_ast env depl ast =
-    let open Grc2ml in
-    match ast with
-    | MLemit vs ->
-      let rebinded_expr = rebind_locals_let vs.svalue.locals vs.svalue.exp in
-      begin match vs.signal.bind with
-        | No_binding | Event _ ->
-          let setval_expr = [%expr set_present_value [%e add_deref_local vs.signal]
-              [%e rebinded_expr]]
-          in begin match vs.signal.origin with
-            | Output | React ->
-              Exp.sequence setval_expr
-                ([%expr [%e mk_ident @@ ident_app_str vs.signal.ident
-                    api_output_signal_callback]
-                    [%e mk_ident vs.signal.ident].value])
-            | Local | Input | Element -> setval_expr
-          end
-
-        | Access (elt, fields) ->
-          let lhs = List.fold_left (fun acc field ->
-              [%expr [%e acc] ##. [%e mk_ident field]]
-            ) (mk_ident elt) fields
-          in
-          [%expr [%e lhs] := [%e rebinded_expr]]
-      end
-    | MLif (test, mlseq1, mlseq2) ->
-      begin match mlseq1, mlseq2 with
-        | mlseq1, (Seqlist [] | Seq (Seqlist [], Seqlist [])) ->
-          [%expr if [%e mk_test env depl test]
-            then [%e mk_sequence env depl mlseq1]]
-        | (Seqlist [] | Seq (Seqlist [], Seqlist [])), mseq2 ->
-          [%expr if not [%e mk_test env depl test]
-            then [%e mk_sequence env depl mlseq2]]
-        | _ ->
-          [%expr if [%e mk_test env depl test] then
-              [%e mk_sequence env depl mlseq1]
-            else [%e mk_sequence env depl mlseq2]]
-      end
-
-    | MLassign_machine (inst_int_id, (machine_ident, sigs, loc)) ->
-      let prog_ident, machine_call = mk_machine_instantiation machine_ident inst_int_id sigs in
-      [%expr [%e mk_ident prog_ident] := [%e machine_call]]
-
-    | MLassign_signal (ident, mlast) ->
-      let ocamlexpr = mk_ml_ast env depl mlast in
-      [%expr [%e mk_ident ident] := make_signal [%e ocamlexpr]]
-
-    | MLenter i ->
-      [%expr Bitset.add
-          [%e select_env_ident]
-          [%e int_const i]]
-
-    | MLexit i ->
-      [%expr Bitset.remove
-          [%e select_env_ident]
-          [%e int_const i]]
-
-    | MLenters_exits (bs_union, bs_inter as bs) ->
-      Bitset.simplify bs;
-      if Bitset.is_empty bs_union then
-        if Bitset.is_full bs_inter then
-          [%expr ()]
-        else [%expr Bitset.inter [%e select_env_ident]
-            [%e expr_of_bitset bs_inter]]
-      else if Bitset.is_full bs_inter then
-        [%expr Bitset.union [%e select_env_ident]
-            [%e expr_of_bitset bs_union]]
-      else
-        [%expr
-          Bitset.inter_union [%e select_env_ident] [%e expr_of_bitset bs_inter]
-            [%e expr_of_bitset bs_union];
-        ]
-
-    | MLunitexpr pexpr ->
-      rebind_locals_let pexpr.locals [%expr let () = [%e pexpr.exp] in ()]
-    | MLexpr pexpr -> rebind_locals_let pexpr.locals pexpr.exp
-
-    | MLpause -> [%expr raise Pause_exc]
-    | MLfinish -> [%expr raise Finish_exc]
-    | MLcall (ident, sigs, loc) ->
-      let tuple = match sigs with [] -> assert false
-                                | [s] -> [%expr [%e handle_param s].value]
-                                | l -> Ast_helper.Exp.tuple ~loc @@
-                                  List.map (fun s -> [%expr [%e handle_param s].value]) l
-      in [%expr [%e mk_ident ident] [%e tuple]]
+  let generate = Schema.generate
 
 
 end
