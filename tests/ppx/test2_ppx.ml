@@ -255,3 +255,18 @@ let%sync elements =
   element e1, e2;
   element e3;
   loop pause
+
+let%sync example_edwards_paper ~print:pdf =
+  input a;
+  output b, c, d, e;
+  trap t begin
+    present a begin
+      emit b;
+      present c (emit d);
+      present e (exit t);
+    end;
+    pause;
+    emit b
+  end
+  || present b (emit c)
+  || present d (emit e)
