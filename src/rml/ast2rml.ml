@@ -1,4 +1,4 @@
-open Pendulum_compiler
+open Compiler
 
 module Ast = Ml2ocaml.Ast
 open Ast
@@ -17,54 +17,56 @@ let print_error fmt = function
 open Gen_utils
 open Gen_names
 
-let rec compile ast =
-  let open Ast.Tagged in
-  let open Ml2ocaml in
-  match ast.st.content with
-  | Loop t -> [%expr rml_loop [%e compile t]]
-  | Seq (t1, t2) -> [%expr rml_seq [%e compile t1] [%e compile t2]]
-  | Par (t1, t2) -> [%expr rml_par [%e compile t1] [%e compile t2]]
+let compile ast =
+  let rec compile ast =
+    let open Ast.Tagged in
+    let open Ml2ocaml in
+    match ast.st.content with
+    | Loop t -> [%expr rml_loop [%e compile t]]
+    | Seq (t1, t2) -> [%expr rml_seq [%e compile t1] [%e compile t2]]
+    | Par (t1, t2) -> [%expr rml_par [%e compile t1] [%e compile t2]]
 
-  | Emit vs ->
-    let signal = mk_ident vs.signal.ident in
-    let value = vs.svalue.exp in
-    [%expr rml_emit_val [%e signal]
-        (fun () -> [%e value])]
+    | Emit vs ->
+      let signal = mk_ident vs.signal.ident in
+      let value = vs.svalue.exp in
+      [%expr rml_emit_val [%e signal]
+          (fun () -> [%e value])]
 
-  | Nothing -> [%expr rml_nothing]
-  | Pause -> [%expr rml_nothing]
+    | Nothing -> [%expr rml_nothing]
+    | Pause -> [%expr rml_nothing]
 
-  | Suspend (t, (s, _)) ->
-    let signal = mk_ident s.ident in
-    [%expr rml_control' [%e signal] [%e compile t]]
+    | Suspend (t, (s, _)) ->
+      let signal = mk_ident s.ident in
+      [%expr rml_control' [%e signal] [%e compile t]]
 
-  | Trap (Label label, t) ->
-    [%expr
-      rml_signal (fun [%p mk_pat_var label] ->
-          rml_until [%e mk_ident label]
-            [%e compile t]
-        )]
+    | Trap (Label label, t) ->
+      [%expr
+        rml_signal (fun [%p mk_pat_var label] ->
+            rml_until [%e mk_ident label]
+              [%e compile t]
+          )]
 
-  | Exit (Label label) ->
-    let signal = mk_ident label in
-    [%expr rml_emit [%e signal]]
+    | Exit (Label label) ->
+      let signal = mk_ident label in
+      [%expr rml_emit [%e signal]]
 
-  | Present ((s, _), t1, t2) ->
-    let signal = mk_ident s.ident in
-    [%expr rml_present [%e signal]
-        [%expr compile t1]
-        [%expr compile t2]]
+    | Present ((s, _), t1, t2) ->
+      let signal = mk_ident s.ident in
+      [%expr rml_present [%e signal]
+          [%expr compile t1]
+          [%expr compile t2]]
 
-  | Atom atom -> [%expr rml_compute (fun () -> [%e atom.exp]; ())]
+    | Atom atom -> [%expr rml_compute (fun () -> [%e atom.exp]; ())]
 
-  | Signal (vs, t) ->
-    [%expr rml_signal (fun [%p mk_pat_var vs.signal.ident] -> [%e compile t])]
+    | Signal (vs, t) ->
+      [%expr rml_signal (fun [%p mk_pat_var vs.signal.ident] -> [%e compile t])]
 
-  | Await (s, _) ->
-    let signal = mk_ident s.ident in
-    [%expr rml_await [%e signal]]
+    | Await (s, _) ->
+      let signal = mk_ident s.ident in
+      [%expr rml_await [%e signal]]
 
-  | Run (ident, params, loc) -> raise (Error (Rml_undefined))
+    | Run (ident, params, loc) -> raise (Error (Rml_undefined))
+  in [%expr fun () -> [%e compile ast]]
 
 let signal_to_creation_expr init_val s =
   match s.bind with
@@ -96,7 +98,7 @@ let mk_args_signals_definitions env e =
 let mk_constructor_reactfun env animate d body =
   let open Ml2ocaml in
   let reactfun = [%expr
-    Lco_ctrl_tree_record.rml_make [%e body]
+    Lco_ctrl_tree_record.(rml_make [%e body])
   ] in
   let reactfun_ident = mk_loc reactfun_name in
   let reactfun_expr = mk_ident reactfun_ident in
@@ -114,7 +116,7 @@ let mk_program_object env reactfun =
   let open Tagged in
   let open Ml2ocaml in
   let mk_field_setter s = mk_method s.ident.loc s.ident.content
-      [%expr Sig_env.Record.emit [%e mk_ident s.ident] ] in
+      [%expr rml_expr_emit_val [%e mk_ident s.ident] ] in
   let pcstr_fields = pcstr_fields mk_field_setter env reactfun in
   Exp.object_ {pcstr_self = Pat.any (); pcstr_fields}
 

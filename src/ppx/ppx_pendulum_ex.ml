@@ -5,8 +5,8 @@ open Asttypes
 open Parsetree
 open Longident
 
-open Pendulum_compiler
-open Pendulum_compiler.Utils
+open Compiler
+open Compiler.Utils
 
 module Ast = Ml2ocaml.Ast
 

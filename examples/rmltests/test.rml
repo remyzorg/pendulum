@@ -24,3 +24,7 @@ let process my_loop input =
     pause
   end
 
+
+let _ =
+  signal s in
+  run my_loop s

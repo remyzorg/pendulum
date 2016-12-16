@@ -5,7 +5,7 @@ open Asttypes
 open Parsetree
 open Longident
 
-open Pendulum_compiler
+open Compiler
 
 
 module Ast = Grc2ml.Ast

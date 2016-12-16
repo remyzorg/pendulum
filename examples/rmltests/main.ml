@@ -89,14 +89,38 @@ open Lco_ctrl_tree_record
 (*     pause *)
 (*   end *)
 
+(* let p s ~dsource = *)
+(*   let create_local s = *)
+(*     let p_react = *)
+(*       Lco_ctrl_tree_record.rml_make *)
+(*         (rml_par *)
+(*            (rml_loop *)
+(*               (rml_seq (rml_await s) *)
+(*                  (rml_seq (rml_compute (fun ()  -> print_endline "hello"; ())) *)
+(*                     rml_nothing))) *)
+(*            (rml_signal *)
+(*               (fun cpt  -> *)
+(*                  rml_loop *)
+(*                    (rml_seq (rml_emit_val' cpt (fun ()  -> List.hd (rml_pre_value cpt) + 1)) *)
+(*                       (rml_seq *)
+(*                          (rml_compute (fun ()  -> print_int @@ List.hd (rml_pre_value cpt); ())) *)
+(*                          (rml_seq *)
+(*                             (rml_compute (fun ()  -> print_newline (); ())) *)
+(*                             rml_nothing)))))) *)
+(*     in *)
+(*     object method s = Sig_env.Record.emit s method react = p_react () end  in *)
+(*   object method create s = create_local (make_signal s) () end *)
+
 let p s ~dsource =
-  let create_local s =
-    let p_react =
-      Lco_ctrl_tree_record.rml_make
-        (rml_par
+let create_local s =
+  let p~react =
+    Lco_ctrl_tree_record.rml_make
+      (fun ()  ->
+         rml_par
            (rml_loop
               (rml_seq (rml_await s)
-                 (rml_seq (rml_compute (fun ()  -> print_endline "hello"; ()))
+                 (rml_seq
+                    (rml_compute (fun ()  -> print_endline "hello"; ()))
                     rml_nothing)))
            (rml_signal
               (fun cpt  ->
@@ -107,6 +131,6 @@ let p s ~dsource =
                          (rml_seq
                             (rml_compute (fun ()  -> print_newline (); ()))
                             rml_nothing))))))
-    in
-    object method s = Sig_env.Record.emit s method react = p_react () end  in
-  object method create s = create_local (make_signal s) () end
+     in
+  object method s = Sig_env.Record.emit s method react = p~react () end  in
+object method create s = create_local (make_signal s) () end

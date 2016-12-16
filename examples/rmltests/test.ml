@@ -82,3 +82,15 @@ let my_loop =
               (_) Lco_ctrl_tree_record.process)
         ) 
 ;;
+Rml_machine.rml_exec
+  (Rml_async_body.boi_hook :: ([]))
+  ((function
+     | ()  ->
+         Lco_ctrl_tree_record.rml_signal
+           (function
+             | s__sig_9  ->
+                 Lco_ctrl_tree_record.rml_run
+                   (function | ()  -> my_loop s__sig_9 )
+             )
+     ):
+    (_) Lco_ctrl_tree_record.process);;
