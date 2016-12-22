@@ -5,7 +5,7 @@ rml:
 
 # ocamlfind ocamlc -I `opam config var lib`/rml/lco unix.cma rmllib.cma test.ml
 
-ml: rml
+ml:
 	ocamlfind ocamlc -package pendulum -package pendulum.ppx \
 		-I `opam config var lib`/rml/lco unix.cma rmllib.cma test.cmo main.ml
 

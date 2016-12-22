@@ -62,6 +62,17 @@ let handle_param = function
   | Sig_param s -> add_deref_local s
   | Exp_param e -> e
 
+let is_tagged env s =
+  Tagged.(s.origin = Element || Hashtbl.mem env.binders_env s.ident.content)
+
+let mk_notbind env mk mknb s =
+  if is_tagged env s then mk s.ident
+  else mknb s.ident
+
+let append_tag s tag =
+  {s with ident =
+            {s.ident with content = Format.sprintf "%s##%s" s.ident.content tag.content;
+            }}
 
 module Debug = struct
   let str = string_const

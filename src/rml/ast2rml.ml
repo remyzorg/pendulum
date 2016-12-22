@@ -29,7 +29,7 @@ let compile ast =
     | Emit vs ->
       let signal = mk_ident vs.signal.ident in
       let value = vs.svalue.exp in
-      [%expr rml_emit_val [%e signal]
+      [%expr rml_emit_val' [%e signal]
           (fun () -> [%e value])]
 
     | Nothing -> [%expr rml_nothing]
@@ -59,7 +59,10 @@ let compile ast =
     | Atom atom -> [%expr rml_compute (fun () -> [%e atom.exp]; ())]
 
     | Signal (vs, t) ->
-      [%expr rml_signal (fun [%p mk_pat_var vs.signal.ident] -> [%e compile t])]
+      [%expr rml_signal_combine
+          (fun () -> [%e vs.svalue.exp])
+          (fun () -> (fun x _ -> x))
+          (fun [%p mk_pat_var vs.signal.ident] -> [%e compile t])]
 
     | Await (s, _) ->
       let signal = mk_ident s.ident in
@@ -121,7 +124,6 @@ let mk_program_object env reactfun =
   Exp.object_ {pcstr_self = Pat.any (); pcstr_fields}
 
 let mk_callbacks_assigns animate env e =
-  let open Ml2ocaml in
   let opexpr loc = mk_ident @@ Ast.mk_loc ~loc "##." in
   let mk_lhs s tag =
     [%expr [%e opexpr tag.loc] [%e mk_ident s.ident] [%e mk_ident tag]]
@@ -151,7 +153,6 @@ let mk_callbacks_assigns animate env e =
   ) e env.Tagged.args_signals
 
 let mk_createfun_inputs_expr env =
-  let open Ml2ocaml in
   build_tuple Exp.tuple (
     fun ?t s -> mk_notbind env mk_ident (fun _ ->
         signal_to_creation_expr (mk_ident s.ident) s) s
@@ -174,7 +175,7 @@ let mk_constructor_create_fun env =
   let createfun_expr =
     if inputs <> [] then
       let ins = mk_createfun_inputs_expr env inputs in
-      [%expr fun [%p createfun_inputs_pat] -> create_local [%e ins] ()]
+      [%expr fun [%p createfun_inputs_pat] -> create_local [%e ins]]
     else
       [%expr create_local ()] in
   createfun_run_inputs_pat, createfun_expr
