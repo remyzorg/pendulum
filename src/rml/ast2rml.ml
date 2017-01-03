@@ -61,7 +61,7 @@ let compile ast =
     | Signal (vs, t) ->
       [%expr rml_signal_combine
           (fun () -> [%e vs.svalue.exp])
-          (fun () -> (fun acc x -> x))
+          (fun () -> (fun x _ -> x))
           (fun [%p mk_pat_var vs.signal.ident] -> [%e compile t])]
 
     | Await (s, _) ->
@@ -124,7 +124,6 @@ let mk_program_object env reactfun =
   Exp.object_ {pcstr_self = Pat.any (); pcstr_fields}
 
 let mk_callbacks_assigns animate env e =
-  let open Ml2ocaml in
   let opexpr loc = mk_ident @@ Ast.mk_loc ~loc "##." in
   let mk_lhs s tag =
     [%expr [%e opexpr tag.loc] [%e mk_ident s.ident] [%e mk_ident tag]]

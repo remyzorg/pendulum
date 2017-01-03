@@ -1,6 +1,4 @@
 
-(* open Test *)
-
 open Implem_lco_ctrl_tree_record
 
 
