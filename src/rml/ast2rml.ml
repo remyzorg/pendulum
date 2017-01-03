@@ -29,7 +29,7 @@ let compile ast =
     | Emit vs ->
       let signal = mk_ident vs.signal.ident in
       let value = vs.svalue.exp in
-      [%expr rml_emit_val [%e signal]
+      [%expr rml_emit_val' [%e signal]
           (fun () -> [%e value])]
 
     | Nothing -> [%expr rml_nothing]
@@ -59,11 +59,14 @@ let compile ast =
     | Atom atom -> [%expr rml_compute (fun () -> [%e atom.exp]; ())]
 
     | Signal (vs, t) ->
-      [%expr rml_signal (fun [%p mk_pat_var vs.signal.ident] -> [%e compile t])]
+      [%expr rml_signal_combine
+          (fun () -> [%e vs.svalue.exp])
+          (fun () -> (fun acc x -> x))
+          (fun [%p mk_pat_var vs.signal.ident] -> [%e compile t])]
 
     | Await (s, _) ->
       let signal = mk_ident s.ident in
-      [%expr rml_await [%e signal]]
+      [%expr rml_await (fun () -> [%e signal])]
 
     | Run (ident, params, loc) -> raise (Error (Rml_undefined))
   in [%expr fun () -> [%e compile ast]]
@@ -73,21 +76,22 @@ let signal_to_creation_expr init_val s =
   | Event (e, gopt) -> assert false
   | _ ->
     Option.casefv s.gatherer (fun g -> assert false)
-      [%expr Lco_ctrl_tree_record.rml_global_signal_combine
-          create [%e init_val] (fun acc x -> x)]
+      [%expr
+        Lco_ctrl_tree_record.rml_global_signal_combine
+          (fun () -> [%e init_val])
+          (fun () -> (fun acc x -> x))]
 
 
 let mk_args_signals_definitions env e =
   let open Tagged in
-  let open Ml2ocaml in
   List.fold_left (fun acc (s, _) ->
       try
         Hashtbl.find env.binders_env s.ident.content
-        |> MList.map_filter has_tobe_defined (function
+        |> MList.map_filter has_to_be_defined (function
             | Event (e, gatherer) as bind -> { (append_tag s e) with gatherer; bind}
             | _ -> s)
         |> List.fold_left (fun acc s ->
-            signal_to_definition (
+            Ml2ocaml.signal_to_definition (
               signal_to_creation_expr [%expr None] s
             ) acc s
           ) acc
@@ -96,7 +100,6 @@ let mk_args_signals_definitions env e =
 
 
 let mk_constructor_reactfun env animate d body =
-  let open Ml2ocaml in
   let reactfun = [%expr
     Lco_ctrl_tree_record.(rml_make [%e body])
   ] in
@@ -106,7 +109,7 @@ let mk_constructor_reactfun env animate d body =
     if animate then
       let animate_ident = mk_loc animate_name in
       Asttypes.Recursive
-    , [Vb.mk (mk_pat_var animate_ident) (mk_raf_call d reactfun_expr)]
+    , [Vb.mk (mk_pat_var animate_ident) (Ml2ocaml.mk_raf_call d reactfun_expr)]
     , mk_ident animate_ident
     else Asttypes.Nonrecursive, [], reactfun_expr
   in
@@ -151,7 +154,6 @@ let mk_callbacks_assigns animate env e =
   ) e env.Tagged.args_signals
 
 let mk_createfun_inputs_expr env =
-  let open Ml2ocaml in
   build_tuple Exp.tuple (
     fun ?t s -> mk_notbind env mk_ident (fun _ ->
         signal_to_creation_expr (mk_ident s.ident) s) s
@@ -159,7 +161,6 @@ let mk_createfun_inputs_expr env =
 
 let mk_constructor_create_fun env =
   let open Tagged in
-  let open Ml2ocaml in
   let inputs, outputs =
     List.partition (fun (x, _) -> is_input x) env.args_signals in
   let mk_notbind mk mknb s = mk_notbind env mk mknb s in
@@ -174,7 +175,7 @@ let mk_constructor_create_fun env =
   let createfun_expr =
     if inputs <> [] then
       let ins = mk_createfun_inputs_expr env inputs in
-      [%expr fun [%p createfun_inputs_pat] -> create_local [%e ins] ()]
+      [%expr fun [%p createfun_inputs_pat] -> create_local [%e ins]]
     else
       [%expr create_local ()] in
   createfun_run_inputs_pat, createfun_expr

@@ -74,19 +74,6 @@ let mk_local_signals_definitions env e = List.fold_left (fun acc vs ->
     [%expr let [%p mk_pat_var vs.signal.ident] = [%e rebinds] in [%e acc]]
   ) e !(env.Tagged.local_only_env)
 
-let append_tag s tag =
-  {s with ident =
-            {s.ident with content = Format.sprintf "%s##%s" s.ident.content tag.content;
-            }}
-
-let has_tobe_defined s = match s with
-  | No_binding | Event _ -> true
-  | Access _ -> false
-
-let is_input s = match s.origin with
-  | Local | Input | Element -> true
-  | Output | React -> false
-
 let signal_to_creation_expr init_val s =
   match s.bind with
   | Event (e, gopt) ->
@@ -108,7 +95,7 @@ let mk_args_signals_definitions env e =
   List.fold_left (fun acc (s, _) ->
       try
         Hashtbl.find env.binders_env s.ident.content
-        |> MList.map_filter has_tobe_defined (function
+        |> MList.map_filter has_to_be_defined (function
             | Event (e, gatherer) as bind -> { (append_tag s e) with gatherer; bind}
             | _ -> s)
         |> List.fold_left (fun acc s ->
@@ -136,9 +123,6 @@ let mk_args_signals_definitions env e =
           | Local | Input | Element -> acc
         end
     ) (mk_local_signals_definitions env e) env.args_signals
-
-let is_tagged env s =
-  Tagged.(s.origin = Element || Hashtbl.mem env.binders_env s.ident.content)
 
 let mk_set_all_absent_definition env e =
   let open Tagged in
@@ -297,10 +281,6 @@ let mk_constructor_reactfun env animate d body =
     else Asttypes.Nonrecursive, [], reactfun_var_expr
   in
   Exp.let_ recparam (Vb.mk (mk_pat_var reactfun_ident) reactfun :: anim), reactfun_var
-
-let mk_notbind env mk mknb s =
-  if is_tagged env s then mk s.ident
-  else mknb s.ident
 
 let mk_createfun_outputs_expr env =
   build_tuple Exp.tuple (

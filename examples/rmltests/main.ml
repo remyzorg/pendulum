@@ -1,5 +1,5 @@
 
-open Test
+(* open Test *)
 
 open Implem_lco_ctrl_tree_record
 
@@ -9,9 +9,7 @@ open Lco_ctrl_tree_record
 
 
 (* let s = rml_global_signal_combine [] (fun x y -> x :: y) *)
-  (* let react = rml_make (my_loop s) in *)
-  (* object *)
-  (*   method set_s str = rml_hard_emit s str; () *)
+  (* let react = rml_make (my_loop s) in *) (* object *) (*   method set_s str = rml_hard_emit s str; () *)
   (*   method get_s = rml_pre_value s *)
   (*   method react = ignore @@ react () *)
   (* end *)
@@ -74,63 +72,52 @@ open Lco_ctrl_tree_record
 (*   react () *)
 
 
-(* let%rml p s ~dsource = *)
-(*   loop begin *)
-(*     await s; *)
-(*     !(print_endline "hello"); *)
-(*     pause *)
-(*   end *)
-(*   || *)
-(*   let cpt = 0 in *)
-(*   loop begin *)
-(*     emit cpt (cpt + 1); *)
-(*     ! (print_int (value cpt)); *)
-(*     !(print_newline ()); *)
-(*     pause *)
-(*   end *)
+let (!!) = rml_pre_value
+
+let%rml p s ~dsource =
+  loop begin
+    await s;
+    !(print_endline "hello");
+    pause
+  end
+  ||
+  let cpt = 0 in
+  loop begin
+    emit cpt (!!cpt + 1);
+    !(print_int !!cpt);
+    !(print_newline ());
+    pause
+  end
 
 (* let p s ~dsource = *)
 (*   let create_local s = *)
 (*     let p_react = *)
-(*       Lco_ctrl_tree_record.rml_make *)
-(*         (rml_par *)
-(*            (rml_loop *)
-(*               (rml_seq (rml_await s) *)
-(*                  (rml_seq (rml_compute (fun ()  -> print_endline "hello"; ())) *)
-(*                     rml_nothing))) *)
-(*            (rml_signal *)
-(*               (fun cpt  -> *)
-(*                  rml_loop *)
-(*                    (rml_seq (rml_emit_val' cpt (fun ()  -> List.hd (rml_pre_value cpt) + 1)) *)
-(*                       (rml_seq *)
-(*                          (rml_compute (fun ()  -> print_int @@ List.hd (rml_pre_value cpt); ())) *)
-(*                          (rml_seq *)
-(*                             (rml_compute (fun ()  -> print_newline (); ())) *)
-(*                             rml_nothing)))))) *)
+(*       let open Lco_ctrl_tree_record in *)
+(*       rml_make *)
+(*         (fun ()  -> *)
+(*            rml_par *)
+(*              (rml_loop *)
+(*                 (rml_seq (rml_await (fun ()  -> s)) *)
+(*                    (rml_seq *)
+(*                       (rml_compute (fun ()  -> print_endline "hello"; ())) *)
+(*                       rml_nothing))) *)
+(*              (rml_signal_combine (fun ()  -> 0) *)
+(*                 (fun ()  -> fun acc  -> fun x  -> x) *)
+(*                 (fun cpt  -> *)
+(*                    rml_loop *)
+(*                      (rml_seq (rml_emit_val' cpt (fun ()  -> (!! cpt) + 1)) *)
+(*                         (rml_seq *)
+(*                            (rml_compute (fun ()  -> print_int (!! cpt); ())) *)
+(*                            (rml_seq *)
+(*                               (rml_compute (fun ()  -> print_newline (); ())) *)
+(*                               rml_nothing)))))) *)
 (*     in *)
-(*     object method s = Sig_env.Record.emit s method react = p_react () end  in *)
-(*   object method create s = create_local (make_signal s) () end *)
-
-let p s ~dsource =
-let create_local s =
-  let p~react =
-    Lco_ctrl_tree_record.rml_make
-      (fun ()  ->
-         rml_par
-           (rml_loop
-              (rml_seq (rml_await s)
-                 (rml_seq
-                    (rml_compute (fun ()  -> print_endline "hello"; ()))
-                    rml_nothing)))
-           (rml_signal
-              (fun cpt  ->
-                 rml_loop
-                   (rml_seq (rml_emit_val' cpt (fun ()  -> List.hd (rml_pre_value cpt) + 1))
-                      (rml_seq
-                         (rml_compute (fun ()  -> print_int @@ List.hd (rml_pre_value cpt); ()))
-                         (rml_seq
-                            (rml_compute (fun ()  -> print_newline (); ()))
-                            rml_nothing))))))
-     in
-  object method s = Sig_env.Record.emit s method react = p~react () end  in
-object method create s = create_local (make_signal s) () end
+(*     object method s = rml_expr_emit_val s method react = p_react () end  in *)
+(*   object *)
+(*     method create s = *)
+(*       create_local *)
+(*         (Lco_ctrl_tree_record.rml_global_signal_combine *)
+(*            create *)
+(*            s *)
+(*            (fun acc  -> fun x  -> x)) *)
+(*   end *)
