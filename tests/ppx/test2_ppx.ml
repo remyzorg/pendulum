@@ -256,7 +256,7 @@ let%sync elements =
   element e3;
   loop pause
 
-let%sync example_edwards_paper ~print:pdf =
+let%sync example_edwards_paper =
   input a;
   output b, c, d, e;
   trap t begin
@@ -270,3 +270,21 @@ let%sync example_edwards_paper ~print:pdf =
   end
   || present b (emit c)
   || present d (emit e)
+
+(* let%sync test_await ~new_feature ~print_only ~print:pdf s = *)
+(*   loop begin *)
+(*     await s; *)
+(*     !(print_endline "hello"); *)
+(*     pause; *)
+(*   end *)
+
+let%sync test_await ~new_feature ~print_only ~print:pdf s1 s2 =
+  loop begin
+    present s1 !(print_endline "hello2") pause;
+    pause;
+  end
+
+
+
+
+

@@ -19,9 +19,10 @@ let parse_and_generate options atom_mapper vb =
       inputs @ map Ast.(fun (s, t) -> mk_signal ~origin:Input s, t) args
     )
   in
-  if has_opt "ast" then
+  let gen_ast_as_ocaml e =
     [%expr ([%e Pendulum_misc.expr_of_ast @@ Pendulum_parse.ast_of_expr atom_mapper e])]
-  else
+  in
+  if has_opt "ast" then gen_ast_as_ocaml e else
     let loc = vb.pvb_loc in
     let pat =
       match vb.pvb_pat.ppat_desc with
@@ -34,12 +35,13 @@ let parse_and_generate options atom_mapper vb =
     let tast = Ast.Analysis.filter_dead_trees tast in
     Pendulum_misc.print_to_dot env (StringSet.remove "debug" options)
       (has_opt "dot") (has_opt "pdf") (has_opt "png") pname tast;
+
     let ocaml_expr =
       if has_opt "rml" then Ast2rml.generate pname options env tast
       else Ml2ocaml.generate pname options env tast
     in
     if has_opt "dsource" then Format.printf "%a@." Pprintast.expression ocaml_expr;
-    [%expr [%e ocaml_expr]]
+    if has_opt "print_only" then gen_ast_as_ocaml e else [%expr [%e ocaml_expr]]
 
 
 let gen_bindings options atom_mapper vbl =

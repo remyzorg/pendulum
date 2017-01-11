@@ -113,6 +113,7 @@ module Flowgraph = struct
       | Call of action * t
       | Test of test_value * t * t * t option (* then * else * end *)
       | Fork of t * t * t (* left * right * sync *)
+      | End_test
       | Pause
       | Finish
 
@@ -196,6 +197,7 @@ module Flowgraph = struct
       | Call of action * t
       | Test of test_value * t * t * t option (* then * else * join_value *)
       | Fork of t * t * t (* left * right * sync *)
+      | End_test
       | Pause
       | Finish
 
@@ -238,6 +240,7 @@ module Flowgraph = struct
               fprintf fmt "%sFork(\n%a, \n%a)"
                 indent (aux @@ lvl + 1) t1 (aux @@ lvl + 1) t2
             | Pause -> fprintf fmt "%sPause" indent
+            | End_test -> fprintf fmt "%sEnd_test" indent
             | Finish -> fprintf fmt "%sFinish" indent
           end)
       in aux 0 fmt t
@@ -249,6 +252,7 @@ module Flowgraph = struct
           | Test(Sync (i1, i2), _, _, _) -> fprintf fmt "sync(%d, %d)" i1 i2
           | Test (tv, _, _, _) -> fprintf fmt "test <B>%a</B>  " pp_test_value_dot tv
           | Fork (_, _, _) -> fprintf fmt "fork"
+          | End_test -> fprintf fmt "end_test"
           | Pause -> fprintf fmt "pause"
           | Finish -> fprintf fmt "finish"
         end)
@@ -312,14 +316,15 @@ module Flowgraph = struct
         end
       | Test (Sync _, _, _, _) -> "shape=invtrapezium"
       | Test _ -> "shape=box, "
-      | Finish -> ", fontcolor=red, "
+      | End_test | Finish -> ", fontcolor=red, "
       | Pause -> ", fontcolor=darkgreen, "
       | Fork _ -> ""
 
 
+
     let print_to_dot fmt fg =
-      let id = let id = ref 0 in fun () -> incr id;!id in
       let open Format in
+      let id = let id = ref 0 in fun () -> incr id;!id in
       let h = Fgtbl.create 17 in
       let rec visit fg =
         try Fgtbl.find h fg with
@@ -332,21 +337,31 @@ module Flowgraph = struct
               fprintf fmt "N%d -> N%d ;@\n" my_id fg_id;
               my_id
 
-            | Test (_, t1, t2, _) | Fork (t1, t2, _) ->
-              let my_id = id () in
-              let shape = match fg with Test _ -> "[style = dashed]" | _ -> "" in
-              fprintf fmt "N%d [%s label=<%a>]; @\n" my_id (style_of_node fg) pp_dot fg;
-              let fg1_id, fg2_id = visit t1, visit t2 in
-              fprintf fmt "N%d -> N%d;@\n" my_id fg1_id;
-              fprintf fmt "N%d -> N%d %s;@\n" my_id fg2_id shape;
-              my_id
+            | Test (_, t1, t2, end_branch) ->
+              print_branches_to_dot fmt "[style = dashed]" fg t1 t2 end_branch
+            | Fork (t1, t2, end_branch) ->
+              print_branches_to_dot fmt "" fg t1 t2 (Some end_branch)
 
-            | Pause | Finish ->
+            | Pause | Finish | End_test ->
               let my_id = id () in
               fprintf fmt "N%d [shape = none, label=<%a>]; @\n" my_id pp_dot fg;
               my_id
-
           end in Fgtbl.add h fg id; id
+
+      and print_branches_to_dot fmt shape fg t1 t2 end_br =
+        let open Format in
+        let my_id = id () in
+        fprintf fmt "N%d [%s label=<%a>]; @\n" my_id (style_of_node fg) pp_dot fg;
+        let fg1_id, fg2_id = visit t1, visit t2 in
+        begin match end_br with
+          | None -> ()
+          | Some endb_tree ->
+            let end_id = visit endb_tree in
+            fprintf fmt "N%d -> N%d [style = dotted];@\n" my_id end_id;
+        end;
+        fprintf fmt "N%d -> N%d;@\n" my_id fg1_id;
+        fprintf fmt "N%d -> N%d %s;@\n" my_id fg2_id shape;
+        my_id
       in
       fprintf fmt "@[<hov 2>digraph flowgraph {@\n";
       ignore(visit fg);
@@ -434,7 +449,7 @@ module Of_ast = struct
           test_node (Signal (s, atopt)) (
             exit_node p endp,
             pause,
-            None
+            Some pause
           )
 
         | Emit s -> Emit s >> endp
@@ -471,7 +486,10 @@ module Of_ast = struct
           @@ test_node (Signal (s, atopt)) (
             surface env q pause end_pres,
             surface env r pause end_pres,
-            None
+            if StringSet.mem "new_feature" options then
+              Some end_pres
+            else
+              None
           )
 
         | Run (id, sigs, loc) ->
@@ -519,10 +537,10 @@ module Of_ast = struct
         | Pause -> Exit p.id >> endp
 
         | Await (s, atopt) ->
-          test_node (Signal (s, atopt)) (
-            exit_node p endp,
-            pause,
-            None)
+          begin match surface env p pause endp with
+            | Call (_, fg) -> fg
+            | _ -> assert false
+          end
 
         | Loop q ->
           depth env q pause @@ surface env q pause
@@ -535,7 +553,7 @@ module Of_ast = struct
           if Ast.Analysis.blocking q then begin
             let surf_r = surface env r pause end_seq in
             let depth_q = depth env q pause surf_r in
-            test_node (Selection q.id) (depth_q, depth_r, None)
+            test_node (Selection q.id) (depth_q, depth_r, Some pause)
           end
           else depth_r
 
@@ -727,7 +745,7 @@ module Schedule = struct
           lr := i1 :: i2 :: !lr
         | Test (_, t1, t2, _) | Fork (t1, t2, _)  ->
           aux t1; aux t2
-        | Pause | Finish -> ()
+        | Pause | Finish | End_test -> ()
       in
       let rec aux_sel sel =
         if List.mem sel.label !lr then sel.tested <- true;
@@ -762,7 +780,7 @@ module Schedule = struct
         | Call (_, t) -> aux (t, stop, s)
         | Test (_, t1, t2, _) | Fork (t1, t2, _) ->
           aux (t1, stop, s) || aux (t2, stop, s)
-        | Pause | Finish -> false
+        | End_test | Pause | Finish -> false
       in memo_rec (module Fg.FgEmitsTbl) aux (fg, stop, s)
 
 
@@ -798,7 +816,7 @@ module Schedule = struct
           let emits2, tests2 = aux (t2, stop) in
           union emits1 emits2, union tests1 tests2
 
-        | Pause | Finish -> empty, empty
+        | End_test | Pause | Finish -> empty, empty
       in memo_rec (module Fg.Fgtbl2) aux (fg, stop)
 
 
@@ -808,7 +826,7 @@ module Schedule = struct
           | Test (tv, _, _, tend) -> Test (tv, t1, t2, tend)
           | Fork (_, _, sync) -> Fork (t1, t2, sync)
           | Call (a, _) -> Call(a, t1)
-          | Pause | Finish -> fg
+          | End_test | Pause | Finish -> fg
         in newfg
       in memo_rec (module Fgtbl3) children (fg, t1, t2)
 
@@ -822,7 +840,7 @@ module Schedule = struct
           | Call (a, t) -> aux (t, elt)
           | Test (_, t1, t2, _) | Fork (t1, t2, _) ->
             Option.mapn (aux (t1, elt)) (fun () -> aux (t2, elt))
-          | Pause | Finish -> None
+          | End_test | Pause | Finish -> None
       in memo_rec (module Fgtbl2) aux (fg, t)
 
 
@@ -839,7 +857,7 @@ module Schedule = struct
             let res2, t2' = aux (t2, elt) in
             res1 || res2,
             children fg (if res1 then t1' else t1) (if res2 then t2' else t2)
-          | Pause | Finish -> false, fg
+          | End_test | Pause | Finish -> false, fg
       in memo_rec (module Fgtbl2) aux (fg, elt)
 
 
@@ -853,7 +871,7 @@ module Schedule = struct
           | Some v1, Some v2 when v1 == v2 && v1 <> Pause && v1 <> Finish -> Some v1
           | _ -> None
           end
-        | Pause | Finish -> None
+        | End_test | Pause | Finish -> None
       end
 
     let leads_to_end stop fg =
@@ -862,7 +880,7 @@ module Schedule = struct
         | Call (Exit n, t) -> Option.map (max n) (aux (stop, t))
         | Call (a, t) -> aux (stop, t)
         | Test (_, t1, t2, _) | Fork (t1, t2, _) -> None
-        | Pause | Finish -> Some 0
+        | End_test | Pause | Finish -> Some 0
       in memo_rec (module Fgtbl2) aux (stop, fg)
 
     let rec replace_join fg1 fg2 replf =
@@ -883,7 +901,7 @@ module Schedule = struct
             in
             let fg1' = children fg1 t1 t2 in
             fg1', !fg2_r
-          | Pause | Finish -> fg1, fg2
+          | End_test | Pause | Finish -> fg1, fg2
       in memo_rec (module Fgtbl2) aux (fg1, fg2)
 
 
@@ -899,7 +917,6 @@ module Schedule = struct
           try Fgtbl2.find fork_tbl (fg2, fg1) with | Not_found ->
             let fg = match fg1, fg2 with
               | fg1, fg2 when fg1 == fg2 -> fg1
-
               | fg1, fg2 when fork_id fg1 = fork_id stop -> fg2
               | fg1, fg2 when fork_id fg2 = fork_id stop -> fg1
 
@@ -916,16 +933,28 @@ module Schedule = struct
                   | None, None -> assert false
                 end
 
-              | (Finish | Pause), fg
+              | (Finish | Pause | End_test ), fg
               | fg, (Finish | Pause) ->
                 Fg.error ~loc:Ast.Tagged.(env.pname.loc) (Par_leads_to_finish fg2)
 
-              | Test (Signal (s, atopt), t1, t2, _), fg2 ->
+              | (Call (Instantiate_run _, _) as fg1), Call (action, t2)
+              | Call (action, t2), (Call (Instantiate_run _, _) as fg1) ->
+                Call (action, sequence_of_fork stop fg1 t2)
+
+              | Call (action, t), fg2 ->
+                Call (action, sequence_of_fork stop fg2 t)
+
+              | (Fork (t1, t2, sync)), (_ as fg2)
+              | (_ as fg2), (Fork (t1, t2, sync)) ->
+                let fg1 = sequence_of_fork sync t1 t2 in
+                sequence_of_fork stop fg1 fg2
+
+              | Test (Signal (s, atopt), t1, t2, join), fg2 ->
                 if emits fg2 stop s then
                   match fg2 with
                   | Call (a, t) ->
                     Call (a, sequence_of_fork stop t fg1)
-                  | Pause | Finish -> assert false (* TODO: Raise exn *)
+                  | End_test | Pause | Finish -> assert false (* TODO: Raise exn *)
                   | Test (test, t1, t2, joinfg2) ->
                     let t1, t2 = replace_join t1 t2 (fun x ->
                         sequence_of_fork stop fg1 x
@@ -939,18 +968,6 @@ module Schedule = struct
                   let t1, t2 = replace_join t1 t2 (fun x -> sequence_of_fork stop x fg2) in
                   children fg1 t1 t2
                 )
-
-              | (Call (Instantiate_run _, _) as fg1), Call (action, t2)
-              | Call (action, t2), (Call (Instantiate_run _, _) as fg1) ->
-                Call (action, sequence_of_fork stop fg1 t2)
-
-              | Call (action, t), fg2 ->
-                Call (action, sequence_of_fork stop fg2 t)
-
-              | (Fork (t1, t2, sync)), (_ as fg2)
-              | (_ as fg2), (Fork (t1, t2, sync)) ->
-                let fg1 = sequence_of_fork sync t1 t2 in
-                sequence_of_fork stop fg1 fg2
 
               | Test (test, t1, t2, joinfg1) as fg1, fg2 ->
 
@@ -988,10 +1005,36 @@ module Schedule = struct
             | Fork (t1, t2, sync) -> sequence_of_fork sync (visit t1) (visit t2)
             | Pause -> Pause
             | Finish -> Finish
+            | End_test -> End_test
           in
           Fgtbl.add visit_tbl fg fg'; fg'
       in
       visit fg
+
+
+
+    module Scheduler = struct
+
+      type state =
+        | Nop
+        | Branch of test_value * state * state
+        | Fg of Fg.t
+
+      type scheduling = { left : state; right : state }
+
+
+      let rec open_tests state =
+        match state with
+        | Fg (Test (tv, lb, rb, _)) -> Branch (tv, Fg lb, Fg rb)
+        | Nop | Fg _ -> state
+        | Branch (_, Nop, Nop) -> Nop
+        | Branch (tv, lb, rb) -> Branch (tv, open_tests lb, open_tests rb)
+
+
+    end
+
+
+
 
     module Stats = struct
 
@@ -1006,7 +1049,7 @@ module Schedule = struct
               | Call (a, t) -> aux t
               | Test (_, t1, t2, _) | Fork (t1, t2, _) ->
                 aux t1; aux t2
-              | Pause | Finish -> ()
+              | End_test | Pause | Finish -> ()
             end
         in
         aux fg; Fgtbl.length h

@@ -73,6 +73,7 @@ module Flowgraph : sig
       | Call of action * t
       | Test of test_value * t * t * t option (* then * else *)
       | Fork of t * t * t (* left * right * sync *)
+      | End_test
       | Pause
       | Finish
 

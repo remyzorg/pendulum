@@ -250,6 +250,8 @@ let compiler_options =
   ; "nooptim"
   ; "obj"
   ; "stats"
+  ; "new_feature"
+  ; "print_only"
   ]
 
 let rec parse_args options inputs exp =

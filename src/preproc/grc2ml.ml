@@ -249,6 +249,7 @@ let grc2ml dep_array fg =
         | Fork (t1, t2, sync) -> assert false
         | Pause -> mls MLpause
         | Finish -> mls MLfinish
+        | End_test -> nop
       end
       in
       Fgtbl.add tbl fg res;
