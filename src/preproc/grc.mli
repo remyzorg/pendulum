@@ -85,19 +85,6 @@ module Flowgraph : sig
     module Fgtbl3 : Hashtbl.S with type key = flowgraph * flowgraph * flowgraph
     module Fgstbl : Hashtbl.S with type key = flowgraph list
 
-    val print_to_dot : Format.formatter -> t -> unit
-    val pp : Format.formatter -> t -> unit
-    val pp_dot : Format.formatter -> t -> unit
-    val pp_test_value : Format.formatter -> test_value -> unit
-    val pp_action: Format.formatter -> action -> unit
-
-    val test_node : test_value -> t * t * t option -> t
-    val sync_node : int * int -> t * t * t option -> t
-
-    val (>>) : action -> t -> t
-    val exit_node : Ast.Tagged.t -> t -> t
-    val enter_node : Ast.Tagged.t -> t -> t
-
 
     type error =
       | Unbound_label of string
@@ -108,6 +95,12 @@ module Flowgraph : sig
 
     exception Error of Ast.loc * error
     val print_error : Format.formatter -> error -> unit
+
+    val print_to_dot : Format.formatter -> t -> unit
+    val pp : Format.formatter -> t -> unit
+    val pp_dot : Format.formatter -> t -> unit
+    val pp_test_value : Format.formatter -> test_value -> unit
+    val pp_action: Format.formatter -> action -> unit
   end
 
   module Make (Ast : Ast.S) : S with module Ast = Ast

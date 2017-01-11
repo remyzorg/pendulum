@@ -125,18 +125,6 @@ module Flowgraph = struct
     module Fgtbl3 : Hashtbl.S with type key = flowgraph * flowgraph * flowgraph
     module Fgstbl : Hashtbl.S with type key = flowgraph list
 
-    val print_to_dot : Format.formatter -> t -> unit
-    val pp : Format.formatter -> t -> unit
-    val pp_dot : Format.formatter -> t -> unit
-    val pp_test_value : Format.formatter -> test_value -> unit
-    val pp_action: Format.formatter -> action -> unit
-    val test_node : test_value -> t * t * t option -> t
-    val sync_node : (int * int) -> (t * t * t option) -> t
-
-    val (>>) : action -> t -> t
-    val exit_node : Ast.Tagged.t -> t -> t
-    val enter_node : Ast.Tagged.t -> t -> t
-
 
     type error =
       | Unbound_label of string
@@ -147,6 +135,12 @@ module Flowgraph = struct
 
     exception Error of Ast.loc * error
     val print_error : Format.formatter -> error -> unit
+
+    val print_to_dot : Format.formatter -> t -> unit
+    val pp : Format.formatter -> t -> unit
+    val pp_dot : Format.formatter -> t -> unit
+    val pp_test_value : Format.formatter -> test_value -> unit
+    val pp_action: Format.formatter -> action -> unit
   end
 
   module Make (Ast : Ast.S) = struct
@@ -297,14 +291,81 @@ module Flowgraph = struct
           | [], _ | _, [] -> false
       end)
 
-    let test_node t (c1, c2, endt) = if c1 == c2 then c1 else
-        Test (t, c1, c2, endt)
+    type error =
+      | Unbound_label of string
+      | Cyclic_causality of t * Ast.signal list
+      | Par_leads_to_finish of t
 
-    let (>>) s c = Call (s, c)
-    let exit_node p next = Exit p.Tagged.id >> next
-    let enter_node p next = Enter p.Tagged.id >> next
+    exception Error of Ast.loc * error
 
-    let sync_node c (t1, t2, endt) = test_node (Sync (c)) (t1, t2, endt)
+    let print_error fmt e =
+      let open Format in
+      fprintf fmt "Error: %s @\n"
+        begin match e with
+          | Unbound_label s -> "unbound label " ^ s
+          | Cyclic_causality (fg, sigs) ->
+            Format.sprintf "Cyclic causality on [%s]"
+              (String.concat "; " @@ List.map Ast.(fun s -> s.ident.content) sigs)
+          | Par_leads_to_finish fg -> "Parallel leads to pause or exit"
+        end
+
+    let error ~loc e = raise (Error (loc, e))
+
+    let pp_test_value_dot fmt tv =
+      Format.(begin
+          match tv with
+          | Signal (s, exp) -> fprintf fmt "%s ?" s.ident.content
+          | Selection i -> fprintf fmt "%d ?" i
+          | Finished -> fprintf fmt "finished ?"
+          | Sync (i1, i2) -> fprintf fmt "sync(%d, %d)" i1 i2
+          | Is_paused (id, _, _) -> fprintf fmt "paused %s ?" id.content
+        end)
+
+    let pp_test_value fmt tv =
+      Format.(begin
+          match tv with
+          | Signal (s, None) -> fprintf fmt "Signal (%s) " s.ident.content
+          | Signal (s, Some at) -> fprintf fmt "Signal (%s, %a) " s.ident.content printexp at.exp
+          | Selection i -> fprintf fmt "Selection %d" i
+          | Sync (i1, i2) -> fprintf fmt "Sync(%d, %d)" i1 i2
+          | Finished -> fprintf fmt "Finished"
+          | Is_paused (id, _, _) -> fprintf fmt "Is_paused %s" id.content
+        end)
+
+    let rec pp fmt t =
+      let rec aux lvl fmt t =
+        let indent = String.init lvl (fun _ -> ' ') in
+        Format.(begin
+            match t with
+            | Call (a, t) ->
+              fprintf fmt "%sCall(%a,\n%a)"
+                indent pp_action a (aux (lvl + 1)) t
+            | Test(Sync (i1, i2), t1, t2, _) ->
+              fprintf fmt "%sSync((%d, %d),\n%a,\n%a)" indent
+                i1 i2 (aux @@ lvl + 1) t1 (aux @@ lvl + 1) t2
+            | Test (tv, t1, t2, _) ->
+              fprintf fmt "%sTest(%a,\n%a,\n%a) "
+                indent pp_test_value tv (aux @@ lvl + 1) t1 (aux @@ lvl + 1) t2
+            | Fork (t1, t2, _) ->
+              fprintf fmt "%sFork(\n%a, \n%a)"
+                indent (aux @@ lvl + 1) t1 (aux @@ lvl + 1) t2
+            | Pause -> fprintf fmt "%sPause" indent
+            | End_test -> fprintf fmt "%sEnd_test" indent
+            | Finish -> fprintf fmt "%sFinish" indent
+          end)
+      in aux 0 fmt t
+
+    let pp_dot fmt t =
+      Format.(begin
+          match t with
+          | Call (a, _) -> fprintf fmt "%a" pp_action_dot a
+          | Test(Sync (i1, i2), _, _, _) -> fprintf fmt "sync(%d, %d)" i1 i2
+          | Test (tv, _, _, _) -> fprintf fmt "test <B>%a</B>  " pp_test_value_dot tv
+          | Fork (_, _, _) -> fprintf fmt "fork"
+          | End_test -> fprintf fmt "end_test"
+          | Pause -> fprintf fmt "pause"
+          | Finish -> fprintf fmt "finish"
+        end)
 
     let style_of_node = function
       | Call (a, _) -> "shape=oval" ^ begin match a with
@@ -319,8 +380,6 @@ module Flowgraph = struct
       | End_test | Finish -> ", fontcolor=red, "
       | Pause -> ", fontcolor=darkgreen, "
       | Fork _ -> ""
-
-
 
     let print_to_dot fmt fg =
       let open Format in
@@ -368,26 +427,6 @@ module Flowgraph = struct
       fprintf fmt "}@]@\n"
 
 
-    type error =
-      | Unbound_label of string
-      | Cyclic_causality of t * Ast.signal list
-      | Par_leads_to_finish of t
-
-    exception Error of Ast.loc * error
-
-    let print_error fmt e =
-      let open Format in
-      fprintf fmt "Error: %s @\n"
-        begin match e with
-          | Unbound_label s -> "unbound label " ^ s
-          | Cyclic_causality (fg, sigs) ->
-            Format.sprintf "Cyclic causality on [%s]"
-              (String.concat "; " @@ List.map Ast.(fun s -> s.ident.content) sigs)
-          | Par_leads_to_finish fg -> "Parallel leads to pause or exit"
-        end
-
-    let error ~loc e = raise (Error (loc, e))
-
   end
 end
 
@@ -418,7 +457,31 @@ module Of_ast = struct
       synctbl : (int * int, Fg.t) Hashtbl.t;
       (* A Sync is the same flow, both in S and D,
          so there is a special table for this *)
+      parents : (Fg.t, Fg.t list) Hashtbl.t
     }
+
+    let add_parent env fg parent =
+      let parents = match Hashtbl.find env.parents fg with
+        | exception Not_found -> []
+        | l -> l
+      in
+      Hashtbl.replace env.parents fg (parent :: parents)
+
+
+    let test_node env t (c1, c2, endt) =
+      let open Fg in
+      if c1 == c2 then c1 else
+        let test = Test (t, c1, c2, endt) in
+        add_parent env c1 test; add_parent env c2 test;
+        test
+
+    let call env s fg =
+      let c = Fg.Call (s, fg) in
+      add_parent env c fg; c
+
+    let exit_node env p next = call env (Fg.Exit p.Tagged.id) next
+    let enter_node env p next = call env (Fg.Enter p.Tagged.id) next
+    let sync_node env c (t1, t2, endt) = test_node env (Fg.Sync (c)) (t1, t2, endt)
 
 
     (* Both surface and depth use a hashconsing function memo_rec : The result
@@ -442,48 +505,49 @@ module Of_ast = struct
       let open Tagged in let open Fg in
       let surface surface env p pause endp =
         match p.st.content with
-        | Pause -> enter_node p pause
+        | Pause -> enter_node env p pause
 
         | Await (s, atopt) ->
-          enter_node p @@
-          test_node (Signal (s, atopt)) (
-            exit_node p endp,
+          enter_node env p @@
+          test_node env (Signal (s, atopt)) (
+            exit_node env p endp,
             pause,
             Some pause
           )
 
-        | Emit s -> Emit s >> endp
+        | Emit s -> call env (Emit s) endp
         | Nothing -> endp
 
-        | Atom f -> Atom f >> endp
+        | Atom f -> call env (Atom f) endp
 
         | Suspend (q, _) ->
-          enter_node p
+          enter_node env p
           @@ surface env q pause
-          @@ exit_node p endp
+          @@ exit_node env p endp
 
         | Signal (s, q) ->
-          enter_node p (
-            Local_signal s
-            >> surface env q pause
-            @@ exit_node p endp)
+          enter_node env p (
+            call env (Local_signal s)
+            @@ surface env q pause
+            @@ exit_node env p endp
+          )
 
         | Seq (q,r) ->
-          let surf_r = (surface env r pause @@ exit_node p endp) in
-          enter_node p
+          let surf_r = (surface env r pause @@ exit_node env p endp) in
+          enter_node env p
           @@ surface env q pause
           @@ surf_r
 
         | Loop q ->
-          enter_node p
+          enter_node env p
           @@ surface env q pause
           (* @@ if Ast.Analysis.blocking q then endp else *)
             pause
 
         | Present ((s, atopt), q, r) ->
-          let end_pres = exit_node p endp in
-          enter_node p
-          @@ test_node (Signal (s, atopt)) (
+          let end_pres = exit_node env p endp in
+          enter_node env p
+          @@ test_node env (Signal (s, atopt)) (
             surface env q pause end_pres,
             surface env r pause end_pres,
             if StringSet.mem "new_feature" options then
@@ -493,18 +557,18 @@ module Of_ast = struct
           )
 
         | Run (id, sigs, loc) ->
-          let endrun = exit_node p endp in
-          enter_node p (
-            Instantiate_run (id, sigs, loc)
-            >> test_node (Is_paused (id, sigs, loc)) (pause, endrun, None))
+          let endrun = exit_node env p endp in
+          enter_node env p (
+            call env (Instantiate_run (id, sigs, loc))
+            @@ test_node env (Is_paused (id, sigs, loc)) (pause, endrun, None))
 
         | Par (q, r) ->
           let syn = try Hashtbl.find env.synctbl (q.id, r.id) with
             | Not_found ->
-              let n = sync_node (q.id, r.id) (pause, exit_node p endp, None)
+              let n = sync_node env (q.id, r.id) (pause, exit_node env p endp, None)
               in Hashtbl.add env.synctbl (q.id, r.id) n; n
           in
-          enter_node p @@
+          enter_node env p @@
           Fork (
             surface env q syn syn,
             surface env r syn syn,
@@ -517,13 +581,12 @@ module Of_ast = struct
           end
 
         | Trap (Label s, q) ->
-          let end_trap = exit_node p endp in
-          enter_node p
+          let end_trap = exit_node env p endp in
+          enter_node env p
           @@ surface {env with exits =
               (StringMap.add s.content end_trap env.exits)} q pause end_trap
       in
       memo_rec h surface
-
 
     let depth options h surface =
       let open Tagged in let open Fg in
@@ -534,7 +597,7 @@ module Of_ast = struct
         | Atom _ -> endp
         | Exit _ -> endp
 
-        | Pause -> Exit p.id >> endp
+        | Pause -> call env (Exit p.id) endp
 
         | Await (s, atopt) ->
           begin match surface env p pause endp with
@@ -548,56 +611,56 @@ module Of_ast = struct
             pause
 
         | Seq (q, r) ->
-          let end_seq = exit_node p endp in
+          let end_seq = exit_node env p endp in
           let depth_r = depth env r pause endp in
           if Ast.Analysis.blocking q then begin
             let surf_r = surface env r pause end_seq in
             let depth_q = depth env q pause surf_r in
-            test_node (Selection q.id) (depth_q, depth_r, Some pause)
+            test_node env (Selection q.id) (depth_q, depth_r, Some pause)
           end
           else depth_r
 
         | Par (q, r) ->
           let syn = try Hashtbl.find env.synctbl (q.id, r.id) with
             | Not_found ->
-              let n = sync_node (q.id, r.id) (pause, exit_node p endp, None)
+              let n = sync_node env (q.id, r.id) (pause, exit_node env p endp, None)
               in Hashtbl.add env.synctbl (q.id, r.id) n; n
           in
           Fork (
-            test_node (Selection q.id) (
+            test_node env (Selection q.id) (
               depth env q syn syn,
               syn,
               None
             ),
-            test_node (Selection r.id) (
+            test_node env (Selection r.id) (
               depth env r syn syn,
               syn,
               None
             ), syn)
 
         | Present (s, q, r) ->
-          let end_pres = exit_node p endp in
-          test_node (Selection q.id) (
+          let end_pres = exit_node env p endp in
+          test_node env (Selection q.id) (
             depth env q pause end_pres,
             depth env r pause end_pres,
             None
           )
 
         | Run (id, sigs, loc) ->
-          let endrun = exit_node p endp in
-          test_node (Is_paused (id, sigs, loc)) (pause, endrun, None)
+          let endrun = exit_node env p endp in
+          test_node env (Is_paused (id, sigs, loc)) (pause, endrun, None)
 
         | Signal (s,q) ->
-          depth env q pause @@ exit_node p endp
+          depth env q pause @@ exit_node env p endp
         | Suspend (q, (s, atopt)) ->
-          test_node (Signal (s, atopt)) (
+          test_node env (Signal (s, atopt)) (
             pause,
-            depth env q pause (Exit p.id >> endp),
+            depth env q pause (call env (Exit p.id) endp),
             None
           )
 
         | Trap (Label s, q) ->
-          let end_trap = exit_node p endp in
+          let end_trap = exit_node env p endp in
           depth {env with exits = StringMap.add s.content end_trap env.exits} q pause end_trap
       in memo_rec h depth
 
@@ -609,6 +672,7 @@ module Of_ast = struct
         under_suspend = false;
         exits = StringMap.empty;
         synctbl = Hashtbl.create 17;
+        parents = Hashtbl.create 17;
       } in
 
       let depthtbl, surftbl = Hashtbl.create 30, Hashtbl.create 30 in
@@ -624,11 +688,11 @@ module Of_ast = struct
         | _ -> Some Finish
       in
       (* the init part of the flowgraph *)
-      test_node Finished (
+      test_node env Finished (
         Finish,
         (* Tests if the first stmt is selection : is the the first
         execution or not *)
-        test_node (Selection p.id) (d, s, endsync),
+        test_node env (Selection p.id) (d, s, endsync),
         Some Finish
       )
     let construct env options p =
