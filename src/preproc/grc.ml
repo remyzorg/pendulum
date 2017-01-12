@@ -101,6 +101,7 @@ module Flowgraph = struct
       | Exit of int
       | Local_signal of Ast.valued_signal
       | Instantiate_run of Ast.ident * Ast.signal Ast.run_param list * Ast.loc
+      | Compressed of action * action
 
     type test_value =
       | Signal of Ast.signal * Ast.atom option
@@ -125,6 +126,8 @@ module Flowgraph = struct
     module Fgtbl3 : Hashtbl.S with type key = flowgraph * flowgraph * flowgraph
     module Fgstbl : Hashtbl.S with type key = flowgraph list
 
+    val memo_rec : (module Hashtbl.S with type key = 'a) ->
+      (('a -> 'b) -> 'a -> 'b) -> 'a -> 'b
 
     type error =
       | Unbound_label of string
@@ -138,6 +141,7 @@ module Flowgraph = struct
 
     val print_to_dot : Format.formatter -> t -> unit
     val pp : Format.formatter -> t -> unit
+    val pp_head : Format.formatter -> t -> unit
     val pp_dot : Format.formatter -> t -> unit
     val pp_test_value : Format.formatter -> test_value -> unit
     val pp_action: Format.formatter -> action -> unit
@@ -156,29 +160,7 @@ module Flowgraph = struct
       | Exit of int
       | Local_signal of valued_signal
       | Instantiate_run of ident * signal run_param list * loc
-
-    let pp_action_dot fmt a =
-      Format.(fprintf fmt "%s" begin
-          match a with
-          | Emit vs -> "emit <B>" ^ vs.signal.ident.content ^ "</B>"
-          | Atom e -> "atom"
-          | Enter i -> sprintf "enter %d" i
-          | Exit i -> sprintf "exit %d" i
-          | Instantiate_run (id, _, _) -> sprintf "instantiate %s" id.content
-          | Local_signal vs ->
-            asprintf "signal %s" vs.signal.ident.content
-        end)
-
-    let pp_action fmt a =
-      Format.(fprintf fmt "%s" begin
-          match a with
-          | Emit vs -> "Emit " ^ vs.signal.ident.content
-          | Atom e -> asprintf "Atom" 
-          | Enter i -> sprintf "Enter %d" i
-          | Exit i -> sprintf "Exit %d" i
-          | Instantiate_run (id, _, _) -> sprintf "Instantiate_run %s" id.content
-          | Local_signal vs -> asprintf "Local_signal %s" vs.signal.ident.content
-        end)
+      | Compressed of action * action
 
     type test_value =
       | Signal of signal * atom option
@@ -195,61 +177,6 @@ module Flowgraph = struct
       | Pause
       | Finish
 
-    let pp_test_value_dot fmt tv =
-      Format.(begin
-          match tv with
-          | Signal (s, exp) -> fprintf fmt "%s ?" s.ident.content
-          | Selection i -> fprintf fmt "%d ?" i
-          | Finished -> fprintf fmt "finished ?"
-          | Sync (i1, i2) -> fprintf fmt "sync(%d, %d)" i1 i2
-          | Is_paused (id, _, _) -> fprintf fmt "paused %s ?" id.content
-        end)
-
-    let pp_test_value fmt tv =
-      Format.(begin
-          match tv with
-          | Signal (s, None) -> fprintf fmt "Signal (%s) " s.ident.content
-          | Signal (s, Some at) -> fprintf fmt "Signal (%s, %a) " s.ident.content printexp at.exp
-          | Selection i -> fprintf fmt "Selection %d" i
-          | Sync (i1, i2) -> fprintf fmt "Sync(%d, %d)" i1 i2
-          | Finished -> fprintf fmt "Finished"
-          | Is_paused (id, _, _) -> fprintf fmt "Is_paused %s" id.content
-        end)
-
-    let rec pp fmt t =
-      let rec aux lvl fmt t =
-        let indent = String.init lvl (fun _ -> ' ') in
-        Format.(begin
-            match t with
-            | Call (a, t) ->
-              fprintf fmt "%sCall(%a,\n%a)"
-                indent pp_action a (aux (lvl + 1)) t
-            | Test(Sync (i1, i2), t1, t2, _) ->
-              fprintf fmt "%sSync((%d, %d),\n%a,\n%a)" indent
-                i1 i2 (aux @@ lvl + 1) t1 (aux @@ lvl + 1) t2
-            | Test (tv, t1, t2, _) ->
-              fprintf fmt "%sTest(%a,\n%a,\n%a) "
-                indent pp_test_value tv (aux @@ lvl + 1) t1 (aux @@ lvl + 1) t2
-            | Fork (t1, t2, _) ->
-              fprintf fmt "%sFork(\n%a, \n%a)"
-                indent (aux @@ lvl + 1) t1 (aux @@ lvl + 1) t2
-            | Pause -> fprintf fmt "%sPause" indent
-            | End_test -> fprintf fmt "%sEnd_test" indent
-            | Finish -> fprintf fmt "%sFinish" indent
-          end)
-      in aux 0 fmt t
-
-    let pp_dot fmt t =
-      Format.(begin
-          match t with
-          | Call (a, _) -> fprintf fmt "%a" pp_action_dot a
-          | Test(Sync (i1, i2), _, _, _) -> fprintf fmt "sync(%d, %d)" i1 i2
-          | Test (tv, _, _, _) -> fprintf fmt "test <B>%a</B>  " pp_test_value_dot tv
-          | Fork (_, _, _) -> fprintf fmt "fork"
-          | End_test -> fprintf fmt "end_test"
-          | Pause -> fprintf fmt "pause"
-          | Finish -> fprintf fmt "finish"
-        end)
 
     type flowgraph = t
 
@@ -290,6 +217,16 @@ module Flowgraph = struct
           | x1 :: t1, x2 :: t2  -> x1 == x2 && equal t1 t2
           | [], _ | _, [] -> false
       end)
+
+    let memo_rec (type a) (module H : Hashtbl.S with type key = a) =
+      let h = H.create 87 in
+      fun f ->
+        let rec g x =
+          try H.find h x with
+          | Not_found ->
+            let y = f g x in
+            H.add h x y; y
+        in g
 
     type error =
       | Unbound_label of string
@@ -332,6 +269,87 @@ module Flowgraph = struct
           | Is_paused (id, _, _) -> fprintf fmt "Is_paused %s" id.content
         end)
 
+
+    let rec pp_action fmt a =
+      Format.(
+          match a with
+          | Emit vs -> fprintf fmt "Emit %s" vs.signal.ident.content
+          | Atom e -> fprintf fmt "Atom"
+          | Enter i -> fprintf fmt "Enter %d" i
+          | Exit i -> fprintf fmt "Exit %d" i
+          | Instantiate_run (id, _, _) -> fprintf fmt "Instantiate_run %s" id.content
+          | Local_signal vs -> fprintf fmt "Local_signal %s" vs.signal.ident.content
+          | Compressed (a, a') -> fprintf fmt "%a,%a" pp_action a pp_action a'
+      )
+
+    let rec pp fmt t =
+      let rec aux lvl fmt t =
+        let indent = String.init lvl (fun _ -> ' ') in
+        Format.(begin
+            match t with
+            | Call (a, t) ->
+              fprintf fmt "%sCall(%a,\n%a)"
+                indent pp_action a (aux (lvl+ 1)) t
+            | Test(Sync (i1, i2), t1, t2, _) ->
+              fprintf fmt "%sSync((%d, %d),\n%a,\n%a)" indent
+                i1 i2 (aux @@ lvl + 1) t1 (aux @@ lvl + 1) t2
+            | Test (tv, t1, t2, _) ->
+              fprintf fmt "%sTest(%a,\n%a,\n%a) "
+                indent pp_test_value tv (aux @@ lvl + 1) t1 (aux @@ lvl + 1) t2
+            | Fork (t1, t2, _) ->
+              fprintf fmt "%sFork(\n%a, \n%a)"
+                indent (aux @@ lvl + 1) t1 (aux @@ lvl + 1) t2
+            | Pause -> fprintf fmt "%sPause" indent
+            | End_test -> fprintf fmt "%sEnd_test" indent
+            | Finish -> fprintf fmt "%sFinish" indent
+          end)
+      in aux 0 fmt t
+
+    let pp_action_dot fmt a =
+      Format.(
+          match a with
+          | Emit vs -> fprintf fmt "emit <B><FONT COLOR=\"blue\">%s</FONT><B>" vs.signal.ident.content
+          | Atom e -> fprintf fmt "atom"
+          | Enter i -> fprintf fmt "<FONT COLOR=\"darkgreen\">enter %d</FONT>" i
+          | Exit i -> fprintf fmt "<FONT COLOR=\"red\">exit %d</FONT>" i
+          | Instantiate_run (id, _, _) -> fprintf fmt "<FONT COLOR=\"darkgreen\">instantiate %s<FONT>" id.content
+          | Local_signal vs -> fprintf fmt "<FONT COLOR=\"darkgreen\">signal %s</FONT>" vs.signal.ident.content
+          | Compressed (a, a') -> fprintf fmt "%a;\n%a" pp_action a pp_action a')
+
+    let pp_dot fmt t =
+      Format.(begin
+          match t with
+          | Call (a, _) -> fprintf fmt "%a" pp_action_dot a
+          | Test(Sync (i1, i2), _, _, _) -> fprintf fmt "sync(%d, %d)" i1 i2
+          | Test (tv, _, _, _) -> fprintf fmt "test <B>%a</B>  " pp_test_value_dot tv
+          | Fork (_, _, _) -> fprintf fmt "fork"
+          | End_test -> fprintf fmt "end_test"
+          | Pause -> fprintf fmt "pause"
+          | Finish -> fprintf fmt "finish"
+        end)
+
+
+    let pp_test_value_dot fmt tv =
+      Format.(begin
+          match tv with
+          | Signal (s, exp) -> fprintf fmt "%s ?" s.ident.content
+          | Selection i -> fprintf fmt "%d ?" i
+          | Finished -> fprintf fmt "finished ?"
+          | Sync (i1, i2) -> fprintf fmt "sync(%d, %d)" i1 i2
+          | Is_paused (id, _, _) -> fprintf fmt "paused %s ?" id.content
+        end)
+
+    let pp_test_value fmt tv =
+      Format.(begin
+          match tv with
+          | Signal (s, None) -> fprintf fmt "Signal (%s) " s.ident.content
+          | Signal (s, Some at) -> fprintf fmt "Signal (%s, %a) " s.ident.content printexp at.exp
+          | Selection i -> fprintf fmt "Selection %d" i
+          | Sync (i1, i2) -> fprintf fmt "Sync(%d, %d)" i1 i2
+          | Finished -> fprintf fmt "Finished"
+          | Is_paused (id, _, _) -> fprintf fmt "Is_paused %s" id.content
+        end)
+
     let rec pp fmt t =
       let rec aux lvl fmt t =
         let indent = String.init lvl (fun _ -> ' ') in
@@ -355,6 +373,22 @@ module Flowgraph = struct
           end)
       in aux 0 fmt t
 
+    let rec pp_head fmt t =
+      Format.(begin
+          match t with
+          | Call (a, t) ->
+            fprintf fmt "Call(%a,_)" pp_action a
+          | Test(Sync (i1, i2), t1, t2, _) ->
+            fprintf fmt "Sync((%d, %d),_,_)" i1 i2
+          | Test (tv, t1, t2, _) ->
+            fprintf fmt "Test(%a,_,_) " pp_test_value tv
+          | Fork (t1, t2, _) ->
+            fprintf fmt "Fork(%a, %a)" pp_head t1 pp_head t2
+          | Pause -> fprintf fmt "Pause"
+          | End_test -> fprintf fmt "End_test"
+          | Finish -> fprintf fmt "Finish"
+        end)
+
     let pp_dot fmt t =
       Format.(begin
           match t with
@@ -368,13 +402,7 @@ module Flowgraph = struct
         end)
 
     let style_of_node = function
-      | Call (a, _) -> "shape=oval" ^ begin match a with
-          | Emit _ | Local_signal _ ->", fontcolor=blue, "
-          | Atom _ -> ", "
-          | Enter i -> ", fontcolor=darkgreen, "
-          | Exit i -> ", fontcolor=red, "
-          | Instantiate_run _ -> ", fontcolor=darkgreen, "
-        end
+      | Call (a, _) -> "shape=oval "
       | Test (Sync _, _, _, _) -> "shape=invtrapezium"
       | Test _ -> "shape=box, "
       | End_test | Finish -> ", fontcolor=red, "
@@ -460,10 +488,12 @@ module Of_ast = struct
       parents : (Fg.t, Fg.t list) Hashtbl.t
     }
 
+    let get_parents env fg =
+      try Hashtbl.find env.parents fg with Not_found -> []
+
     let add_parent env fg parent =
-      let parents = match Hashtbl.find env.parents fg with
-        | exception Not_found -> []
-        | l -> l
+      let parents =
+        try Hashtbl.find env.parents fg with Not_found -> []
       in
       Hashtbl.replace env.parents fg (parent :: parents)
 
@@ -490,7 +520,7 @@ module Of_ast = struct
        required twice or more, the result is already in the table.
     *)
 
-    let memo_rec h f =
+    let memo_rec_build h f =
       let open Tagged in
       let rec g env x p e =
         try Hashtbl.find h (x.id, p, e) with
@@ -586,7 +616,7 @@ module Of_ast = struct
           @@ surface {env with exits =
               (StringMap.add s.content end_trap env.exits)} q pause end_trap
       in
-      memo_rec h surface
+      memo_rec_build h surface
 
     let depth options h surface =
       let open Tagged in let open Fg in
@@ -662,8 +692,47 @@ module Of_ast = struct
         | Trap (Label s, q) ->
           let end_trap = exit_node env p endp in
           depth {env with exits = StringMap.add s.content end_trap env.exits} q pause end_trap
-      in memo_rec h depth
+      in memo_rec_build h depth
 
+    let compress env fg =
+      let open Fg in
+      let compress compress fg =
+        match fg with
+        | Call (a, child) ->
+          let child_comp = compress child in
+          begin match child_comp with
+          | Call (a', next_child) ->
+            Format.printf "Need to compress (me : %a) @\n" pp_action a;
+            begin match get_parents env child with
+              | [parent] when fg == parent ->
+                Format.printf "   I'm the only one @\n";
+                Call (Compressed (a, a'), next_child)
+              | l ->
+                Format.printf "   I'm NOT the only one : ";
+                Format.printf "[%a]"
+                  (MList.pp_iter ~sep:", " Fg.pp_head) l;
+                Format.printf "@\n";
+                Call (a, child_comp)
+            end
+          | _ -> Call (a, child_comp)
+          end
+        | Test (test_value, then_br, else_br, end_fg_opt) ->
+          let then_br' = compress then_br in
+          let else_br' = compress else_br in
+          let end_fg_opt' = match end_fg_opt with
+            | Some end_fg -> Some (compress end_fg)
+            | None -> None
+          in
+          Test (test_value, then_br', else_br', end_fg_opt')
+        | Fork (lfg, rfg, sync_fg) ->
+          let lfg' = compress lfg in
+          let rfg' = compress rfg in
+          let sync_fg' = compress sync_fg in
+          Fork (lfg', rfg', sync_fg')
+        | End_test -> End_test
+        | Pause -> Pause
+        | Finish -> Finish
+      in Fg.memo_rec (module Fgtbl) compress fg
 
     let flowgraph astenv options p =
       let open Fg in
@@ -688,13 +757,20 @@ module Of_ast = struct
         | _ -> Some Finish
       in
       (* the init part of the flowgraph *)
-      test_node env Finished (
-        Finish,
-        (* Tests if the first stmt is selection : is the the first
-        execution or not *)
-        test_node env (Selection p.id) (d, s, endsync),
-        Some Finish
-      )
+      let result_fg = test_node env Finished (
+          Finish,
+          (* Tests if the first stmt is selection : is the the first
+             execution or not *)
+          test_node env (Selection p.id) (d, s, endsync),
+          Some Finish
+        )
+      in
+      if StringSet.mem "new_feature" options then begin
+        compress env result_fg;
+      end else begin
+        result_fg
+      end
+
     let construct env options p =
       St.of_ast p, flowgraph env options p
 
@@ -745,7 +821,6 @@ module Schedule = struct
     open Fg
     open Ast
 
-
     let check_causality_cycles grc =
       let open Ast.SignalMap in
       let st, fg = grc in
@@ -786,16 +861,6 @@ module Schedule = struct
       in
       visit empty fg
 
-    let memo_rec (type a) (module H : Hashtbl.S with type key = a) =
-      let h = H.create 87 in
-      fun f ->
-        let rec g x =
-          try H.find h x with
-          | Not_found ->
-            let y = f g x in
-            H.add h x y; y
-        in g
-
     let tag_tested_stmts sel fg =
       let open Fg in
       let open St in
@@ -829,7 +894,6 @@ module Schedule = struct
         | Call (Emit vs, t) when s.ident.content = vs.signal.ident.content -> true
         | fg when fg == stop -> false
 
-
         | Call (Instantiate_run (_, sigs, _) , t) ->
           List.exists (fun s' -> s.ident.content = s'.ident.content)
           @@ Ast.filter_param (fun x -> x) sigs
@@ -839,7 +903,6 @@ module Schedule = struct
           @@ Ast.filter_param (fun x -> x) sigs
           || aux (t1, stop, s)
           || aux (t2, stop, s)
-
 
         | Call (_, t) -> aux (t, stop, s)
         | Test (_, t1, t2, _) | Fork (t1, t2, _) ->
@@ -1057,7 +1120,6 @@ module Schedule = struct
 
             in Fgtbl2.add fork_tbl (fg1, fg2) fg; fg
       in
-
       let rec visit fg =
         try
           Fgtbl.find visit_tbl fg

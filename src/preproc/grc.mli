@@ -61,6 +61,7 @@ module Flowgraph : sig
       | Exit of int
       | Local_signal of Ast.valued_signal
       | Instantiate_run of Ast.ident * Ast.signal Ast.run_param list * Ast.loc
+      | Compressed of action * action
 
     type test_value =
       | Signal of Ast.signal * Ast.atom option
@@ -85,6 +86,9 @@ module Flowgraph : sig
     module Fgtbl3 : Hashtbl.S with type key = flowgraph * flowgraph * flowgraph
     module Fgstbl : Hashtbl.S with type key = flowgraph list
 
+    val memo_rec : (module Hashtbl.S with type key = 'a) ->
+      (('a -> 'b) -> 'a -> 'b) -> 'a -> 'b
+
 
     type error =
       | Unbound_label of string
@@ -98,6 +102,7 @@ module Flowgraph : sig
 
     val print_to_dot : Format.formatter -> t -> unit
     val pp : Format.formatter -> t -> unit
+    val pp_head : Format.formatter -> t -> unit
     val pp_dot : Format.formatter -> t -> unit
     val pp_test_value : Format.formatter -> test_value -> unit
     val pp_action: Format.formatter -> action -> unit
@@ -159,12 +164,8 @@ module Schedule : sig
         The algorithm is rather naive and could be optimized.*)
 
     module Stats : sig
-
       val size : Fg.t -> int
-
       val pp : Format.formatter -> Fg.t -> unit
-
-
     end
 
   end

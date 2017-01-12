@@ -200,7 +200,7 @@ let%sync loop_no_pause2 o1 o2 =
     (!(Format.printf "OK2"); pause)
   )
 
-let%sync loop_pause_pause ~print:pdf =
+let%sync loop_pause_pause =
   loop (
     pause;
     pause;
@@ -277,6 +277,7 @@ let%sync example_edwards_paper =
 (*     !(print_endline "hello"); *)
 (*     pause; *)
 (*   end *)
+
 
 let%sync test_await ~new_feature ~print_only ~print:pdf s1 s2 =
   loop begin

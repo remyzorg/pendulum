@@ -171,7 +171,7 @@ let (++) c1 c2 = Seq (c1, c2)
 let concat_setter ident n = Ast.mk_loc ~loc:ident.loc (* creation of a setter given by a run *)
     (Format.sprintf "set~%s~arg~%d" ident.content n)
 
-let mk_ml_action deps mr a =
+let rec mk_ml_action deps mr a =
   let open Flowgraph in
   match a with
   | Emit vs -> mr := SignalSet.add vs.signal !mr; mls @@ MLemit vs
@@ -182,6 +182,9 @@ let mk_ml_action deps mr a =
   | Instantiate_run (id, sigs, loc) ->
     let inst_int_id, machine_id = remove_ident_renaming id in
     mls @@ MLassign_machine (inst_int_id, (machine_id, sigs, loc))
+  | Compressed (la, ra) ->
+    mk_ml_action deps mr la ++ mk_ml_action deps mr ra
+
 
 let (<::) sel l =
   let open Selection_tree in
