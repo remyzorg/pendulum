@@ -144,6 +144,7 @@ module type S = sig
 
   module Analysis : sig
     val blocking : Tagged.t -> bool
+    val non_blocking : Tagged.t -> bool
     val filter_dead_trees : Tagged.t -> Tagged.t
   end
 
@@ -571,7 +572,7 @@ module Make (E : Exp) = struct
         | Seq (st1, st2) | Present (_, st1, st2) ->
           edge false x.id st1.id; edge true x.id st2.id;
           visit st1; visit st2
-        | Par (st1, st2) -> 
+        | Par (st1, st2) ->
           edge false x.id st1.id; edge false x.id st2.id;
           visit st1; visit st2
       in
@@ -595,11 +596,29 @@ module Make (E : Exp) = struct
       | Suspend (t,_) -> blocking t
       | Trap (_,t) -> blocking t
       | Exit _ -> false
-      | Present (_,t1,t2) -> blocking t1 || blocking t2
+      | Present (_,t1,t2) -> blocking t1 && blocking t2
       | Atom _ -> false
       | Signal (_,t) -> blocking t
       | Await s -> true
       | Run _ -> true
+
+    let rec non_blocking t =
+      let open Tagged in
+      match t.st.content with
+      | Loop t -> false
+      | Seq (t1,t2) -> non_blocking t1 && non_blocking t2
+      | Par (t1,t2) -> non_blocking t1 && non_blocking t2
+      | Emit _ -> true
+      | Nothing  -> true
+      | Pause  -> false
+      | Suspend (t,_) -> non_blocking t
+      | Trap (_,t) -> non_blocking t
+      | Exit _ -> true
+      | Present (_,t1,t2) -> non_blocking t1 && non_blocking t2
+      | Atom _ -> true
+      | Signal (_,t) -> non_blocking t
+      | Await s -> false
+      | Run _ -> false
 
     let change t st =
       let open Tagged in

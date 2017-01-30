@@ -123,6 +123,7 @@ module Flowgraph = struct
     module Fgtbl : Hashtbl.S with type key = flowgraph
     module FgEmitsTbl : Hashtbl.S with type key = flowgraph * flowgraph * Ast.signal
     module Fgtbl2 : Hashtbl.S with type key = flowgraph * flowgraph
+    module Grctbl : Hashtbl.S with type key = int * flowgraph * flowgraph
     module Fgtbl3 : Hashtbl.S with type key = flowgraph * flowgraph * flowgraph
     module Fgstbl : Hashtbl.S with type key = flowgraph list
 
@@ -184,6 +185,12 @@ module Flowgraph = struct
         type t = flowgraph
         let hash = Hashtbl.hash
         let equal = (==)
+      end)
+
+    module Grctbl = Hashtbl.Make(struct
+        type t = int * flowgraph * flowgraph
+        let hash = Hashtbl.hash
+        let equal (i1, a1, b1) (i2, a2, b2) = i1 = i2 && (a1 == a2) && (b1 == b2)
       end)
 
     module FgEmitsTbl = Hashtbl.Make(struct
@@ -305,28 +312,30 @@ module Flowgraph = struct
           end)
       in aux 0 fmt t
 
-    let pp_action_dot fmt a =
-      Format.(
-          match a with
-          | Emit vs -> fprintf fmt "emit <B><FONT COLOR=\"blue\">%s</FONT><B>" vs.signal.ident.content
-          | Atom e -> fprintf fmt "atom"
-          | Enter i -> fprintf fmt "<FONT COLOR=\"darkgreen\">enter %d</FONT>" i
-          | Exit i -> fprintf fmt "<FONT COLOR=\"red\">exit %d</FONT>" i
-          | Instantiate_run (id, _, _) -> fprintf fmt "<FONT COLOR=\"darkgreen\">instantiate %s<FONT>" id.content
-          | Local_signal vs -> fprintf fmt "<FONT COLOR=\"darkgreen\">signal %s</FONT>" vs.signal.ident.content
-          | Compressed (a, a') -> fprintf fmt "%a;\n%a" pp_action a pp_action a')
+    let rec pp_action_dot fmt a =
+      let open Format in
+      let open Dot_pp in
+      match a with
+      | Emit vs -> fprintf fmt "emit %a" (font blue (bold pp_print_string)) vs.signal.ident.content
+      | Atom e -> fprintf fmt "atom"
+      | Enter i -> fprintf fmt "enter %a" (bold @@ font darkgreen pp_print_int) i
+      | Exit i -> fprintf fmt "exit %a" (bold @@ font red pp_print_int) i
+      | Instantiate_run (id, _, _) ->
+        fprintf fmt "instantiate %a" (font darkgreen (pp_print_string)) id.content
+      | Local_signal vs -> fprintf fmt "signal %a" (font darkgreen pp_print_string) vs.signal.ident.content
+      | Compressed (a, a') -> fprintf fmt "%a ;%s%a" pp_action_dot a br pp_action_dot a'
 
     let pp_dot fmt t =
-      Format.(begin
-          match t with
-          | Call (a, _) -> fprintf fmt "%a" pp_action_dot a
-          | Test(Sync (i1, i2), _, _, _) -> fprintf fmt "sync(%d, %d)" i1 i2
-          | Test (tv, _, _, _) -> fprintf fmt "test <B>%a</B>  " pp_test_value_dot tv
-          | Fork (_, _, _) -> fprintf fmt "fork"
-          | End_test -> fprintf fmt "end_test"
-          | Pause -> fprintf fmt "pause"
-          | Finish -> fprintf fmt "finish"
-        end)
+      let open Format in
+      let open Dot_pp in
+      match t with
+      | Call (a, _) -> fprintf fmt "%a" pp_action_dot a
+      | Test(Sync (i1, i2), _, _, _) -> fprintf fmt "sync(%d, %d)" i1 i2
+      | Test (tv, _, _, _) -> fprintf fmt "test %a " (bold pp_test_value_dot) tv
+      | Fork (_, _, _) -> fprintf fmt "fork"
+      | End_test -> fprintf fmt "end_test"
+      | Pause -> fprintf fmt "pause"
+      | Finish -> fprintf fmt "finish"
 
 
     let pp_test_value_dot fmt tv =
@@ -440,12 +449,6 @@ module Flowgraph = struct
         let my_id = id () in
         fprintf fmt "N%d [%s label=<%a>]; @\n" my_id (style_of_node fg) pp_dot fg;
         let fg1_id, fg2_id = visit t1, visit t2 in
-        begin match end_br with
-          | None -> ()
-          | Some endb_tree ->
-            let end_id = visit endb_tree in
-            fprintf fmt "N%d -> N%d [style = dotted];@\n" my_id end_id;
-        end;
         fprintf fmt "N%d -> N%d;@\n" my_id fg1_id;
         fprintf fmt "N%d -> N%d %s;@\n" my_id fg2_id shape;
         my_id
@@ -507,7 +510,7 @@ module Of_ast = struct
 
     let call env s fg =
       let c = Fg.Call (s, fg) in
-      add_parent env c fg; c
+      add_parent env fg c; c
 
     let exit_node env p next = call env (Fg.Exit p.Tagged.id) next
     let enter_node env p next = call env (Fg.Enter p.Tagged.id) next
@@ -523,10 +526,10 @@ module Of_ast = struct
     let memo_rec_build h f =
       let open Tagged in
       let rec g env x p e =
-        try Hashtbl.find h (x.id, p, e) with
+        try Fg.Grctbl.find h (x.id, p, e) with
         | Not_found ->
           let y = f g env x p e in
-          Hashtbl.add h (x.id, p, e) y; y
+          Fg.Grctbl.add h (x.id, p, e) y; y
       in g
 
 
@@ -535,7 +538,12 @@ module Of_ast = struct
       let open Tagged in let open Fg in
       let surface surface env p pause endp =
         match p.st.content with
-        | Pause -> enter_node env p pause
+        | Pause ->
+          if StringSet.mem "new_feature" options then
+            Format.printf "Je passe dans S(Pause) %d (%a : %d | %a : %d)\n"
+              p.id pp_head pause (Obj.magic pause) pp_head endp (Obj.magic endp)
+          ;
+          enter_node env p pause
 
         | Await (s, atopt) ->
           enter_node env p @@
@@ -571,7 +579,6 @@ module Of_ast = struct
         | Loop q ->
           enter_node env p
           @@ surface env q pause
-          (* @@ if Ast.Analysis.blocking q then endp else *)
             pause
 
         | Present ((s, atopt), q, r) ->
@@ -580,10 +587,7 @@ module Of_ast = struct
           @@ test_node env (Signal (s, atopt)) (
             surface env q pause end_pres,
             surface env r pause end_pres,
-            if StringSet.mem "new_feature" options then
-              Some end_pres
-            else
-              None
+            None
           )
 
         | Run (id, sigs, loc) ->
@@ -643,12 +647,10 @@ module Of_ast = struct
         | Seq (q, r) ->
           let end_seq = exit_node env p endp in
           let depth_r = depth env r pause endp in
-          if Ast.Analysis.blocking q then begin
+          if Ast.Analysis.non_blocking q then depth_r else
             let surf_r = surface env r pause end_seq in
             let depth_q = depth env q pause surf_r in
             test_node env (Selection q.id) (depth_q, depth_r, Some pause)
-          end
-          else depth_r
 
         | Par (q, r) ->
           let syn = try Hashtbl.find env.synctbl (q.id, r.id) with
@@ -670,11 +672,14 @@ module Of_ast = struct
 
         | Present (s, q, r) ->
           let end_pres = exit_node env p endp in
-          test_node env (Selection q.id) (
-            depth env q pause end_pres,
-            depth env r pause end_pres,
-            None
-          )
+          if Ast.Analysis.non_blocking q then
+            depth env r pause end_pres
+          else
+            test_node env (Selection q.id) (
+              depth env q pause end_pres,
+              depth env r pause end_pres,
+              None
+            )
 
         | Run (id, sigs, loc) ->
           let endrun = exit_node env p endp in
@@ -691,7 +696,8 @@ module Of_ast = struct
 
         | Trap (Label s, q) ->
           let end_trap = exit_node env p endp in
-          depth {env with exits = StringMap.add s.content end_trap env.exits} q pause end_trap
+          depth {env with exits =
+                            StringMap.add s.content end_trap env.exits} q pause end_trap
       in memo_rec_build h depth
 
     let compress env fg =
@@ -702,15 +708,16 @@ module Of_ast = struct
           let child_comp = compress child in
           begin match child_comp with
           | Call (a', next_child) ->
-            Format.printf "Need to compress (me : %a) @\n" pp_action a;
+            Format.printf "Need to compress (me : %a) (child : %a) @\n"
+              pp_action a pp_action a';
             begin match get_parents env child with
               | [parent] when fg == parent ->
-                Format.printf "   I'm the only one @\n";
+                Format.printf "   ONLY one @\n";
                 Call (Compressed (a, a'), next_child)
               | l ->
-                Format.printf "   I'm NOT the only one : ";
+                Format.printf "   NOT only one : ";
                 Format.printf "[%a]"
-                  (MList.pp_iter ~sep:", " Fg.pp_head) l;
+                  (MList.pp_iter ~sep:"; " Fg.pp_head) l;
                 Format.printf "@\n";
                 Call (a, child_comp)
             end
@@ -719,10 +726,7 @@ module Of_ast = struct
         | Test (test_value, then_br, else_br, end_fg_opt) ->
           let then_br' = compress then_br in
           let else_br' = compress else_br in
-          let end_fg_opt' = match end_fg_opt with
-            | Some end_fg -> Some (compress end_fg)
-            | None -> None
-          in
+          let end_fg_opt' = Option.map compress end_fg_opt in
           Test (test_value, then_br', else_br', end_fg_opt')
         | Fork (lfg, rfg, sync_fg) ->
           let lfg' = compress lfg in
@@ -744,13 +748,13 @@ module Of_ast = struct
         parents = Hashtbl.create 17;
       } in
 
-      let depthtbl, surftbl = Hashtbl.create 30, Hashtbl.create 30 in
+      let depthtbl, surftbl = Grctbl.create 30, Grctbl.create 30 in
 
       (* creates the surface function with the table, to be passed to depth *)
-      let surface = surface options surftbl in
-
-      let s = surface env p Pause Finish in
-      let d = depth options depthtbl surface env p Pause Finish in
+      let surf = surface options surftbl in
+      let dep = depth options depthtbl in
+      let s = surf env p Pause Finish in
+      let d = dep surf env p Pause Finish in
 
       let endsync = match d with
         | Fork (_ , _, sync) -> Some sync

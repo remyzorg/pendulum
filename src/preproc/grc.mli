@@ -83,6 +83,7 @@ module Flowgraph : sig
     module Fgtbl : Hashtbl.S with type key = flowgraph
     module FgEmitsTbl : Hashtbl.S with type key = flowgraph * flowgraph * Ast.signal
     module Fgtbl2 : Hashtbl.S with type key = flowgraph * flowgraph
+    module Grctbl : Hashtbl.S with type key = int * flowgraph * flowgraph
     module Fgtbl3 : Hashtbl.S with type key = flowgraph * flowgraph * flowgraph
     module Fgstbl : Hashtbl.S with type key = flowgraph list
 

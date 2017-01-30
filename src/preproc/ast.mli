@@ -184,6 +184,7 @@ module type S = sig
 
   module Analysis : sig
     val blocking : Tagged.t -> bool
+    val non_blocking : Tagged.t -> bool
     val filter_dead_trees : Tagged.t -> Tagged.t
   end
 
