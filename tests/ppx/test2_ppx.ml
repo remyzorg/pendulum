@@ -281,11 +281,16 @@ let%sync example_edwards_paper =
 
 let%sync test_await ~new_feature ~print_only ~print:pdf s1 s2 =
   loop begin
-    present s1 !(print_endline "hello1") (pause; pause)
-    ||
-    present s2 !(print_endline "hello1") (pause; pause);
+    present s1 !(print_endline "hello1") pause;
     pause
   end
+  ||
+  loop begin
+    present s2 !(print_endline "hello2") pause;
+    pause
+  end
+
+
 
 
 

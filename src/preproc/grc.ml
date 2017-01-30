@@ -114,7 +114,6 @@ module Flowgraph = struct
       | Call of action * t
       | Test of test_value * t * t * t option (* then * else * end *)
       | Fork of t * t * t (* left * right * sync *)
-      | End_test
       | Pause
       | Finish
 
@@ -123,12 +122,15 @@ module Flowgraph = struct
     module Fgtbl : Hashtbl.S with type key = flowgraph
     module FgEmitsTbl : Hashtbl.S with type key = flowgraph * flowgraph * Ast.signal
     module Fgtbl2 : Hashtbl.S with type key = flowgraph * flowgraph
-    module Grctbl : Hashtbl.S with type key = int * flowgraph * flowgraph
+    module Fgtblid : Hashtbl.S with type key = int * flowgraph
+    module Grctbl : Hashtbl.S with type key = Ast.Tagged.t * flowgraph * flowgraph
     module Fgtbl3 : Hashtbl.S with type key = flowgraph * flowgraph * flowgraph
     module Fgstbl : Hashtbl.S with type key = flowgraph list
 
     val memo_rec : (module Hashtbl.S with type key = 'a) ->
       (('a -> 'b) -> 'a -> 'b) -> 'a -> 'b
+
+    val compress : ?env:(t list Fgtbl.t) -> t -> t
 
     type error =
       | Unbound_label of string
@@ -174,7 +176,6 @@ module Flowgraph = struct
       | Call of action * t
       | Test of test_value * t * t * t option (* then * else * join_value *)
       | Fork of t * t * t (* left * right * sync *)
-      | End_test
       | Pause
       | Finish
 
@@ -187,10 +188,25 @@ module Flowgraph = struct
         let equal = (==)
       end)
 
-    module Grctbl = Hashtbl.Make(struct
-        type t = int * flowgraph * flowgraph
+    module Fgtblid = Hashtbl.Make(struct
+        type t = int * flowgraph
         let hash = Hashtbl.hash
-        let equal (i1, a1, b1) (i2, a2, b2) = i1 = i2 && (a1 == a2) && (b1 == b2)
+        let equal (id, fg) (id', fg') = id = id && fg == fg'
+      end)
+
+    module Grctbl = Hashtbl.Make(struct
+        open Tagged
+        type t = Tagged.t * flowgraph * flowgraph
+
+        let hash (ast, pausek, endk) =
+          let open Hashtbl in
+          (19 * (hash ast.id * 19 + hash pausek) +
+           (if ast.st.content == Pause then hash pausek else hash endk)) land max_int
+
+        let equal (ast, pausek, endk) (ast', pausek', endk') =
+          ast.id = ast'.id
+          && (pausek == pausek')
+          && (ast.st.content = Pause || endk == endk')
       end)
 
     module FgEmitsTbl = Hashtbl.Make(struct
@@ -234,6 +250,70 @@ module Flowgraph = struct
             let y = f g x in
             H.add h x y; y
         in g
+
+    let get_parents parents fg =
+      try Fgtbl.find parents fg with Not_found -> []
+
+    let add_parent parents_tbl fg parent =
+      let parents =
+        try Fgtbl.find parents_tbl fg with Not_found -> []
+      in
+      Fgtbl.replace parents_tbl fg (parent :: parents)
+
+    let parents ph fg =
+      let parents parents fg = match fg with
+        | Call (a, child) ->
+          add_parent ph child fg; parents child
+        | Test (test_value, then_br, else_br, end_fg_opt) ->
+          add_parent ph then_br fg; add_parent ph else_br fg;
+          parents then_br; parents else_br
+        | Fork (lfg, rfg, sync_fg) ->
+          add_parent ph lfg fg;
+          add_parent ph rfg fg;
+          parents lfg; parents rfg
+        | Pause | Finish -> ()
+      in memo_rec (module Fgtbl) parents fg
+
+    let compress ?env fg =
+      let env = match env with
+        | None ->
+          let ph = Fgtbl.create 17 in
+          parents ph fg; ph
+        | Some env -> env
+      in
+      let compress compress fg = match fg with
+        | Call (a, child) ->
+          let child_comp = compress child in
+          begin match child_comp with
+          | Call (a', next_child) ->
+            (* Format.printf "Need to compress (me : %a) (child : %a) @\n" *)
+            (*   pp_action a pp_action a'; *)
+            begin match get_parents env child with
+              | [parent] when fg == parent ->
+                (* Format.printf "   ONLY one @\n"; *)
+                Call (Compressed (a, a'), next_child)
+              | l ->
+                (* Format.printf "   NOT only one : "; *)
+                (* Format.printf "[%a]" *)
+                (*   (MList.pp_iter ~sep:"; " Fg.pp_head) l; *)
+                (* Format.printf "@\n"; *)
+                Call (a, child_comp)
+            end
+          | _ -> Call (a, child_comp)
+          end
+        | Test (test_value, then_br, else_br, end_fg_opt) ->
+          let then_br' = compress then_br in
+          let else_br' = compress else_br in
+          let end_fg_opt' = Option.map compress end_fg_opt in
+          Test (test_value, then_br', else_br', end_fg_opt')
+        | Fork (lfg, rfg, sync_fg) ->
+          let lfg' = compress lfg in
+          let rfg' = compress rfg in
+          let sync_fg' = compress sync_fg in
+          Fork (lfg', rfg', sync_fg')
+        | Pause -> Pause
+        | Finish -> Finish
+      in memo_rec (module Fgtbl) compress fg
 
     type error =
       | Unbound_label of string
@@ -307,7 +387,6 @@ module Flowgraph = struct
               fprintf fmt "%sFork(\n%a, \n%a)"
                 indent (aux @@ lvl + 1) t1 (aux @@ lvl + 1) t2
             | Pause -> fprintf fmt "%sPause" indent
-            | End_test -> fprintf fmt "%sEnd_test" indent
             | Finish -> fprintf fmt "%sFinish" indent
           end)
       in aux 0 fmt t
@@ -333,7 +412,6 @@ module Flowgraph = struct
       | Test(Sync (i1, i2), _, _, _) -> fprintf fmt "sync(%d, %d)" i1 i2
       | Test (tv, _, _, _) -> fprintf fmt "test %a " (bold pp_test_value_dot) tv
       | Fork (_, _, _) -> fprintf fmt "fork"
-      | End_test -> fprintf fmt "end_test"
       | Pause -> fprintf fmt "pause"
       | Finish -> fprintf fmt "finish"
 
@@ -377,7 +455,6 @@ module Flowgraph = struct
               fprintf fmt "%sFork(\n%a, \n%a)"
                 indent (aux @@ lvl + 1) t1 (aux @@ lvl + 1) t2
             | Pause -> fprintf fmt "%sPause" indent
-            | End_test -> fprintf fmt "%sEnd_test" indent
             | Finish -> fprintf fmt "%sFinish" indent
           end)
       in aux 0 fmt t
@@ -394,7 +471,6 @@ module Flowgraph = struct
           | Fork (t1, t2, _) ->
             fprintf fmt "Fork(%a, %a)" pp_head t1 pp_head t2
           | Pause -> fprintf fmt "Pause"
-          | End_test -> fprintf fmt "End_test"
           | Finish -> fprintf fmt "Finish"
         end)
 
@@ -405,7 +481,6 @@ module Flowgraph = struct
           | Test(Sync (i1, i2), _, _, _) -> fprintf fmt "sync(%d, %d)" i1 i2
           | Test (tv, _, _, _) -> fprintf fmt "test <B>%a</B>  " pp_test_value_dot tv
           | Fork (_, _, _) -> fprintf fmt "fork"
-          | End_test -> fprintf fmt "end_test"
           | Pause -> fprintf fmt "pause"
           | Finish -> fprintf fmt "finish"
         end)
@@ -414,7 +489,7 @@ module Flowgraph = struct
       | Call (a, _) -> "shape=oval "
       | Test (Sync _, _, _, _) -> "shape=invtrapezium"
       | Test _ -> "shape=box, "
-      | End_test | Finish -> ", fontcolor=red, "
+      | Finish -> ", fontcolor=red, "
       | Pause -> ", fontcolor=darkgreen, "
       | Fork _ -> ""
 
@@ -438,7 +513,7 @@ module Flowgraph = struct
             | Fork (t1, t2, end_branch) ->
               print_branches_to_dot fmt "" fg t1 t2 (Some end_branch)
 
-            | Pause | Finish | End_test ->
+            | Pause | Finish ->
               let my_id = id () in
               fprintf fmt "N%d [shape = none, label=<%a>]; @\n" my_id pp_dot fg;
               my_id
@@ -473,6 +548,8 @@ module Of_ast = struct
 
     val flowgraph : Ast.Tagged.env -> Options.t -> Ast.Tagged.t -> Fg.t
     val construct : Ast.Tagged.env -> Options.t -> Ast.Tagged.t -> St.t * Fg.t
+
+
   end
 
   module Make (Fg : Flowgraph.S) (St : Selection_tree.S with module Ast = Fg.Ast) = struct
@@ -484,35 +561,42 @@ module Of_ast = struct
 
     type env = {
       exits : Fg.t StringMap.t;
+      exit_nodes : Fg.t Fg.Fgtblid.t;
       under_suspend : bool;
       synctbl : (int * int, Fg.t) Hashtbl.t;
       (* A Sync is the same flow, both in S and D,
          so there is a special table for this *)
-      parents : (Fg.t, Fg.t list) Hashtbl.t
+      parents : (Fg.t list) Fg.Fgtbl.t
     }
 
-    let get_parents env fg =
-      try Hashtbl.find env.parents fg with Not_found -> []
+    let get_parents parents fg =
+      try Fg.Fgtbl.find parents fg with Not_found -> []
 
-    let add_parent env fg parent =
+    let add_parent parents_tbl fg parent =
       let parents =
-        try Hashtbl.find env.parents fg with Not_found -> []
+        try Fg.Fgtbl.find parents_tbl fg with Not_found -> []
       in
-      Hashtbl.replace env.parents fg (parent :: parents)
-
+      Fg.Fgtbl.replace parents_tbl fg (parent :: parents)
 
     let test_node env t (c1, c2, endt) =
       let open Fg in
       if c1 == c2 then c1 else
         let test = Test (t, c1, c2, endt) in
-        add_parent env c1 test; add_parent env c2 test;
+        add_parent env.parents c1 test; add_parent env.parents c2 test;
         test
 
     let call env s fg =
       let c = Fg.Call (s, fg) in
-      add_parent env fg c; c
+      add_parent env.parents fg c; c
 
-    let exit_node env p next = call env (Fg.Exit p.Tagged.id) next
+    let exit_node env p next =
+      let open Tagged in
+      try Fg.Fgtblid.find env.exit_nodes (p.id, next) with
+      | Not_found ->
+        let ex = call env (Fg.Exit p.id) next in
+        Fg.Fgtblid.add env.exit_nodes (p.id, next) ex; ex
+
+
     let enter_node env p next = call env (Fg.Enter p.Tagged.id) next
     let sync_node env c (t1, t2, endt) = test_node env (Fg.Sync (c)) (t1, t2, endt)
 
@@ -526,10 +610,10 @@ module Of_ast = struct
     let memo_rec_build h f =
       let open Tagged in
       let rec g env x p e =
-        try Fg.Grctbl.find h (x.id, p, e) with
+        try Fg.Grctbl.find h (x, p, e) with
         | Not_found ->
           let y = f g env x p e in
-          Fg.Grctbl.add h (x.id, p, e) y; y
+          Fg.Grctbl.add h (x, p, e) y; y
       in g
 
 
@@ -538,12 +622,7 @@ module Of_ast = struct
       let open Tagged in let open Fg in
       let surface surface env p pause endp =
         match p.st.content with
-        | Pause ->
-          if StringSet.mem "new_feature" options then
-            Format.printf "Je passe dans S(Pause) %d (%a : %d | %a : %d)\n"
-              p.id pp_head pause (Obj.magic pause) pp_head endp (Obj.magic endp)
-          ;
-          enter_node env p pause
+        | Pause -> enter_node env p pause
 
         | Await (s, atopt) ->
           enter_node env p @@
@@ -696,47 +775,11 @@ module Of_ast = struct
 
         | Trap (Label s, q) ->
           let end_trap = exit_node env p endp in
-          depth {env with exits =
-                            StringMap.add s.content end_trap env.exits} q pause end_trap
+          depth {env with
+                 exits = StringMap.add s.content end_trap env.exits} q pause end_trap
       in memo_rec_build h depth
 
-    let compress env fg =
-      let open Fg in
-      let compress compress fg =
-        match fg with
-        | Call (a, child) ->
-          let child_comp = compress child in
-          begin match child_comp with
-          | Call (a', next_child) ->
-            Format.printf "Need to compress (me : %a) (child : %a) @\n"
-              pp_action a pp_action a';
-            begin match get_parents env child with
-              | [parent] when fg == parent ->
-                Format.printf "   ONLY one @\n";
-                Call (Compressed (a, a'), next_child)
-              | l ->
-                Format.printf "   NOT only one : ";
-                Format.printf "[%a]"
-                  (MList.pp_iter ~sep:"; " Fg.pp_head) l;
-                Format.printf "@\n";
-                Call (a, child_comp)
-            end
-          | _ -> Call (a, child_comp)
-          end
-        | Test (test_value, then_br, else_br, end_fg_opt) ->
-          let then_br' = compress then_br in
-          let else_br' = compress else_br in
-          let end_fg_opt' = Option.map compress end_fg_opt in
-          Test (test_value, then_br', else_br', end_fg_opt')
-        | Fork (lfg, rfg, sync_fg) ->
-          let lfg' = compress lfg in
-          let rfg' = compress rfg in
-          let sync_fg' = compress sync_fg in
-          Fork (lfg', rfg', sync_fg')
-        | End_test -> End_test
-        | Pause -> Pause
-        | Finish -> Finish
-      in Fg.memo_rec (module Fgtbl) compress fg
+
 
     let flowgraph astenv options p =
       let open Fg in
@@ -745,11 +788,11 @@ module Of_ast = struct
         under_suspend = false;
         exits = StringMap.empty;
         synctbl = Hashtbl.create 17;
-        parents = Hashtbl.create 17;
+        parents = Fgtbl.create 17;
+        exit_nodes = Fgtblid.create 17;
       } in
 
       let depthtbl, surftbl = Grctbl.create 30, Grctbl.create 30 in
-
       (* creates the surface function with the table, to be passed to depth *)
       let surf = surface options surftbl in
       let dep = depth options depthtbl in
@@ -769,11 +812,7 @@ module Of_ast = struct
           Some Finish
         )
       in
-      if StringSet.mem "new_feature" options then begin
-        compress env result_fg;
-      end else begin
-        result_fg
-      end
+      Fg.compress ~env:env.parents result_fg
 
     let construct env options p =
       St.of_ast p, flowgraph env options p
@@ -878,7 +917,7 @@ module Schedule = struct
           lr := i1 :: i2 :: !lr
         | Test (_, t1, t2, _) | Fork (t1, t2, _)  ->
           aux t1; aux t2
-        | Pause | Finish | End_test -> ()
+        | Pause | Finish -> ()
       in
       let rec aux_sel sel =
         if List.mem sel.label !lr then sel.tested <- true;
@@ -911,7 +950,7 @@ module Schedule = struct
         | Call (_, t) -> aux (t, stop, s)
         | Test (_, t1, t2, _) | Fork (t1, t2, _) ->
           aux (t1, stop, s) || aux (t2, stop, s)
-        | End_test | Pause | Finish -> false
+        | Pause | Finish -> false
       in memo_rec (module Fg.FgEmitsTbl) aux (fg, stop, s)
 
 
@@ -947,7 +986,7 @@ module Schedule = struct
           let emits2, tests2 = aux (t2, stop) in
           union emits1 emits2, union tests1 tests2
 
-        | End_test | Pause | Finish -> empty, empty
+        | Pause | Finish -> empty, empty
       in memo_rec (module Fg.Fgtbl2) aux (fg, stop)
 
 
@@ -957,7 +996,7 @@ module Schedule = struct
           | Test (tv, _, _, tend) -> Test (tv, t1, t2, tend)
           | Fork (_, _, sync) -> Fork (t1, t2, sync)
           | Call (a, _) -> Call(a, t1)
-          | End_test | Pause | Finish -> fg
+          | Pause | Finish -> fg
         in newfg
       in memo_rec (module Fgtbl3) children (fg, t1, t2)
 
@@ -971,7 +1010,7 @@ module Schedule = struct
           | Call (a, t) -> aux (t, elt)
           | Test (_, t1, t2, _) | Fork (t1, t2, _) ->
             Option.mapn (aux (t1, elt)) (fun () -> aux (t2, elt))
-          | End_test | Pause | Finish -> None
+          | Pause | Finish -> None
       in memo_rec (module Fgtbl2) aux (fg, t)
 
 
@@ -988,7 +1027,7 @@ module Schedule = struct
             let res2, t2' = aux (t2, elt) in
             res1 || res2,
             children fg (if res1 then t1' else t1) (if res2 then t2' else t2)
-          | End_test | Pause | Finish -> false, fg
+          | Pause | Finish -> false, fg
       in memo_rec (module Fgtbl2) aux (fg, elt)
 
 
@@ -1002,7 +1041,7 @@ module Schedule = struct
           | Some v1, Some v2 when v1 == v2 && v1 <> Pause && v1 <> Finish -> Some v1
           | _ -> None
           end
-        | End_test | Pause | Finish -> None
+        | Pause | Finish -> None
       end
 
     let leads_to_end stop fg =
@@ -1011,7 +1050,7 @@ module Schedule = struct
         | Call (Exit n, t) -> Option.map (max n) (aux (stop, t))
         | Call (a, t) -> aux (stop, t)
         | Test (_, t1, t2, _) | Fork (t1, t2, _) -> None
-        | End_test | Pause | Finish -> Some 0
+        | Pause | Finish -> Some 0
       in memo_rec (module Fgtbl2) aux (stop, fg)
 
     let rec replace_join fg1 fg2 replf =
@@ -1032,7 +1071,7 @@ module Schedule = struct
             in
             let fg1' = children fg1 t1 t2 in
             fg1', !fg2_r
-          | End_test | Pause | Finish -> fg1, fg2
+          | Pause | Finish -> fg1, fg2
       in memo_rec (module Fgtbl2) aux (fg1, fg2)
 
 
@@ -1064,7 +1103,7 @@ module Schedule = struct
                   | None, None -> assert false
                 end
 
-              | (Finish | Pause | End_test ), fg
+              | (Finish | Pause ), fg
               | fg, (Finish | Pause) ->
                 Fg.error ~loc:Ast.Tagged.(env.pname.loc) (Par_leads_to_finish fg2)
 
@@ -1085,7 +1124,7 @@ module Schedule = struct
                   match fg2 with
                   | Call (a, t) ->
                     Call (a, sequence_of_fork stop t fg1)
-                  | End_test | Pause | Finish -> assert false (* TODO: Raise exn *)
+                  | Pause | Finish -> assert false (* TODO: Raise exn *)
                   | Test (test, t1, t2, joinfg2) ->
                     let t1, t2 = replace_join t1 t2 (fun x ->
                         sequence_of_fork stop fg1 x
@@ -1135,11 +1174,10 @@ module Schedule = struct
             | Fork (t1, t2, sync) -> sequence_of_fork sync (visit t1) (visit t2)
             | Pause -> Pause
             | Finish -> Finish
-            | End_test -> End_test
           in
           Fgtbl.add visit_tbl fg fg'; fg'
       in
-      visit fg
+      Fg.compress @@ visit fg
 
 
 
@@ -1179,7 +1217,7 @@ module Schedule = struct
               | Call (a, t) -> aux t
               | Test (_, t1, t2, _) | Fork (t1, t2, _) ->
                 aux t1; aux t2
-              | End_test | Pause | Finish -> ()
+              | Pause | Finish -> ()
             end
         in
         aux fg; Fgtbl.length h

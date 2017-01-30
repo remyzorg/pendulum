@@ -74,7 +74,6 @@ module Flowgraph : sig
       | Call of action * t
       | Test of test_value * t * t * t option (* then * else *)
       | Fork of t * t * t (* left * right * sync *)
-      | End_test
       | Pause
       | Finish
 
@@ -83,13 +82,15 @@ module Flowgraph : sig
     module Fgtbl : Hashtbl.S with type key = flowgraph
     module FgEmitsTbl : Hashtbl.S with type key = flowgraph * flowgraph * Ast.signal
     module Fgtbl2 : Hashtbl.S with type key = flowgraph * flowgraph
-    module Grctbl : Hashtbl.S with type key = int * flowgraph * flowgraph
+    module Fgtblid : Hashtbl.S with type key = int * flowgraph
+    module Grctbl : Hashtbl.S with type key = Ast.Tagged.t * flowgraph * flowgraph
     module Fgtbl3 : Hashtbl.S with type key = flowgraph * flowgraph * flowgraph
     module Fgstbl : Hashtbl.S with type key = flowgraph list
 
     val memo_rec : (module Hashtbl.S with type key = 'a) ->
       (('a -> 'b) -> 'a -> 'b) -> 'a -> 'b
 
+    val compress : ?env:(t list Fgtbl.t) -> t -> t
 
     type error =
       | Unbound_label of string
