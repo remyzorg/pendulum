@@ -174,6 +174,7 @@ let%sync reincarnation1 o1 o2 =
     !(print_string "ok");
   end
 
+(* Check never returns *)
 let%sync reincarnation2 o1 o2 =
   loop (
     let s = () in
@@ -271,24 +272,27 @@ let%sync example_edwards_paper =
   || present b (emit c)
   || present d (emit e)
 
-(* let%sync test_await ~new_feature ~print_only ~print:pdf s = *)
-(*   loop begin *)
-(*     await s; *)
-(*     !(print_endline "hello"); *)
-(*     pause; *)
-(*   end *)
-
-
-let%sync test_await ~new_feature ~print_only ~print:pdf s1 s2 =
+let%sync test_await ~new_feature ~print_only ~print:pdf s =
   loop begin
-    present s1 !(print_endline "hello1") pause;
-    pause
+    await s;
+    !(print_endline "hello");
+    pause;
+  end
+
+
+let%sync test_await ~new_feature ~print:(pdf, dot) s1 s2 s3 =
+  begin
+    present s1 !(print_endline "hello1");
+    emit s2;
+    present s3 !(print_endline "hello3")
   end
   ||
   loop begin
-    present s2 !(print_endline "hello2") pause;
-    pause
+    present s2 !(print_endline "hello2");
+    emit s3;
   end
+
+
 
 
 

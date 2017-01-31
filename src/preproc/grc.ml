@@ -136,6 +136,7 @@ module Flowgraph = struct
       | Unbound_label of string
       | Cyclic_causality of t * Ast.signal list
       | Par_leads_to_finish of t
+      | Invariant_violation of t * string
 
     val error : loc:Ast.loc -> error -> 'a
 
@@ -286,17 +287,10 @@ module Flowgraph = struct
           let child_comp = compress child in
           begin match child_comp with
           | Call (a', next_child) ->
-            (* Format.printf "Need to compress (me : %a) (child : %a) @\n" *)
-            (*   pp_action a pp_action a'; *)
             begin match get_parents env child with
               | [parent] when fg == parent ->
-                (* Format.printf "   ONLY one @\n"; *)
                 Call (Compressed (a, a'), next_child)
               | l ->
-                (* Format.printf "   NOT only one : "; *)
-                (* Format.printf "[%a]" *)
-                (*   (MList.pp_iter ~sep:"; " Fg.pp_head) l; *)
-                (* Format.printf "@\n"; *)
                 Call (a, child_comp)
             end
           | _ -> Call (a, child_comp)
@@ -315,47 +309,57 @@ module Flowgraph = struct
         | Finish -> Finish
       in memo_rec (module Fgtbl) compress fg
 
-    type error =
-      | Unbound_label of string
-      | Cyclic_causality of t * Ast.signal list
-      | Par_leads_to_finish of t
-
-    exception Error of Ast.loc * error
-
-    let print_error fmt e =
-      let open Format in
-      fprintf fmt "Error: %s @\n"
-        begin match e with
-          | Unbound_label s -> "unbound label " ^ s
-          | Cyclic_causality (fg, sigs) ->
-            Format.sprintf "Cyclic causality on [%s]"
-              (String.concat "; " @@ List.map Ast.(fun s -> s.ident.content) sigs)
-          | Par_leads_to_finish fg -> "Parallel leads to pause or exit"
-        end
-
-    let error ~loc e = raise (Error (loc, e))
 
     let pp_test_value_dot fmt tv =
       Format.(begin
           match tv with
-          | Signal (s, exp) -> fprintf fmt "%s ?" s.ident.content
+          | Signal (s, exp) ->
+            fprintf fmt "%a"
+            Dot_pp.(font blue (fun fmt x -> fprintf fmt "%s ?" x)) s.ident.content
           | Selection i -> fprintf fmt "%d ?" i
           | Finished -> fprintf fmt "finished ?"
           | Sync (i1, i2) -> fprintf fmt "sync(%d, %d)" i1 i2
           | Is_paused (id, _, _) -> fprintf fmt "paused %s ?" id.content
         end)
 
+    let rec pp_action_dot fmt a =
+      let open Format in
+      let open Dot_pp in
+      match a with
+      | Emit vs ->
+        fprintf fmt "%a"
+          (font blue (bold str)) vs.signal.ident.content
+      | Atom e -> fprintf fmt "atom"
+      | Enter i -> fprintf fmt "%a" (bold @@ font darkgreen int) i
+      | Exit i -> fprintf fmt "%a" (bold @@ font red int) i
+      | Instantiate_run (id, _, _) ->
+        fprintf fmt "instantiate %a" (font darkgreen str) id.content
+      | Local_signal vs ->
+        fprintf fmt "signal %a" (font darkgreen str) vs.signal.ident.content
+      | Compressed (a, a') -> fprintf fmt "%a; %a" pp_action_dot a pp_action_dot a'
+
+    let pp_dot fmt t =
+      let open Format in
+      let open Dot_pp in
+      match t with
+      | Call (a, _) -> fprintf fmt "%a" pp_action_dot a
+      | Test(Sync (i1, i2), _, _, _) -> fprintf fmt "sync(%d, %d)" i1 i2
+      | Test (tv, _, _, _) -> fprintf fmt "%a " (bold pp_test_value_dot) tv
+      | Fork (_, _, _) -> fprintf fmt "fork"
+      | Pause -> fprintf fmt "pause"
+      | Finish -> fprintf fmt "finish"
+
     let pp_test_value fmt tv =
       Format.(begin
           match tv with
           | Signal (s, None) -> fprintf fmt "Signal (%s) " s.ident.content
-          | Signal (s, Some at) -> fprintf fmt "Signal (%s, %a) " s.ident.content printexp at.exp
+          | Signal (s, Some at) ->
+            fprintf fmt "Signal (%s, %a) " s.ident.content printexp at.exp
           | Selection i -> fprintf fmt "Selection %d" i
           | Sync (i1, i2) -> fprintf fmt "Sync(%d, %d)" i1 i2
           | Finished -> fprintf fmt "Finished"
           | Is_paused (id, _, _) -> fprintf fmt "Is_paused %s" id.content
         end)
-
 
     let rec pp_action fmt a =
       Format.(
@@ -366,124 +370,43 @@ module Flowgraph = struct
           | Exit i -> fprintf fmt "Exit %d" i
           | Instantiate_run (id, _, _) -> fprintf fmt "Instantiate_run %s" id.content
           | Local_signal vs -> fprintf fmt "Local_signal %s" vs.signal.ident.content
-          | Compressed (a, a') -> fprintf fmt "%a,%a" pp_action a pp_action a'
+          | Compressed (a, a') -> fprintf fmt "%a; %a" pp_action a pp_action a'
       )
 
     let rec pp fmt t =
       let rec aux lvl fmt t =
         let indent = String.init lvl (fun _ -> ' ') in
-        Format.(begin
-            match t with
-            | Call (a, t) ->
-              fprintf fmt "%sCall(%a,\n%a)"
-                indent pp_action a (aux (lvl+ 1)) t
-            | Test(Sync (i1, i2), t1, t2, _) ->
-              fprintf fmt "%sSync((%d, %d),\n%a,\n%a)" indent
-                i1 i2 (aux @@ lvl + 1) t1 (aux @@ lvl + 1) t2
-            | Test (tv, t1, t2, _) ->
-              fprintf fmt "%sTest(%a,\n%a,\n%a) "
-                indent pp_test_value tv (aux @@ lvl + 1) t1 (aux @@ lvl + 1) t2
-            | Fork (t1, t2, _) ->
-              fprintf fmt "%sFork(\n%a, \n%a)"
-                indent (aux @@ lvl + 1) t1 (aux @@ lvl + 1) t2
-            | Pause -> fprintf fmt "%sPause" indent
-            | Finish -> fprintf fmt "%sFinish" indent
-          end)
-      in aux 0 fmt t
-
-    let rec pp_action_dot fmt a =
-      let open Format in
-      let open Dot_pp in
-      match a with
-      | Emit vs -> fprintf fmt "emit %a" (font blue (bold pp_print_string)) vs.signal.ident.content
-      | Atom e -> fprintf fmt "atom"
-      | Enter i -> fprintf fmt "enter %a" (bold @@ font darkgreen pp_print_int) i
-      | Exit i -> fprintf fmt "exit %a" (bold @@ font red pp_print_int) i
-      | Instantiate_run (id, _, _) ->
-        fprintf fmt "instantiate %a" (font darkgreen (pp_print_string)) id.content
-      | Local_signal vs -> fprintf fmt "signal %a" (font darkgreen pp_print_string) vs.signal.ident.content
-      | Compressed (a, a') -> fprintf fmt "%a ;%s%a" pp_action_dot a br pp_action_dot a'
-
-    let pp_dot fmt t =
-      let open Format in
-      let open Dot_pp in
-      match t with
-      | Call (a, _) -> fprintf fmt "%a" pp_action_dot a
-      | Test(Sync (i1, i2), _, _, _) -> fprintf fmt "sync(%d, %d)" i1 i2
-      | Test (tv, _, _, _) -> fprintf fmt "test %a " (bold pp_test_value_dot) tv
-      | Fork (_, _, _) -> fprintf fmt "fork"
-      | Pause -> fprintf fmt "pause"
-      | Finish -> fprintf fmt "finish"
-
-
-    let pp_test_value_dot fmt tv =
-      Format.(begin
-          match tv with
-          | Signal (s, exp) -> fprintf fmt "%s ?" s.ident.content
-          | Selection i -> fprintf fmt "%d ?" i
-          | Finished -> fprintf fmt "finished ?"
-          | Sync (i1, i2) -> fprintf fmt "sync(%d, %d)" i1 i2
-          | Is_paused (id, _, _) -> fprintf fmt "paused %s ?" id.content
-        end)
-
-    let pp_test_value fmt tv =
-      Format.(begin
-          match tv with
-          | Signal (s, None) -> fprintf fmt "Signal (%s) " s.ident.content
-          | Signal (s, Some at) -> fprintf fmt "Signal (%s, %a) " s.ident.content printexp at.exp
-          | Selection i -> fprintf fmt "Selection %d" i
-          | Sync (i1, i2) -> fprintf fmt "Sync(%d, %d)" i1 i2
-          | Finished -> fprintf fmt "Finished"
-          | Is_paused (id, _, _) -> fprintf fmt "Is_paused %s" id.content
-        end)
-
-    let rec pp fmt t =
-      let rec aux lvl fmt t =
-        let indent = String.init lvl (fun _ -> ' ') in
-        Format.(begin
-            match t with
-            | Call (a, t) ->
-              fprintf fmt "%sCall(%a,\n%a)"
-                indent pp_action a (aux (lvl + 1)) t
-            | Test(Sync (i1, i2), t1, t2, _) ->
-              fprintf fmt "%sSync((%d, %d),\n%a,\n%a)" indent
-                i1 i2 (aux @@ lvl + 1) t1 (aux @@ lvl + 1) t2
-            | Test (tv, t1, t2, _) ->
-              fprintf fmt "%sTest(%a,\n%a,\n%a) "
-                indent pp_test_value tv (aux @@ lvl + 1) t1 (aux @@ lvl + 1) t2
-            | Fork (t1, t2, _) ->
-              fprintf fmt "%sFork(\n%a, \n%a)"
-                indent (aux @@ lvl + 1) t1 (aux @@ lvl + 1) t2
-            | Pause -> fprintf fmt "%sPause" indent
-            | Finish -> fprintf fmt "%sFinish" indent
-          end)
+        let open Format in
+        match t with
+        | Call (a, t) ->
+          fprintf fmt "%sCall([%a],\n%a)"
+            indent pp_action a (aux (lvl + 1)) t
+        | Test(Sync (i1, i2), t1, t2, _) ->
+          fprintf fmt "%sSync((%d, %d),\n%a,\n%a)" indent
+            i1 i2 (aux @@ lvl + 1) t1 (aux @@ lvl + 1) t2
+        | Test (tv, t1, t2, _) ->
+          fprintf fmt "%sTest(%a,\n%a,\n%a) "
+            indent pp_test_value tv (aux @@ lvl + 1) t1 (aux @@ lvl + 1) t2
+        | Fork (t1, t2, _) ->
+          fprintf fmt "%sFork(\n%a, \n%a)"
+            indent (aux @@ lvl + 1) t1 (aux @@ lvl + 1) t2
+        | Pause -> fprintf fmt "%sPause" indent
+        | Finish -> fprintf fmt "%sFinish" indent
       in aux 0 fmt t
 
     let rec pp_head fmt t =
-      Format.(begin
-          match t with
-          | Call (a, t) ->
-            fprintf fmt "Call(%a,_)" pp_action a
-          | Test(Sync (i1, i2), t1, t2, _) ->
-            fprintf fmt "Sync((%d, %d),_,_)" i1 i2
-          | Test (tv, t1, t2, _) ->
-            fprintf fmt "Test(%a,_,_) " pp_test_value tv
-          | Fork (t1, t2, _) ->
-            fprintf fmt "Fork(%a, %a)" pp_head t1 pp_head t2
-          | Pause -> fprintf fmt "Pause"
-          | Finish -> fprintf fmt "Finish"
-        end)
-
-    let pp_dot fmt t =
-      Format.(begin
-          match t with
-          | Call (a, _) -> fprintf fmt "%a" pp_action_dot a
-          | Test(Sync (i1, i2), _, _, _) -> fprintf fmt "sync(%d, %d)" i1 i2
-          | Test (tv, _, _, _) -> fprintf fmt "test <B>%a</B>  " pp_test_value_dot tv
-          | Fork (_, _, _) -> fprintf fmt "fork"
-          | Pause -> fprintf fmt "pause"
-          | Finish -> fprintf fmt "finish"
-        end)
+      let open Format in
+      match t with
+      | Call (a, t) ->
+        fprintf fmt "Call([%a],_)" pp_action a
+      | Test(Sync (i1, i2), t1, t2, _) ->
+        fprintf fmt "Sync((%d, %d),_,_)" i1 i2
+      | Test (tv, t1, t2, _) ->
+        fprintf fmt "Test(%a,_,_) " pp_test_value tv
+      | Fork (t1, t2, _) ->
+        fprintf fmt "Fork(%a, %a)" pp_head t1 pp_head t2
+      | Pause -> fprintf fmt "Pause"
+      | Finish -> fprintf fmt "Finish"
 
     let style_of_node = function
       | Call (a, _) -> "shape=oval "
@@ -531,6 +454,32 @@ module Flowgraph = struct
       fprintf fmt "@[<hov 2>digraph flowgraph {@\n";
       ignore(visit fg);
       fprintf fmt "}@]@\n"
+
+    type error =
+      | Unbound_label of string
+      | Cyclic_causality of t * Ast.signal list
+      | Par_leads_to_finish of t
+      | Invariant_violation of t * string
+
+    exception Error of Ast.loc * error
+
+    let print_error fmt e =
+      let open Format in
+      fprintf fmt "Error: %a @\n" (fun fmt e ->
+        begin match e with
+          | Unbound_label s -> fprintf fmt "unbound label %s" s
+          | Cyclic_causality (fg, sigs) ->
+            fprintf fmt "Cyclic causality on [%a]"
+              (MList.pp_iter ~sep:"; "
+                 (fun fmt s -> fprintf fmt "%s" s.ident.content)) sigs
+          | Par_leads_to_finish fg ->
+            fprintf fmt "Parallel leads to pause or exit"
+          | Invariant_violation (fg, err) ->
+            fprintf fmt "An invariant is broken. %s. %a" err pp fg
+        end
+        ) e
+
+    let error ~loc e = raise (Error (loc, e))
 
 
   end
@@ -843,7 +792,7 @@ module Schedule = struct
     val replace_join : Fg.t -> Fg.t -> (Fg.t -> Fg.t)
       -> Fg.t * Fg.t
     val children: Fg.t -> Fg.t -> Fg.t -> Fg.t
-    val interleave: Fg.Ast.Tagged.env -> Fg.t -> Fg.t
+    val interleave: StringSet.t -> Fg.Ast.Tagged.env -> Fg.t -> Fg.t
 
     module Stats : sig
       val size : Fg.t -> int
@@ -1044,15 +993,6 @@ module Schedule = struct
         | Pause | Finish -> None
       end
 
-    let leads_to_end stop fg =
-      let aux aux (stop, fg) = match fg with
-        | fg when fg == stop -> None
-        | Call (Exit n, t) -> Option.map (max n) (aux (stop, t))
-        | Call (a, t) -> aux (stop, t)
-        | Test (_, t1, t2, _) | Fork (t1, t2, _) -> None
-        | Pause | Finish -> Some 0
-      in memo_rec (module Fgtbl2) aux (stop, fg)
-
     let rec replace_join fg1 fg2 replf =
       let rec aux aux (fg1, fg2) =
         let res, fg2' = find_and_replace replf fg2 fg1 in
@@ -1079,90 +1019,141 @@ module Schedule = struct
       | (Fg.Test (Fg.Sync c, _, _, _)) -> c
       | _ -> 0, 0
 
-    let rec interleave env fg =
+    let eq_fork_id fg1 fg2 = fork_id fg1 = fork_id fg2
+
+    (* type action = *)
+    (*   | Emit of valued_signal *)
+    (*   | Atom of atom *)
+    (*   | Enter of int *)
+    (*   | Exit of int *)
+    (*   | Local_signal of valued_signal *)
+    (*   | Instantiate_run of ident * signal run_param list * loc *)
+    (*   | Compressed of action * action *)
+
+    (* type test_value = *)
+    (*   | Signal of signal * atom option *)
+    (*   | Selection of int *)
+    (*   | Sync of (int * int) *)
+    (*   | Is_paused of ident * signal run_param list * loc *)
+    (*   | Finished *)
+
+    (* type t = *)
+    (*   | Call of action * t *)
+    (*   | Test of test_value * t * t * t option (\* then * else * join_value *\) *)
+    (*   | Fork of t * t * t (\* left * right * sync *\) *)
+    (*   | Pause *)
+    (*   | Finish *)
+
+    let inner_interleave options env fork_tbl =
+      let rec interleave (stop: Fg.t) fg1 fg2 =
+        try Fgtbl2.find fork_tbl (fg1, fg2) with | Not_found ->
+        try Fgtbl2.find fork_tbl (fg2, fg1) with | Not_found ->
+          let fg = match fg1, fg2 with
+            | fg1, fg2 when eq_fork_id fg1 stop -> fg2
+            | fg1, fg2 when eq_fork_id fg2 stop -> fg1
+
+            | Call (action, t), fg | fg, Call (action, t) ->
+              Call (action, interleave stop fg t)
+
+
+
+
+
+
+
+            | Fork _, fg | fg, Fork _ ->
+              (* Impossible by construction *)
+              Fg.error ~loc:Ast.Tagged.(env.pname.loc)
+                (Invariant_violation (fg, "Fork reached while interleaving"))
+            | (Finish | Pause), fg | fg, (Finish | Pause) ->
+              (* Impossible by construction *)
+              Fg.error ~loc:Ast.Tagged.(env.pname.loc)
+                (Invariant_violation (fg, "Parallel leads to pause or exit"))
+
+            | _ -> assert false
+
+
+          in Fgtbl2.add fork_tbl (fg1, fg2) fg; fg
+      in interleave
+
+    let inner_interleave options env fork_tbl =
+      let rec interleave (stop: Fg.t) fg1 fg2 =
+        try Fgtbl2.find fork_tbl (fg1, fg2) with | Not_found ->
+        try Fgtbl2.find fork_tbl (fg2, fg1) with | Not_found ->
+          let fg = match fg1, fg2 with
+            | fg1, fg2 when fork_id fg1 = fork_id stop -> fg2
+            | fg1, fg2 when fork_id fg2 = fork_id stop -> fg1
+
+            | (Finish | Pause ), fg
+            | fg, (Finish | Pause) ->
+              Fg.error ~loc:Ast.Tagged.(env.pname.loc) (Par_leads_to_finish fg2)
+
+            | (Call (Instantiate_run _, _) as fg1), Call (action, t2)
+            | Call (action, t2), (Call (Instantiate_run _, _) as fg1) ->
+              Call (action, interleave stop fg1 t2)
+
+            | Call (action, t), fg2 ->
+              Call (action, interleave stop fg2 t)
+
+            | (Fork (t1, t2, sync)), _
+            | _, (Fork (t1, t2, sync)) ->
+              let fg1 = interleave sync t1 t2 in
+              interleave stop fg1 fg2
+
+            | Test (Signal (s, atopt), t1, t2, join), fg2 ->
+
+              if StringSet.mem "new_feature" options then
+                Format.printf "%a %a\n" pp_head fg1 pp_head fg2;
+
+              if emits fg2 stop s then
+                match fg2 with
+                | Call (a, t) ->
+                  Call (a, interleave stop t fg1)
+                | Pause | Finish -> assert false
+                | Test (test, t1, t2, joinfg2) ->
+                  let t1, t2 = replace_join t1 t2 (fun x ->
+                      interleave stop fg1 x
+                    )
+                  in
+                  Test(test, t1, t2, joinfg2)
+                | Fork (t1, t2, sync) ->
+                  let fg2 = interleave stop t1 t2 in
+                  interleave sync fg1 fg2
+              else (
+                let t1, t2 = replace_join t1 t2 (fun x -> interleave stop x fg2) in
+                children fg1 t1 t2
+              )
+
+            | Test (test, t1, t2, joinfg1) as fg1, fg2 ->
+
+              let open SignalSet in
+              let fg1_emits, fg1_tests = extract_emits_tests_sets fg1 stop in
+              let fg2_emits, fg2_tests = extract_emits_tests_sets fg2 stop in
+              let inter1 = inter fg2_emits fg1_tests in
+              let inter2 = inter fg1_emits fg2_tests in
+
+              if inter1 <> empty then
+                if inter2 <> empty then begin
+                  Fg.(error ~loc:Ast.Tagged.(env.pname.loc)
+                      @@ Cyclic_causality
+                        (fg1, (SignalSet.fold List.cons (union inter1 inter2) [])))
+                end
+                else
+                  interleave stop fg2 fg1
+              else
+                let t1, t2 = replace_join t1 t2 (fun x ->
+                    interleave stop fg2 x
+                  )
+                in Test(test, t1, t2, joinfg1)
+
+          in Fgtbl2.add fork_tbl (fg1, fg2) fg; fg
+      in interleave
+
+
+    let interleave options env fg =
       let fork_tbl = Fgtbl2.create 17 in
       let visit_tbl = Fgtbl.create 17 in
-      let rec sequence_of_fork (stop: Fg.t) fg1 fg2 =
-        try Fgtbl2.find fork_tbl (fg1, fg2) with | Not_found ->
-          try Fgtbl2.find fork_tbl (fg2, fg1) with | Not_found ->
-            let fg = match fg1, fg2 with
-              | fg1, fg2 when fg1 == fg2 -> fg1
-              | fg1, fg2 when fork_id fg1 = fork_id stop -> fg2
-              | fg1, fg2 when fork_id fg2 = fork_id stop -> fg1
-
-              | fg1, fg2 when fork_id fg1 = fork_id stop
-                -> sequence_of_fork stop fg2 fg1
-
-              | fg1, fg2 when leads_to_end stop fg1 != None
-                              || leads_to_end stop fg2 != None ->
-                begin match leads_to_end stop fg1, leads_to_end stop fg2 with
-                  | Some n1, Some n2 when n1 >= n2 -> fg1
-                  | Some n1, Some n2 -> fg2
-                  | Some _, None -> fg1
-                  | None, Some _ -> fg2
-                  | None, None -> assert false
-                end
-
-              | (Finish | Pause ), fg
-              | fg, (Finish | Pause) ->
-                Fg.error ~loc:Ast.Tagged.(env.pname.loc) (Par_leads_to_finish fg2)
-
-              | (Call (Instantiate_run _, _) as fg1), Call (action, t2)
-              | Call (action, t2), (Call (Instantiate_run _, _) as fg1) ->
-                Call (action, sequence_of_fork stop fg1 t2)
-
-              | Call (action, t), fg2 ->
-                Call (action, sequence_of_fork stop fg2 t)
-
-              | (Fork (t1, t2, sync)), (_ as fg2)
-              | (_ as fg2), (Fork (t1, t2, sync)) ->
-                let fg1 = sequence_of_fork sync t1 t2 in
-                sequence_of_fork stop fg1 fg2
-
-              | Test (Signal (s, atopt), t1, t2, join), fg2 ->
-                if emits fg2 stop s then
-                  match fg2 with
-                  | Call (a, t) ->
-                    Call (a, sequence_of_fork stop t fg1)
-                  | Pause | Finish -> assert false (* TODO: Raise exn *)
-                  | Test (test, t1, t2, joinfg2) ->
-                    let t1, t2 = replace_join t1 t2 (fun x ->
-                        sequence_of_fork stop fg1 x
-                      )
-                    in
-                    Test(test, t1, t2, joinfg2)
-                  | Fork (t1, t2, sync) ->
-                    let fg2 = sequence_of_fork stop t1 t2 in
-                    sequence_of_fork sync fg1 fg2
-                else (
-                  let t1, t2 = replace_join t1 t2 (fun x -> sequence_of_fork stop x fg2) in
-                  children fg1 t1 t2
-                )
-
-              | Test (test, t1, t2, joinfg1) as fg1, fg2 ->
-
-                let open SignalSet in
-                let fg1_emits, fg1_tests = extract_emits_tests_sets fg1 stop in
-                let fg2_emits, fg2_tests = extract_emits_tests_sets fg2 stop in
-                let inter1 = inter fg2_emits fg1_tests in
-                let inter2 = inter fg1_emits fg2_tests in
-
-                if inter1 <> empty then
-                  if inter2 <> empty then begin
-                    Fg.(error ~loc:Ast.Tagged.(env.pname.loc)
-                        @@ Cyclic_causality
-                          (fg1, (SignalSet.fold List.cons (union inter1 inter2) [])))
-                  end
-                  else
-                    sequence_of_fork stop fg2 fg1
-                else
-                  let t1, t2 = replace_join t1 t2 (fun x ->
-                      sequence_of_fork stop fg2 x
-                    )
-                  in Test(test, t1, t2, joinfg1)
-
-            in Fgtbl2.add fork_tbl (fg1, fg2) fg; fg
-      in
+      let interleave = inner_interleave options env fork_tbl in
       let rec visit fg =
         try
           Fgtbl.find visit_tbl fg
@@ -1171,14 +1162,13 @@ module Schedule = struct
             | Call (a, t) -> Call (a, visit t)
             | Test (tv, t1, t2, tend) ->
               Test (tv, visit t1, visit t2, Option.map visit tend)
-            | Fork (t1, t2, sync) -> sequence_of_fork sync (visit t1) (visit t2)
+            | Fork (t1, t2, sync) -> interleave sync (visit t1) (visit t2)
             | Pause -> Pause
             | Finish -> Finish
           in
           Fgtbl.add visit_tbl fg fg'; fg'
       in
       Fg.compress @@ visit fg
-
 
 
     module Scheduler = struct

@@ -23,6 +23,9 @@ module Dot_pp = struct
   let font color p fmt e = Format.fprintf fmt "<FONT COLOR=\"%s\">%a</FONT>" color p e
   let bold p fmt e = Format.fprintf fmt "<B>%a</B>" p e
 
+  let int = Format.pp_print_int
+  let str = Format.pp_print_string
+
   let br = "<br/>"
 
 
@@ -64,7 +67,6 @@ module StringMap =struct
     List.fold_left (fun acc (k, v) ->
         add k v acc
       ) empty l
-
 
 end
 

@@ -96,6 +96,7 @@ module Flowgraph : sig
       | Unbound_label of string
       | Cyclic_causality of t * Ast.signal list
       | Par_leads_to_finish of t
+      | Invariant_violation of t * string
 
     val error : loc:Ast.loc -> error -> 'a
 
@@ -161,7 +162,7 @@ module Schedule : sig
       -> Fg.t * Fg.t
     val children: Fg.t -> Fg.t -> Fg.t -> Fg.t
 
-    val interleave: Fg.Ast.Tagged.env -> Fg.t -> Fg.t
+    val interleave: Utils.StringSet.t -> Fg.Ast.Tagged.env -> Fg.t -> Fg.t
     (** It basically linearize the flowgraph by removing all the Fork
         The algorithm is rather naive and could be optimized.*)
 

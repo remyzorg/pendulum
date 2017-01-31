@@ -507,7 +507,7 @@ let generate pname options env tast =
   let _deps = Schedule.check_causality_cycles grc in
   let t_check = Sys.time () -. t_cons in
 
-  let interleaved_cfg = Schedule.interleave env flowgraph in
+  let interleaved_cfg = Schedule.interleave options env flowgraph in
   let t_inter = Sys.time () -. t_check in
   let maxid, deps = Grc2ml.deplist selection_tree in
   let dep_array = Array.make (maxid + 1) [] in

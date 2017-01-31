@@ -112,5 +112,5 @@ let print_to_dot env options todot topdf topng name e =
     let sel, fg = Grc2ml.Of_ast.construct env options e in
     pr "_sel" Grc2ml.Selection_tree.print_to_dot sel;
     pr "_fg" Grc2ml.Flowgraph.print_to_dot fg;
-    let fg = Grc2ml.Schedule.interleave env fg in
+    let fg = Grc2ml.Schedule.interleave options env fg in
     pr "_interfg" Grc2ml.Flowgraph.print_to_dot fg
