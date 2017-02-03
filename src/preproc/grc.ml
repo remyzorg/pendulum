@@ -648,7 +648,7 @@ module Of_ast = struct
 
         | Exit (Label s) ->
           begin try StringMap.find s.content env.exits
-            with Not_found -> error ~loc:Ast.dummy_loc @@ Unbound_label s.content
+            with Not_found -> error ~loc:(Ast.dummy_loc()) @@ Unbound_label s.content
           end
 
         | Trap (Label s, q) ->
@@ -888,7 +888,6 @@ module Schedule = struct
       aux fg; aux_sel sel
 
 
-
     let emits options fg stop s =
       let aux aux (fg, stop, (s : Ast.signal)) =
         match fg with
@@ -1112,11 +1111,10 @@ module Schedule = struct
 
             | Test (Signal (s, atopt), t1, t2, join), fg2 ->
 
-              let can_emit = emits options fg2 stop s in
-
-              if StringSet.mem "new_feature" options then
-                Format.printf "%a emit %s before %a : %B\n"
-                  pp_head fg2 s.ident.content pp_head stop can_emit;
+              (* let can_emit = emits options fg2 stop s in *)
+              (* if StringSet.mem "new_feature" options then *)
+              (*   Format.printf "%a emit %s before %a : %B\n" *)
+              (*     pp_head fg2 s.ident.content pp_head stop can_emit; *)
 
               if emits options fg2 stop s then
                 match fg2 with

@@ -12,6 +12,7 @@ module Ast = Ml2ocaml.Ast
 
 
 let parse_and_generate options atom_mapper vb =
+  Ast.set_dummy_loc vb.pvb_loc;
   let e, options, args = Pendulum_parse.parse_args options [] vb.pvb_expr in
   let has_opt s = StringSet.mem s options in
   let e, binders, inputs = Pendulum_parse.pop_signals_decl e in
@@ -27,7 +28,7 @@ let parse_and_generate options atom_mapper vb =
     let pat =
       match vb.pvb_pat.ppat_desc with
       | Ppat_var id -> id
-      | _ -> { txt = "unknown"; loc = Ast.dummy_loc}
+      | _ -> { txt = "unknown"; loc = (Ast.dummy_loc())}
     in
     let pname = Format.sprintf "%s_%s" (Pendulum_misc.filename loc) pat.txt in
     let ast = Pendulum_parse.ast_of_expr atom_mapper e in
@@ -60,7 +61,7 @@ let try_compile_error f mapper str =
     Error.(error ~loc (Other_err (e, Flowgraph.print_error)))
   | Location.Error _ as e -> raise e
   | e ->
-    Error.(error ~loc:Ast.dummy_loc
+    Error.(error ~loc:(Ast.dummy_loc ())
              (Other_err (e, fun fmt e ->
                   Format.fprintf fmt "%s" (Printexc.to_string e))))
 

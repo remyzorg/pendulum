@@ -86,7 +86,8 @@ module type S = sig
   module SignalSet : Set.S with type elt = signal
 
 
-  val dummy_loc : loc
+  val set_dummy_loc : loc -> unit
+  val dummy_loc : unit -> loc
   val mk_loc : ?loc:loc -> 'a -> 'a location
 
   module Derived : sig

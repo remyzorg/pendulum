@@ -45,7 +45,7 @@ let mk_mach_inst_ident mch k =
   }
 
 
-let mk_set_mach_arg_n n mch = Ast.mk_loc ~loc:Ast.dummy_loc
+let mk_set_mach_arg_n n mch = Ast.mk_loc ~loc:(Ast.dummy_loc ())
     (Format.sprintf "%s~set~arg~%d" mch n)
 
 let mk_machine_instantiation machine_ident inst_int_id args =
@@ -250,7 +250,7 @@ let mk_animate_mutex animate body =
   if not animate then body else
     [%expr let [%p mk_pat_var @@ Ast.mk_loc animated_state_var_name] = ref false in [%e body]]
 
-let select_env_var = Location.(mkloc select_env_name !Ast_helper.default_loc)
+let select_env_var = Location.(mkloc select_env_name (Ast.dummy_loc ()))
 let select_env_ident = mk_ident (Ast.mk_loc select_env_name)
 
 let mk_running_env debug nstmts body =
@@ -486,7 +486,7 @@ and mk_ml_ast env depl ast =
     rebind_locals_let pexpr.locals [%expr let () = [%e pexpr.exp] in ()]
   | MLexpr pexpr -> rebind_locals_let pexpr.locals pexpr.exp
 
-  | MLpause -> [%expr raise Pause_exc]
+  | MLpause -> [%expr raise Pause_exc] [@loc Ast.dummy_loc ()]
   | MLfinish -> [%expr raise Finish_exc]
   | MLcall (ident, sigs, loc) ->
     let tuple = match sigs with [] -> assert false

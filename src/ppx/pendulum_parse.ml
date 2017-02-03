@@ -200,7 +200,7 @@ let ast_of_expr atom_mapper e =
     | [%expr run [%e? ident] [%e? tupl]] ->
       Run (check_expr_ident ident, signal_tuple_to_list tupl, tupl.pexp_loc)
     | [%expr run [%e? ident]] ->
-      Run (check_expr_ident ident, [], Ast.dummy_loc)
+      Run (check_expr_ident ident, [], (Ast.dummy_loc ()))
 
     | [%expr halt ] ->
       Halt
