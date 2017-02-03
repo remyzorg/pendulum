@@ -132,6 +132,8 @@ module Flowgraph = struct
 
     val compress : ?env:(t list Fgtbl.t) -> t -> t
 
+    val emits : Ast.signal -> action -> bool
+
     type error =
       | Unbound_label of string
       | Cyclic_causality of t * Ast.signal list
@@ -274,6 +276,13 @@ module Flowgraph = struct
           parents lfg; parents rfg
         | Pause | Finish -> ()
       in memo_rec (module Fgtbl) parents fg
+
+    let rec emits s (act : action) =
+      match act with
+      | Emit vs when vs.signal.ident.content = s.ident.content -> true
+      | Compressed (a1, a2) -> emits s a1 || emits s a2
+      | Atom _ | Emit _ | Enter _ | Exit _
+      | Local_signal _ | Instantiate_run _ -> false
 
     let compress ?env fg =
       let env = match env with
@@ -880,11 +889,11 @@ module Schedule = struct
 
 
 
-    let emits fg stop s =
+    let emits options fg stop s =
       let aux aux (fg, stop, (s : Ast.signal)) =
         match fg with
-        | Call (Emit vs, t) when s.ident.content = vs.signal.ident.content -> true
-        | fg when fg == stop -> false
+        | fg when fg = stop -> false
+        | Call (act, t) when Fg.emits s act -> true
 
         | Call (Instantiate_run (_, sigs, _) , t) ->
           List.exists (fun s' -> s.ident.content = s'.ident.content)
@@ -1051,15 +1060,10 @@ module Schedule = struct
           let fg = match fg1, fg2 with
             | fg1, fg2 when eq_fork_id fg1 stop -> fg2
             | fg1, fg2 when eq_fork_id fg2 stop -> fg1
-
             | Call (action, t), fg | fg, Call (action, t) ->
               Call (action, interleave stop fg t)
-
-
-
-
-
-
+            | Test (tv1, l1, r1, _), Test (tv2, l2, r2, _) ->
+              interleave_test stop (tv1, l1, r1) (tv2, l2, r2)
 
             | Fork _, fg | fg, Fork _ ->
               (* Impossible by construction *)
@@ -1070,10 +1074,16 @@ module Schedule = struct
               Fg.error ~loc:Ast.Tagged.(env.pname.loc)
                 (Invariant_violation (fg, "Parallel leads to pause or exit"))
 
-            | _ -> assert false
-
-
           in Fgtbl2.add fork_tbl (fg1, fg2) fg; fg
+      and interleave_test stop (tv1, l1, r1) (tv2, l2, r2) =
+        match tv1, tv2 with
+        | Finished, tv | tv, Finished -> Fg.error ~loc:Ast.Tagged.(env.pname.loc)
+            (Invariant_violation (r2, "Finished reached from interleaving"))
+
+        | Signal (s, _), tv | tv, Signal (s, _) -> assert false
+        | Selection i, tv | tv, Selection i -> assert false
+        | Sync (i1, i2), tv | tv, Sync (i1, i2) -> assert false
+        | Is_paused _, tv -> assert false (* TODO *)
       in interleave
 
     let inner_interleave options env fork_tbl =
@@ -1102,10 +1112,13 @@ module Schedule = struct
 
             | Test (Signal (s, atopt), t1, t2, join), fg2 ->
 
-              if StringSet.mem "new_feature" options then
-                Format.printf "%a %a\n" pp_head fg1 pp_head fg2;
+              let can_emit = emits options fg2 stop s in
 
-              if emits fg2 stop s then
+              if StringSet.mem "new_feature" options then
+                Format.printf "%a emit %s before %a : %B\n"
+                  pp_head fg2 s.ident.content pp_head stop can_emit;
+
+              if emits options fg2 stop s then
                 match fg2 with
                 | Call (a, t) ->
                   Call (a, interleave stop t fg1)

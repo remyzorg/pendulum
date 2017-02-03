@@ -92,6 +92,8 @@ module Flowgraph : sig
 
     val compress : ?env:(t list Fgtbl.t) -> t -> t
 
+    val emits : Ast.signal -> action -> bool
+
     type error =
       | Unbound_label of string
       | Cyclic_causality of t * Ast.signal list
