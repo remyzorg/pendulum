@@ -20,6 +20,7 @@ let expr_of_bitset bs =
   |> List.map int_const
   |> Exp.array
 
+[@@metaloc Ast.dummy_loc ()]
 
 let deplist sel =
   let open Selection_tree in
@@ -372,8 +373,7 @@ let mk_constructor options nstmts env reactfun_body =
       method create = [%e createfun_expr]
       method create_run = [%e createfun_run_expr]
     end
-
-  ]
+  ] [@metaloc Ast.dummy_loc ()]
 
 
 let rec mk_test env depl test =

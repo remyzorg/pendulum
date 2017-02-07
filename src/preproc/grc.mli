@@ -154,7 +154,7 @@ module Schedule : sig
     val check_causality_cycles : 'a * Fg.t -> Fg.t list Ast.SignalMap.t
 
     val tag_tested_stmts : St.t -> Fg.t -> unit
-    val find : bool -> Fg.t -> Fg.t -> Fg.t option
+    val find : ?stop:Fg.t -> bool -> Fg.t -> Fg.t -> Fg.t option
     val find_and_replace :
       (Fg.t -> Fg.t) ->
       Fg.t -> Fg.t -> bool * Fg.t

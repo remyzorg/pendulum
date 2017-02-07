@@ -792,7 +792,7 @@ module Schedule = struct
 
     val check_causality_cycles : 'a * Fg.t -> Fg.t list Ast.SignalMap.t
     val tag_tested_stmts : St.t -> Fg.t -> unit
-    val find : bool -> Fg.t -> Fg.t -> Fg.t option
+    val find : ?stop:Fg.t -> bool -> Fg.t -> Fg.t -> Fg.t option
     val find_and_replace :
       (Fg.t -> Fg.t) ->
       Fg.t -> Fg.t -> bool * Fg.t
@@ -957,14 +957,26 @@ module Schedule = struct
         in newfg
       in memo_rec (module Fgtbl3) children (fg, t1, t2)
 
+    let fork_id = function
+      | (Fg.Test (Fg.Sync c, _, _, _)) -> c
+      | _ -> 0, 0
 
-    let find nofinish fg t =
+    let eq_fork_id fg1 fg2 = fork_id fg1 = fork_id fg2
+
+    let find ?stop nofinish fg t =
       let aux aux (fg, elt) =
         if fg == elt then
-          if nofinish && (fg == Pause || fg == Finish) then None 
+          if nofinish && (fg == Pause || fg == Finish) then None
           else Some fg
         else match fg with
           | Call (a, t) -> aux (t, elt)
+
+          | Test (Sync _, t1, t2, _)  ->
+            begin match stop with
+            | Some stop when eq_fork_id stop fg -> Some stop
+            | _ -> Option.mapn (aux (t1, elt)) (fun () -> aux (t2, elt))
+            end
+
           | Test (_, t1, t2, _) | Fork (t1, t2, _) ->
             Option.mapn (aux (t1, elt)) (fun () -> aux (t2, elt))
           | Pause | Finish -> None
@@ -993,13 +1005,13 @@ module Schedule = struct
         match fg1 with
         | Call(a, t) -> find_join nopause fg2 t
         | Test (_, t1, t2, _) | Fork (t1, t2, _) ->
-
           begin match (find_join nopause fg2 t1), (find_join nopause fg2 t2) with
           | Some v1, Some v2 when v1 == v2 && v1 <> Pause && v1 <> Finish -> Some v1
           | _ -> None
           end
         | Pause | Finish -> None
       end
+
 
     let rec replace_join fg1 fg2 replf =
       let rec aux aux (fg1, fg2) =
@@ -1022,12 +1034,6 @@ module Schedule = struct
           | Pause | Finish -> fg1, fg2
       in memo_rec (module Fgtbl2) aux (fg1, fg2)
 
-
-    let fork_id = function
-      | (Fg.Test (Fg.Sync c, _, _, _)) -> c
-      | _ -> 0, 0
-
-    let eq_fork_id fg1 fg2 = fork_id fg1 = fork_id fg2
 
     (* type action = *)
     (*   | Emit of valued_signal *)
@@ -1052,6 +1058,14 @@ module Schedule = struct
     (*   | Pause *)
     (*   | Finish *)
 
+    type flowgraph_heap =
+      | FHleaf of Fg.t
+      | FHnode of Fg.t * flowgraph_heap * flowgraph_heap
+
+
+    let context_interleaving options env fg1 (tv1, l1, r1) fg2 (tv2, l2, r2) =
+      assert false
+
     let inner_interleave options env fork_tbl =
       let rec interleave (stop: Fg.t) fg1 fg2 =
         try Fgtbl2.find fork_tbl (fg1, fg2) with | Not_found ->
@@ -1062,8 +1076,7 @@ module Schedule = struct
             | Call (action, t), fg | fg, Call (action, t) ->
               Call (action, interleave stop fg t)
             | Test (tv1, l1, r1, _), Test (tv2, l2, r2, _) ->
-              interleave_test stop (tv1, l1, r1) (tv2, l2, r2)
-
+              interleave_test stop fg1 (tv1, l1, r1) fg2 (tv2, l2, r2)
             | Fork _, fg | fg, Fork _ ->
               (* Impossible by construction *)
               Fg.error ~loc:Ast.Tagged.(env.pname.loc)
@@ -1072,18 +1085,34 @@ module Schedule = struct
               (* Impossible by construction *)
               Fg.error ~loc:Ast.Tagged.(env.pname.loc)
                 (Invariant_violation (fg, "Parallel leads to pause or exit"))
-
           in Fgtbl2.add fork_tbl (fg1, fg2) fg; fg
-      and interleave_test stop (tv1, l1, r1) (tv2, l2, r2) =
+
+      and interleave_test stop fg1 (tv1, l1, r1) fg2 (tv2, l2, r2) =
         match tv1, tv2 with
         | Finished, tv | tv, Finished -> Fg.error ~loc:Ast.Tagged.(env.pname.loc)
             (Invariant_violation (r2, "Finished reached from interleaving"))
 
-        | Signal (s, _), tv | tv, Signal (s, _) -> assert false
+        | Signal (s1, _) as t1, (Signal (s2, _) as t2) ->
+          let l, r, fg, t =
+            if emits options fg1 stop s2 then
+              if emits options fg2 stop s1 then
+                Fg.(error ~loc:s1.ident.loc
+                    @@ Cyclic_causality (fg1, [s1; s2]))
+              else l1, r1, fg2, t1 else l2, r2, fg1, t2
+          in
+          let l', r' = replace_join l r (fun x -> interleave stop fg x) in
+          Test (t, l', r', None)
+
+        | Signal (s, _), tv | tv, Signal (s, _)->
+          context_interleaving options env fg1 (tv1, l1, r1) fg2 (tv2, l2, r2)
+
+
+
         | Selection i, tv | tv, Selection i -> assert false
         | Sync (i1, i2), tv | tv, Sync (i1, i2) -> assert false
         | Is_paused _, tv -> assert false (* TODO *)
-      in interleave
+
+    in interleave
 
     let inner_interleave options env fork_tbl =
       let rec interleave (stop: Fg.t) fg1 fg2 =
