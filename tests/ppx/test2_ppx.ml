@@ -293,10 +293,30 @@ let%sync test_await ~new_feature ~print:(pdf, dot) s1 s2 s3 =
   end
 
 
+let%sync example_thesis_1 ~print:pdf = pause
+
+let%sync example_thesis_2 ~print:pdf s = emit s
 
 
+let%sync example_thesis_3 ~print:pdf s =
+  pause; emit s (); pause
 
+let%sync example_thesis2 ~print:pdf s1 s2 =
+  present s2 (emit s2)
 
+let%sync lol_loop ~print:pdf s =
+  loop begin
+    emit s;
+    pause
+  end
 
+let%sync lol_loop2 ~print:pdf s =
+  loop begin
+    pause;
+    emit s
+  end
+
+let%sync paremit ~print:pdf s1 s2 =
+    (pause; emit s1) || (emit s2; pause)
 
 

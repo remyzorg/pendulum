@@ -41,7 +41,7 @@ Library rml_backend
   FindlibParent: pendulum
   BuildDepends: pendulum.compiler
 
-Library ppx
+Library ppx_pendulum
    Path: src/ppx
    FindlibParent: pendulum
    FindlibName: ppx

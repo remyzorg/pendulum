@@ -674,7 +674,7 @@ module Of_ast = struct
 
         | Seq (q, r) ->
           let end_seq = exit_node env p endp in
-          let depth_r = depth env r pause endp in
+          let depth_r = depth env r pause end_seq in
           if Ast.Analysis.non_blocking q then depth_r else
             let surf_r = surface env r pause end_seq in
             let depth_q = depth env q pause surf_r in
@@ -1103,7 +1103,7 @@ module Schedule = struct
             | Test (Signal (s, atopt), t1, t2, join), fg2 ->
 
               if StringSet.mem "new_feature" options then
-                Format.printf "%a %a\n" pp_head fg1 pp_head fg2;
+                Format.eprintf "debug_grc: %a %a\n" pp_head fg1 pp_head fg2;
 
               if emits fg2 stop s then
                 match fg2 with
