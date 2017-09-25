@@ -60,7 +60,8 @@ module type S = sig
   module SignalMap : Map.S with type key = signal
   module SignalSet : Set.S with type elt = signal
 
-  val dummy_loc : loc
+  val set_dummy_loc : loc -> unit
+  val dummy_loc : unit -> loc
   val mk_loc : ?loc:loc -> 'a -> 'a location
 
   module Derived : sig
@@ -163,7 +164,10 @@ module Make (E : Exp) = struct
     loc : loc;
     content : 'a;
   }
-  let dummy_loc = Location.none
+
+  let dummy_loc_ref = ref Location.none
+  let set_dummy_loc loc = dummy_loc_ref := loc
+  let dummy_loc () = ! dummy_loc_ref
 
   type ident = string location
 
@@ -194,7 +198,7 @@ module Make (E : Exp) = struct
         function Sig_param ({bind = No_binding} as x) -> (f x) :: acc | _ -> acc) []
     |> List.rev
 
-  let mk_loc ?(loc=dummy_loc) content = {loc; content}
+  let mk_loc ?(loc=dummy_loc()) content = {loc; content}
   let mk_signal ?(origin=Local) ?(bind=No_binding) ?gatherer ident = {ident; origin; bind; gatherer}
 
   let mk_vid ?(fields=[]) sname ivalue = {sname; fields; ivalue}
@@ -288,7 +292,7 @@ module Make (E : Exp) = struct
       | Run of ident * signal run_param list * loc
     and tagged = (tagged_ast) location
 
-    let mk_tagged ?(loc = dummy_loc) content id =
+    let mk_tagged ?(loc = dummy_loc()) content id =
       {id; st = {loc ; content}}
 
     type env = {

@@ -30,7 +30,7 @@ let signaltype_of_type t =
 let mk_ident s = Exp.ident ~loc:s.loc
     Location.(mkloc (Longident.Lident s.content) s.loc)
 
-let mk_value_binding ?(pvb_loc=Location.none)
+let mk_value_binding ?(pvb_loc=Ast.dummy_loc ())
     ?(pvb_attributes=[]) pvb_pat pvb_expr =
   { pvb_pat; pvb_expr; pvb_attributes; pvb_loc; }
 
