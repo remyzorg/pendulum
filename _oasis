@@ -11,6 +11,10 @@ Flag all
   Description: build and install everything
   Default: false
 
+Flag react
+  Description: build and install react related exemples
+  Default: false
+
 Flag ppx
   Description: Build the ppx syntax extension
   Default$: flag(all)

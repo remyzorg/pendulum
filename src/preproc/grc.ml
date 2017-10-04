@@ -609,9 +609,7 @@ module Of_ast = struct
 
         | Seq (q,r) ->
           let surf_r = (surface env r pause @@ exit_node env p endp) in
-          enter_node env p
-          @@ surface env q pause
-          @@ surf_r
+          enter_node env p @@ surface env q pause@@ surf_r
 
         | Loop q ->
           enter_node env p

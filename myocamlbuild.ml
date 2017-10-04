@@ -1,5 +1,5 @@
 (* OASIS_START *)
-(* DO NOT EDIT (digest: deda12b8685558c3ca67f306e4fd25f4) *)
+(* DO NOT EDIT (digest: 408d82d6ca710df0c4b081b7c8e02bdf) *)
 module OASISGettext = struct
 (* # 22 "src/oasis/OASISGettext.ml" *)
 
@@ -105,10 +105,7 @@ module OASISString = struct
         ok := false;
       incr str_idx
     done;
-    if !what_idx = String.length what then
-      true
-    else
-      false
+    !what_idx = String.length what
 
 
   let strip_starts_with ~what str =
@@ -131,10 +128,7 @@ module OASISString = struct
         ok := false;
       decr str_idx
     done;
-    if !what_idx = -1 then
-      true
-    else
-      false
+    !what_idx = -1
 
 
   let strip_ends_with ~what str =
@@ -440,7 +434,7 @@ module OASISExpr = struct
 end
 
 
-# 443 "myocamlbuild.ml"
+# 437 "myocamlbuild.ml"
 module BaseEnvLight = struct
 (* # 22 "src/base/BaseEnvLight.ml" *)
 
@@ -520,7 +514,7 @@ module BaseEnvLight = struct
 end
 
 
-# 523 "myocamlbuild.ml"
+# 517 "myocamlbuild.ml"
 module MyOCamlbuildFindlib = struct
 (* # 22 "src/plugins/ocamlbuild/MyOCamlbuildFindlib.ml" *)
 
@@ -746,6 +740,9 @@ module MyOCamlbuildBase = struct
 (* # 110 "src/plugins/ocamlbuild/MyOCamlbuildBase.ml" *)
 
 
+  let env_filename = Pathname.basename BaseEnvLight.default_filename
+
+
   let dispatch_combine lst =
     fun e ->
       List.iter
@@ -878,20 +875,25 @@ module MyOCamlbuildBase = struct
 end
 
 
-# 881 "myocamlbuild.ml"
+# 878 "myocamlbuild.ml"
 open Ocamlbuild_plugin;;
 let package_default =
   {
      MyOCamlbuildBase.lib_ocaml =
        [
           ("pendulum", ["src/runtime"], []);
-          ("pendulum_compiler", ["src/preproc"], []);
-          ("ppx", ["src/ppx"], [])
+          ("compiler", ["src/preproc"], []);
+          ("rml_backend", ["src/rml"], []);
+          ("ppx_pendulum", ["src/ppx"], [])
        ];
      lib_c = [];
      flags = [];
      includes =
-       [("tests/ppx", ["src/runtime"]); ("src/ppx", ["src/preproc"])]
+       [
+          ("tests/ppx", ["src/runtime"]);
+          ("src/rml", ["src/preproc"]);
+          ("src/ppx", ["src/preproc"; "src/rml"])
+       ]
   }
   ;;
 
@@ -899,7 +901,7 @@ let conf = {MyOCamlbuildFindlib.no_automatic_syntax = false}
 
 let dispatch_default = MyOCamlbuildBase.dispatch_default conf package_default;;
 
-# 903 "myocamlbuild.ml"
+# 905 "myocamlbuild.ml"
 (* OASIS_STOP *)
 
 Ocamlbuild_plugin.dispatch dispatch_default;;
