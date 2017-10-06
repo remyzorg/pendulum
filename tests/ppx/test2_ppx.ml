@@ -424,3 +424,7 @@ let%sync paremit ~print:pdf s1 s2 =
     (pause; emit s1) || (emit s2; pause)
 
 
+let%sync par2 ~print:pdf s1 s2 s3 =
+  (present s1 pause (emit s2); pause)
+  ||
+  present s2 (emit s3) pause
