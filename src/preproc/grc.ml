@@ -53,7 +53,7 @@ module Selection_tree = struct
         | Emit _ | Nothing | Exit _ | Atom _ | Run _ -> mk_tree Bottom tagged.id
         | Pause -> mk_tree Pause tagged.id
 
-        | Par (t1, t2) -> mk_tree (Par [visit t1; visit t2]) tagged.id
+        | Par l -> mk_tree (Par (List.map visit l)) tagged.id
         | Seq (t1, t2) -> mk_tree (Excl [visit t1; visit t2]) tagged.id
         | Present (_, st1, st2) -> mk_tree (Excl [visit st1; visit st2]) tagged.id
 
@@ -631,7 +631,8 @@ module Of_ast = struct
             call env (Instantiate_run (id, sigs, loc))
             @@ test_node env (Is_paused (id, sigs, loc)) (pause, endrun, None))
 
-        | Par (q, r) ->
+        | Par l ->
+
           let syn = try Hashtbl.find env.synctbl (q.id, r.id) with
             | Not_found ->
               let n = sync_node env (q.id, r.id) (pause, exit_node env p endp, None)
@@ -1112,6 +1113,10 @@ module Schedule = struct
 
     in interleave
 
+
+
+
+
     let inner_interleave options env fork_tbl =
       let rec interleave (stop: Fg.t) fg1 fg2 =
         try Fgtbl2.find fork_tbl (fg1, fg2) with | Not_found ->
@@ -1130,6 +1135,9 @@ module Schedule = struct
 
             | Call (action, t), fg2 ->
               Call (action, interleave stop fg2 t)
+
+            | fg1, Call (action, t) ->
+              Call (action, interleave stop fg1 t)
 
             | (Fork (t1, t2, sync)), _
             | _, (Fork (t1, t2, sync)) ->

@@ -134,7 +134,7 @@ module type S = sig
     and tagged_ast =
       | Loop of t
       | Seq of t * t
-      | Par of t * t
+      | Par of t list
       | Emit of valued_signal
       | Nothing
       | Pause

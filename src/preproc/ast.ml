@@ -106,7 +106,7 @@ module type S = sig
     and tagged_ast =
       | Loop of t
       | Seq of t * t
-      | Par of t * t
+      | Par of t list
       | Emit of valued_signal
       | Nothing
       | Pause
@@ -278,7 +278,7 @@ module Make (E : Exp) = struct
     and tagged_ast =
       | Loop of t
       | Seq of t * t
-      | Par of t * t
+      | Par of t list
       | Emit of valued_signal
       | Nothing
       | Pause
@@ -416,6 +416,18 @@ module Make (E : Exp) = struct
       machine_runs = ref IdentMap.empty
     }
 
+    let rec extract_parallel l st1 st2 =
+      let open Derived in
+      match st1.content, st2.content with
+      | Par (st11, st12), Par (st21, st22) ->
+        extract_parallel (extract_parallel l st21 st22) st11 st12
+      | Par (st11, st12), _ ->
+        extract_parallel [st2] st11 st12
+      | _, Par (st21, st22)  ->
+        st1 :: extract_parallel l st21 st22
+      | _, _ -> st1 :: st2 :: l
+
+
     let rec of_ast ?(sigs=[]) ?(binders=[]) pname ast =
       let id = ref 0 in
       let start_env = create_env pname sigs binders in
@@ -433,9 +445,8 @@ module Make (E : Exp) = struct
           mk_tagged (Seq (st1, st2)) !+id
 
         | Derived.Par (st1, st2) ->
-          let st1 = visit env st1 in
-          let st2 = visit env st2 in
-          mk_tagged (Par (st1, st2)) !+id
+          let sts = extract_parallel [] st1 st2 in
+          mk_tagged (Par (List.map (visit env) sts)) !+id
 
         | Derived.Emit s ->
           let locals = List.map (fun x -> x.signal) env.local_only_scope in
@@ -511,17 +522,17 @@ module Make (E : Exp) = struct
               mkl @@ Present_then (s, mkl @@ Seq (mkl Pause, st))), s))
         | Derived.Abort (st, s) ->
           mk_tagged (Trap (trap_signal, mk_tagged (
-              Par (mk_tagged (
-                  Seq (visit env (mkl @@ Derived.Suspend_imm (st, s)),
-                       mk_tagged (Exit trap_signal) !+id)
-                ) !+id,
-                   mk_tagged (Seq (visit env (mkl @@ Derived.Await s), mk_tagged (Exit trap_signal) !+id)) !+id)
+              Par [
+                mk_tagged (Seq (visit env (mkl @@ Derived.Suspend_imm (st, s)),
+                                mk_tagged (Exit trap_signal) !+id)) !+id
+                ; mk_tagged (Seq (visit env (mkl @@ Derived.Await s),
+                                mk_tagged (Exit trap_signal) !+id)) !+id
+              ]
             ) !+id)) !+id
         | Derived.Weak_abort (st, s) ->
           mk_tagged (Trap (trap_signal, mk_tagged (
-              Par (visit env st, mk_tagged (
-                  Seq (visit env (mkl @@ Derived.Await s), mk_tagged (Exit trap_signal) !+id))
-                  !+id)) !+id)) !+id
+              Par [visit env st; mk_tagged (Seq (visit env (mkl @@ Derived.Await s), mk_tagged (Exit trap_signal) !+id))
+                  !+id]) !+id)) !+id
         | Derived.Loop_each (st, s) ->
           mk_tagged (Loop (
               visit env Derived.(mkl @@ Abort (mkl @@ Seq (st, mkl Halt), s)))
@@ -552,10 +563,8 @@ module Make (E : Exp) = struct
         | Suspend (st, (s, _)) -> fprintf fmt "suspend %s "  s.ident.content
         | Trap (Label s, st) -> fprintf fmt "trap %s "  s.content
 
-        | Seq (st1, st2) ->
-          fprintf fmt "seq" ;
-        | Par (st1, st2) ->
-          fprintf fmt "par" ;
+        | Seq _ -> fprintf fmt "seq"
+        | Par _ -> fprintf fmt "par"
         | Present ((s, _), st1, st2) ->
           fprintf fmt "present %s "  s.ident.content
 
@@ -576,9 +585,10 @@ module Make (E : Exp) = struct
         | Seq (st1, st2) | Present (_, st1, st2) ->
           edge false x.id st1.id; edge true x.id st2.id;
           visit st1; visit st2
-        | Par (st1, st2) ->
-          edge false x.id st1.id; edge false x.id st2.id;
-          visit st1; visit st2
+        | Par sts ->
+          (* edge false x.id st1.id; edge false x.id st2.id; *)
+          (* visit st1; visit st2 *)
+          List.iter (fun st -> edge false x.id st.id; visit st) sts
       in
       fprintf fmt "@[<hov 2>digraph tagged {@\n";
       visit tagged;
@@ -593,7 +603,7 @@ module Make (E : Exp) = struct
       match t.st.content with
       | Loop t -> blocking t
       | Seq (t1,t2) -> blocking t1 || blocking t2
-      | Par (t1,t2) -> blocking t1 || blocking t2
+      | Par ts -> List.exists blocking ts
       | Emit _ -> false
       | Nothing  -> false
       | Pause  -> true
@@ -611,7 +621,7 @@ module Make (E : Exp) = struct
       match t.st.content with
       | Loop t -> false
       | Seq (t1,t2) -> non_blocking t1 && non_blocking t2
-      | Par (t1,t2) -> non_blocking t1 && non_blocking t2
+      | Par ts -> List.for_all non_blocking ts
       | Emit _ -> true
       | Nothing  -> true
       | Pause  -> false
@@ -643,10 +653,9 @@ module Make (E : Exp) = struct
             let stuck, t2 = aux t2 in
             stuck, change t @@ Seq (t1, t2)
 
-        | Par (t1,t2) ->
-          let stuck1, t1 = aux t1 in
-          let stuck2, t2 = aux t2 in
-          stuck1 || stuck2, change t @@ Par (t1, t2)
+        | Par l ->
+          let stucks, ts = List.(split (map (aux) l)) in
+          List.exists (fun x -> x) stucks, change t @@ Par ts
 
         | Nothing | Await _ | Atom _ | Exit _ | Pause  | Emit _ | Run _ -> false, t
 
