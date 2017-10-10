@@ -27,7 +27,7 @@ module type S = sig
 
   type ident = string location
 
-  type signal_origin = Local | Input | Output | Element
+  type signal_origin = Local | Input | Output | Element | React
 
 
   type gatherer = exp option
@@ -60,7 +60,8 @@ module type S = sig
   module SignalMap : Map.S with type key = signal
   module SignalSet : Set.S with type elt = signal
 
-  val dummy_loc : loc
+  val set_dummy_loc : loc -> unit
+  val dummy_loc : unit -> loc
   val mk_loc : ?loc:loc -> 'a -> 'a location
 
   module Derived : sig
@@ -144,6 +145,7 @@ module type S = sig
 
   module Analysis : sig
     val blocking : Tagged.t -> bool
+    val non_blocking : Tagged.t -> bool
     val filter_dead_trees : Tagged.t -> Tagged.t
   end
 
@@ -162,7 +164,10 @@ module Make (E : Exp) = struct
     loc : loc;
     content : 'a;
   }
-  let dummy_loc = Location.none
+
+  let dummy_loc_ref = ref Location.none
+  let set_dummy_loc loc = dummy_loc_ref := loc
+  let dummy_loc () = ! dummy_loc_ref
 
   type ident = string location
 
@@ -173,7 +178,7 @@ module Make (E : Exp) = struct
     | Event of ident * gatherer
     | No_binding
 
-  type signal_origin = Local | Input | Output | Element
+  type signal_origin = Local | Input | Output | Element | React
 
 
   type signal = { ident : ident; origin : signal_origin; bind : signal_binder; gatherer : gatherer}
@@ -193,7 +198,7 @@ module Make (E : Exp) = struct
         function Sig_param ({bind = No_binding} as x) -> (f x) :: acc | _ -> acc) []
     |> List.rev
 
-  let mk_loc ?(loc=dummy_loc) content = {loc; content}
+  let mk_loc ?(loc=dummy_loc()) content = {loc; content}
   let mk_signal ?(origin=Local) ?(bind=No_binding) ?gatherer ident = {ident; origin; bind; gatherer}
 
   let mk_vid ?(fields=[]) sname ivalue = {sname; fields; ivalue}
@@ -287,7 +292,7 @@ module Make (E : Exp) = struct
       | Run of ident * signal run_param list * loc
     and tagged = (tagged_ast) location
 
-    let mk_tagged ?(loc = dummy_loc) content id =
+    let mk_tagged ?(loc = dummy_loc()) content id =
       {id; st = {loc ; content}}
 
     type env = {
@@ -373,7 +378,7 @@ module Make (E : Exp) = struct
              if not is_binded then
                Hashtbl.replace env.binders_env s.content (bind :: tags);
              let ident = mk_loc ~loc:s.loc (Format.sprintf "%s##%s" s.content eident.content) in
-             {ident; origin; bind; gatherer}
+             {ident; origin = Input; bind; gatherer}
            (* if it's an access, concat with a##.b##.c *)
            | Access (elt, fields) ->
              let fields_str = List.fold_left (fun acc field ->
@@ -571,7 +576,7 @@ module Make (E : Exp) = struct
         | Seq (st1, st2) | Present (_, st1, st2) ->
           edge false x.id st1.id; edge true x.id st2.id;
           visit st1; visit st2
-        | Par (st1, st2) -> 
+        | Par (st1, st2) ->
           edge false x.id st1.id; edge false x.id st2.id;
           visit st1; visit st2
       in
@@ -595,11 +600,29 @@ module Make (E : Exp) = struct
       | Suspend (t,_) -> blocking t
       | Trap (_,t) -> blocking t
       | Exit _ -> false
-      | Present (_,t1,t2) -> blocking t1 || blocking t2
+      | Present (_,t1,t2) -> blocking t1 && blocking t2
       | Atom _ -> false
       | Signal (_,t) -> blocking t
       | Await s -> true
       | Run _ -> true
+
+    let rec non_blocking t =
+      let open Tagged in
+      match t.st.content with
+      | Loop t -> false
+      | Seq (t1,t2) -> non_blocking t1 && non_blocking t2
+      | Par (t1,t2) -> non_blocking t1 && non_blocking t2
+      | Emit _ -> true
+      | Nothing  -> true
+      | Pause  -> false
+      | Suspend (t,_) -> non_blocking t
+      | Trap (_,t) -> non_blocking t
+      | Exit _ -> true
+      | Present (_,t1,t2) -> non_blocking t1 && non_blocking t2
+      | Atom _ -> true
+      | Signal (_,t) -> non_blocking t
+      | Await s -> false
+      | Run _ -> false
 
     let change t st =
       let open Tagged in

@@ -5,29 +5,30 @@ open Asttypes
 open Parsetree
 open Longident
 
-open Pendulum_compiler
+open Compiler
+open Compiler.Utils
 
-open Utils
-
-module Ast = Sync2ml.Ast
+module Ast = Ml2ocaml.Ast
 
 
-let parse_and_generate atom_mapper vb =
-  let e, options, args = Pendulum_parse.parse_args (StringSet.empty) [] vb.pvb_expr in
+let parse_and_generate options atom_mapper vb =
+  Ast.set_dummy_loc vb.pvb_loc;
+  let e, options, args = Pendulum_parse.parse_args options [] vb.pvb_expr in
   let has_opt s = StringSet.mem s options in
   let e, binders, inputs = Pendulum_parse.pop_signals_decl e in
   let sigs = List.(
       inputs @ map Ast.(fun (s, t) -> mk_signal ~origin:Input s, t) args
     )
   in
-  if has_opt "ast" then
+  let gen_ast_as_ocaml e =
     [%expr ([%e Pendulum_misc.expr_of_ast @@ Pendulum_parse.ast_of_expr atom_mapper e])]
-  else
+  in
+  if has_opt "ast" then gen_ast_as_ocaml e else
     let loc = vb.pvb_loc in
     let pat =
       match vb.pvb_pat.ppat_desc with
       | Ppat_var id -> id
-      | _ -> { txt = "unknown"; loc = Ast.dummy_loc}
+      | _ -> { txt = "unknown"; loc = (Ast.dummy_loc())}
     in
     let pname = Format.sprintf "%s_%s" (Pendulum_misc.filename loc) pat.txt in
     let ast = Pendulum_parse.ast_of_expr atom_mapper e in
@@ -35,28 +36,32 @@ let parse_and_generate atom_mapper vb =
     let tast = Ast.Analysis.filter_dead_trees tast in
     Pendulum_misc.print_to_dot env (StringSet.remove "debug" options)
       (has_opt "dot") (has_opt "pdf") (has_opt "png") pname tast;
-    let ocaml_expr = Sync2ml.generate pname options env tast in
-    if has_opt "dsource" then Format.printf "%a@." Pprintast.expression ocaml_expr;
-    [%expr [%e ocaml_expr]]
+
+    let ocaml_expr =
+      if has_opt "rml" then Ast2rml.generate pname options env tast
+      else Ml2ocaml.generate pname options env tast
+    in
+    if has_opt "dsource" then Format.eprintf "%a@." Pprintast.expression ocaml_expr;
+    if has_opt "print_only" then gen_ast_as_ocaml e else [%expr [%e ocaml_expr]]
 
 
-let gen_bindings atom_mapper vbl =
+let gen_bindings options atom_mapper vbl =
   List.map (fun vb ->
-      {vb with pvb_expr = parse_and_generate atom_mapper vb}
+      {vb with pvb_expr = parse_and_generate options atom_mapper vb}
     ) vbl
 
 let try_compile_error f mapper str =
-  let open Sync2ml in
+  let open Grc2ml in
   try f mapper str with
   | Ast.Error (loc, e) ->
     Error.(error ~loc (Other_err (e, Ast.print_error)))
-  | Sync2ml.Error (loc, e) ->
-    Error.(error ~loc (Other_err (e, Sync2ml.print_error)))
+  | Grc2ml.Error (loc, e) ->
+    Error.(error ~loc (Other_err (e, Grc2ml.print_error)))
   | Flowgraph.Error (loc, e) ->
     Error.(error ~loc (Other_err (e, Flowgraph.print_error)))
   | Location.Error _ as e -> raise e
   | e ->
-    Error.(error ~loc:Ast.dummy_loc
+    Error.(error ~loc:(Ast.dummy_loc ())
              (Other_err (e, fun fmt e ->
                   Format.fprintf fmt "%s" (Printexc.to_string e))))
 
@@ -70,7 +75,7 @@ let tagged_signals_mapper =
            {Ast.content = Format.sprintf "%s##%s" content tag_content; loc}
          in
          let e' =
-           [%expr !![%e Sync2ml.Ocaml_gen.mk_ident ident]][@metaloc exp.pexp_loc]
+           [%expr !![%e Gen_utils.mk_ident ident]][@metaloc exp.pexp_loc]
          in
          mapper.expr mapper e'
        | x ->
@@ -79,14 +84,24 @@ let tagged_signals_mapper =
   }
 
 let pendulum_mapper argv =
-  let open Sync2ml in
+  let open Grc2ml in
   {default_mapper with
    structure_item = try_compile_error (fun mapper stri ->
        match stri with
+
+       | { pstr_desc = Pstr_extension (({ txt = "rml" }, PStr [
+           { pstr_desc = Pstr_value (Nonrecursive, vbs) }]), attrs); pstr_loc } ->
+
+         Str.value Nonrecursive
+         @@ gen_bindings (StringSet.singleton "rml")
+           (tagged_signals_mapper.expr tagged_signals_mapper) vbs
+
        | { pstr_desc = Pstr_extension (({ txt = "sync" }, PStr [
            { pstr_desc = Pstr_value (Nonrecursive, vbs) }]), attrs); pstr_loc } ->
+
          Str.value Nonrecursive
-         @@ gen_bindings (tagged_signals_mapper.expr tagged_signals_mapper) vbs
+         @@ gen_bindings StringSet.empty
+           (tagged_signals_mapper.expr tagged_signals_mapper) vbs
 
        | { pstr_desc = Pstr_extension (({ txt = "sync" }, PStr [
            { pstr_desc = Pstr_value (Recursive, _) }]), _); pstr_loc } ->
@@ -103,7 +118,8 @@ let pendulum_mapper argv =
              begin match e.pexp_desc with
                | Pexp_let (Nonrecursive, vbl, e) ->
                  Exp.let_ Nonrecursive
-                   (gen_bindings (tagged_signals_mapper.expr tagged_signals_mapper) vbl)
+                   (gen_bindings StringSet.empty
+                      (tagged_signals_mapper.expr tagged_signals_mapper) vbl)
                  @@ mapper.expr mapper e
                | Pexp_let (Recursive, vbl, e) ->
                  Error.(error ~loc Non_recursive_let)

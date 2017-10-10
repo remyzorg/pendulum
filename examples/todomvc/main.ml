@@ -196,7 +196,7 @@ module View = struct
         a_onclick (fun _ ->
             Pendulum.Signal.set_present_value select_sig cnt; animate (); true)
       ] in
-      let a = if selected then (a_checked `Checked) :: a else a
+      let a = if selected then (a_checked ()) :: a else a
       in input ~a ()
     in
     let mdiv = div ~a:[a_class ["view"]] [tgl_done; lbl_content; btn_rm] in

@@ -9,7 +9,7 @@ let p =
       !(Format.printf "%d\n" !!a)
     ; pause
     end in react_obj#create 0
-let () = p#a 10; p#react
+let () = p#a 10; ignore @@ p#react
 (* 'a -> < react : Pendulum.Program.state; x : 'a -> unit > *)
 
 let%sync p2 = loop pause
@@ -37,3 +37,12 @@ let _ :
   (unit, unit) signal * (unit -> unit) ->
   < react : unit; status : state; s : 'a -> unit >
   = p_out#create_run
+
+let%sync mouse =
+  input i;
+  output write (^);
+  loop begin
+    present i
+      (emit write "")
+  ; pause
+  end

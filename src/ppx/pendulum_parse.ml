@@ -4,11 +4,11 @@ open Asttypes
 open Parsetree
 open Longident
 
-open Pendulum_compiler
+open Compiler
 
 open Utils
 
-module Ast = Sync2ml.Ast
+module Ast = Grc2ml.Ast
 
 
 let check_expr_ident e =
@@ -72,49 +72,58 @@ let rec check_signal_emit_expr acc atom_mapper e =
   in
   List.rev @@ aux [] e
 
+let origin =
+  let open Ast in [
+    "output", Output;
+    "input", Input;
+    "element", Element;
+    "react", React;
+  ] |> StringMap.of_assoc
+
+let get_orig = function
+| { pexp_desc = Pexp_ident {txt = Lident content; loc} } ->
+    StringMap.find content origin
+  | _ -> raise Not_found
+
+let is_orig e = try ignore @@ get_orig e; true with Not_found -> false
 
 let pop_signals_decl e =
   let open Ast in
   let mk ?gatherer origin var = mk_signal ~origin ?gatherer (check_expr_ident var) in
-  let get_orig = function
-    | [%expr output] -> Output
-    | [%expr input] -> Input
-    | [%expr element] -> Element
-    | _ -> Input
-  in
   let sig_of_expr ?gatherer orig = function
-    | [%expr ([%e? e_var] : [%t? t])] -> mk (get_orig orig) e_var, Some t
-    | e_var -> mk ?gatherer (get_orig orig) e_var, None
+    | [%expr ([%e? e_var] : [%t? t])] -> mk orig e_var, Some t
+    | e_var -> mk ?gatherer orig e_var, None
   in
   let rec aux p binders sigs =
     match p with
     | [%expr [%e? {pexp_desc = Pexp_tuple (
-                    [%expr [%e? ([%expr input] | [%expr output]) as orig]
-                             [%e? e_var]] :: e_vars)}]; [%e? e2]] ->
+        [%expr [%e? orig] [%e? e_var]] :: e_vars)}]; [%e? e2]]
+      when is_orig orig ->
+
+      let orig = get_orig orig in
       aux e2 binders @@ List.fold_left (fun acc e_var' ->
           sig_of_expr orig e_var' :: acc
         ) (sig_of_expr orig e_var :: sigs) e_vars
 
-    | [%expr [%e? ([%expr input] | [%expr output] | [%expr element]) as orig]
-               [%e? e_var]; [%e? e2] ] ->
-      aux e2 binders @@ sig_of_expr orig e_var :: sigs
+    | [%expr [%e? orig] [%e? e_var]; [%e? e2] ] when is_orig orig ->
+      aux e2 binders @@ sig_of_expr (get_orig orig) e_var :: sigs
 
-    | [%expr [%e? ([%expr input] | [%expr output] | [%expr element]) as orig]
-               [%e? e_var] [%e? {pexp_desc = Pexp_record (gatherers, None)}];
-             [%e? e2] ] ->
+    | [%expr [%e? orig] [%e? e_var]
+        [%e? {pexp_desc = Pexp_record (gatherers, None)}];
+      [%e? e2] ] when is_orig orig ->
       let binder = List.map (fun ({txt; loc}, expr) ->
           match txt with
           | Lident s -> Event (Ast.mk_loc ~loc s, Some expr)
           | _ -> Error.(syntax_error ~loc:e.pexp_loc Event_name)
         ) gatherers
       in
-      let s, _ as st = sig_of_expr orig e_var in
+      let s, _ as st = sig_of_expr (get_orig orig) e_var in
       aux e2 ((s.ident.content, binder) :: binders) @@ st :: sigs
 
-    | [%expr [%e? ([%expr input] | [%expr output] | [%expr element]) as orig]
-               [%e? e_var] [%e? gatherer]; [%e? e2] ] ->
-      let st = sig_of_expr ~gatherer orig e_var in
+    | [%expr [%e? orig] [%e? e_var] [%e? gatherer]; [%e? e2] ] when is_orig orig ->
+      let st = sig_of_expr ~gatherer (get_orig orig) e_var in
       aux e2 binders @@ st :: sigs
+
     | e -> e, binders, sigs
   in aux e [] []
 
@@ -191,7 +200,7 @@ let ast_of_expr atom_mapper e =
     | [%expr run [%e? ident] [%e? tupl]] ->
       Run (check_expr_ident ident, signal_tuple_to_list tupl, tupl.pexp_loc)
     | [%expr run [%e? ident]] ->
-      Run (check_expr_ident ident, [], Ast.dummy_loc)
+      Run (check_expr_ident ident, [], (Ast.dummy_loc ()))
 
     | [%expr halt ] ->
       Halt
@@ -241,6 +250,8 @@ let compiler_options =
   ; "nooptim"
   ; "obj"
   ; "stats"
+  ; "new_feature"
+  ; "print_only"
   ]
 
 let rec parse_args options inputs exp =

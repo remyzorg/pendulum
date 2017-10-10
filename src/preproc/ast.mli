@@ -42,7 +42,7 @@ module type S = sig
 
   type ident = string location
 
-  type signal_origin = Local | Input | Output | Element
+  type signal_origin = Local | Input | Output | Element | React
 
   type gatherer = exp option
 
@@ -86,7 +86,8 @@ module type S = sig
   module SignalSet : Set.S with type elt = signal
 
 
-  val dummy_loc : loc
+  val set_dummy_loc : loc -> unit
+  val dummy_loc : unit -> loc
   val mk_loc : ?loc:loc -> 'a -> 'a location
 
   module Derived : sig
@@ -184,6 +185,7 @@ module type S = sig
 
   module Analysis : sig
     val blocking : Tagged.t -> bool
+    val non_blocking : Tagged.t -> bool
     val filter_dead_trees : Tagged.t -> Tagged.t
   end
 

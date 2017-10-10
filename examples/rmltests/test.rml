@@ -1,0 +1,30 @@
+let process main =
+  print_endline "Hello world!"
+
+let process main2 s w =
+  signal x in
+  signal y in
+  loop
+    emit s 5;
+    pause
+  end
+  ||
+  control
+    loop
+        present s then emit x else emit y;
+        pause
+    end
+  with w done
+
+
+let process my_loop input =
+  loop
+    (present input then
+      print_endline (">" ^ (String.concat "; " (pre ?input))));
+    pause
+  end
+
+
+let _ =
+  signal s in
+  run my_loop s

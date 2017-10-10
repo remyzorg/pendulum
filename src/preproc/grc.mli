@@ -61,6 +61,7 @@ module Flowgraph : sig
       | Exit of int
       | Local_signal of Ast.valued_signal
       | Instantiate_run of Ast.ident * Ast.signal Ast.run_param list * Ast.loc
+      | Compressed of action * action
 
     type test_value =
       | Signal of Ast.signal * Ast.atom option
@@ -81,32 +82,35 @@ module Flowgraph : sig
     module Fgtbl : Hashtbl.S with type key = flowgraph
     module FgEmitsTbl : Hashtbl.S with type key = flowgraph * flowgraph * Ast.signal
     module Fgtbl2 : Hashtbl.S with type key = flowgraph * flowgraph
+    module Fgtblid : Hashtbl.S with type key = int * flowgraph
+    module Grctbl : Hashtbl.S with type key = Ast.Tagged.t * flowgraph * flowgraph
     module Fgtbl3 : Hashtbl.S with type key = flowgraph * flowgraph * flowgraph
     module Fgstbl : Hashtbl.S with type key = flowgraph list
 
-    val print_to_dot : Format.formatter -> t -> unit
-    val pp : Format.formatter -> t -> unit
-    val pp_dot : Format.formatter -> t -> unit
-    val pp_test_value : Format.formatter -> test_value -> unit
-    val pp_action: Format.formatter -> action -> unit
+    val memo_rec : (module Hashtbl.S with type key = 'a) ->
+      (('a -> 'b) -> 'a -> 'b) -> 'a -> 'b
 
-    val test_node : test_value -> t * t * t option -> t
-    val sync_node : int * int -> t * t * t option -> t
+    val compress : ?env:(t list Fgtbl.t) -> t -> t
 
-    val (>>) : action -> t -> t
-    val exit_node : Ast.Tagged.t -> t -> t
-    val enter_node : Ast.Tagged.t -> t -> t
-
+    val emits : Ast.signal -> action -> bool
 
     type error =
       | Unbound_label of string
       | Cyclic_causality of t * Ast.signal list
       | Par_leads_to_finish of t
+      | Invariant_violation of t * string
 
     val error : loc:Ast.loc -> error -> 'a
 
     exception Error of Ast.loc * error
     val print_error : Format.formatter -> error -> unit
+
+    val print_to_dot : Format.formatter -> t -> unit
+    val pp : Format.formatter -> t -> unit
+    val pp_head : Format.formatter -> t -> unit
+    val pp_dot : Format.formatter -> t -> unit
+    val pp_test_value : Format.formatter -> test_value -> unit
+    val pp_action: Format.formatter -> action -> unit
   end
 
   module Make (Ast : Ast.S) : S with module Ast = Ast
@@ -150,7 +154,7 @@ module Schedule : sig
     val check_causality_cycles : 'a * Fg.t -> Fg.t list Ast.SignalMap.t
 
     val tag_tested_stmts : St.t -> Fg.t -> unit
-    val find : bool -> Fg.t -> Fg.t -> Fg.t option
+    val find : ?stop:Fg.t -> bool -> Fg.t -> Fg.t -> Fg.t option
     val find_and_replace :
       (Fg.t -> Fg.t) ->
       Fg.t -> Fg.t -> bool * Fg.t
@@ -160,17 +164,13 @@ module Schedule : sig
       -> Fg.t * Fg.t
     val children: Fg.t -> Fg.t -> Fg.t -> Fg.t
 
-    val interleave: Fg.Ast.Tagged.env -> Fg.t -> Fg.t
+    val interleave: Utils.StringSet.t -> Fg.Ast.Tagged.env -> Fg.t -> Fg.t
     (** It basically linearize the flowgraph by removing all the Fork
         The algorithm is rather naive and could be optimized.*)
 
     module Stats : sig
-
       val size : Fg.t -> int
-
       val pp : Format.formatter -> Fg.t -> unit
-
-
     end
 
   end

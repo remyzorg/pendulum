@@ -14,6 +14,24 @@ module Tuple = struct
 
 end
 
+
+module Dot_pp = struct
+
+  let blue = "blue"
+  let darkgreen = "darkgreen"
+  let red = "red"
+  let font color p fmt e = Format.fprintf fmt "<FONT COLOR=\"%s\">%a</FONT>" color p e
+  let bold p fmt e = Format.fprintf fmt "<B>%a</B>" p e
+
+  let int = Format.pp_print_int
+  let str = Format.pp_print_string
+
+  let br = "<br/>"
+
+
+end
+
+
 module MList = struct
 
   let rec map_filter p f = function
@@ -29,7 +47,7 @@ module MList = struct
 
   let rec pp_iter ?(sep="") pp_element fmt = function
     | [h] -> Format.fprintf fmt "%a" pp_element h
-    | h :: t -> Format.fprintf fmt "%a%s@;%a" pp_element h sep (pp_iter ~sep pp_element) t
+    | h :: t -> Format.fprintf fmt "%a%s%a" pp_element h sep (pp_iter ~sep pp_element) t
     | [] -> ()
 
   let rec pp_iter_nobreak ?(sep="") pp_element fmt = function
@@ -39,10 +57,20 @@ module MList = struct
 
 end
 
-module StringMap = Map.Make(struct
+module StringMap =struct
+  include Map.Make(struct
     type t = string
     let compare = compare
   end)
+
+  let of_assoc l =
+    List.fold_left (fun acc (k, v) ->
+        add k v acc
+      ) empty l
+
+end
+
+
 
 module StringSet = Set.Make(struct
     type t = string

@@ -1,7 +1,7 @@
 [%%shared
     open Eliom_lib
     open Eliom_content
-    open Html5.D
+    open Html.D
 ]
 
 module With_ocsigen_app =
@@ -15,7 +15,7 @@ let main_service =
 
 
 let todomvc_base () =
-  let open Html5.F in
+  let open Html.F in
   div ~a:[a_id "todomvc"] [
     div ~a:[a_class [ "todomvc-wrapper"]] [
       section ~a:[a_class ["todoapp"]]
@@ -51,7 +51,7 @@ let todomvc_base () =
 
 
 let info_footer () =
-  let open Html5.F in
+  let open Html.F in
   footer ~a:[a_class ["info"]]
     [ span ~a:[a_id "remove_storage"] [pcdata "remove local storage"]
     ; p [ pcdata "Double-click to edit a todo"]
@@ -69,7 +69,7 @@ let info_footer () =
 
 let%client main _ =
   let open Todomvc in
-  let  _, _, _, _, m_react = Controller.machine CoerceTo.(
+  let m = Controller.machine#create CoerceTo.(
     "todo-list" @> ul
   , "new-todo" @> input
   , "filter_footer" @> element
@@ -79,7 +79,7 @@ let%client main _ =
   , "visibility_completed" @> a
   , "visibility_active" @> a
   , "remove_storage" @> element) in
-  ignore (m_react ());
+  ignore (m#react ());
   false
 
 let%client _ =  Lwt_js_events.onload () >|= main
@@ -95,7 +95,7 @@ let () =
            ~title:"Pendulum on Eliom • TodoMVC"
            ~css:[["css"; "node_modules"; "todomvc-common"; "base.css"];
                  ["css"; "node_modules"; "todomvc-app-css"; "index.css"]  ]
-           Html5.F.(body [
+           Html.F.(body [
              todomvc_base ();
              info_footer ()
            ])))

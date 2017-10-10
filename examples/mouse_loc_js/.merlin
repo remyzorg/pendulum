@@ -1,0 +1,5 @@
+S .
+B _build
+PPX pendulum
+PPX js_of_ocaml.ppx
+PKG js_of_ocaml.tyxml

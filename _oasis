@@ -11,28 +11,41 @@ Flag all
   Description: build and install everything
   Default: false
 
+Flag react
+  Description: build and install react related exemples
+  Default: false
+
 Flag ppx
   Description: Build the ppx syntax extension
   Default$: flag(all)
 
-Library "pendulum"
+Library pendulum
   Path: src/runtime/
   Pack: true
   Install: true
   Modules: Runtime_ast, Runtime_misc, Signal, Program
 
-Library "pendulum_compiler"
+Library compiler
   Path: src/preproc/
   Pack: true
   Install: true
   FindlibParent: pendulum
   FindlibName: compiler 
-  Modules: Utils, Ast, Grc, Sync2ml
+  Modules: Utils, Ast, Grc, Grc2ml, Ml2ocaml, Gen_names, Gen_utils
   BuildDepends:
     unix,
     ppx_tools.metaquot
 
-Library ppx
+Library rml_backend
+  Path: src/rml/
+  Install: true
+  Pack: true
+  Modules: Ast2rml
+  FindlibName: rml_backend 
+  FindlibParent: pendulum
+  BuildDepends: pendulum.compiler
+
+Library ppx_pendulum
    Path: src/ppx
    FindlibParent: pendulum
    FindlibName: ppx
@@ -48,9 +61,11 @@ Executable ppx_pendulum
   BuildDepends:
     compiler-libs.common,
     ppx_tools.metaquot,
+    pendulum.rml_backend,
     pendulum.compiler
   MainIs:         ppx_pendulum_ex.ml
   CompiledObject: best
+
 
 Executable "test_ppx"
  Path: tests/ppx
@@ -59,9 +74,13 @@ Executable "test_ppx"
  CompiledObject: byte
  MainIs: test_ppx.ml
  BuildTools: ppx_pendulum
- # BuildDepends: oUnit, pendulum
  BuildDepends: js_of_ocaml.ppx, oUnit, js_of_ocaml, pendulum
 
-
-
-    
+Executable "test_ppx_react"
+ Path: tests/ppx
+ Build$: flag(tests) || flag(ppx) || flag(react)
+ Install: false
+ CompiledObject: byte
+ MainIs: test_ppx_react.ml
+ BuildTools: ppx_pendulum
+ BuildDepends: react, oUnit, pendulum
