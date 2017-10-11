@@ -120,6 +120,7 @@ module Flowgraph = struct
     type flowgraph = t
 
     module Fgtbl : Hashtbl.S with type key = flowgraph
+    module Synctbl : Hashtbl.S with type key = int * int
     module FgEmitsTbl : Hashtbl.S with type key = flowgraph * flowgraph * Ast.signal
     module Fgtbl2 : Hashtbl.S with type key = flowgraph * flowgraph
     module Fgtblid : Hashtbl.S with type key = int * flowgraph
@@ -133,6 +134,7 @@ module Flowgraph = struct
     val compress : ?env:(t list Fgtbl.t) -> t -> t
 
     val emits : Ast.signal -> action -> bool
+    val test_eq : test_value -> test_value -> bool
 
     type error =
       | Unbound_label of string
@@ -190,6 +192,12 @@ module Flowgraph = struct
         let hash = Hashtbl.hash
         let equal = (==)
       end)
+
+    module Synctbl = Hashtbl.Make(struct
+        type t = int * int
+        let hash = Hashtbl.hash
+        let equal = (=)
+        end)
 
     module Fgtblid = Hashtbl.Make(struct
         type t = int * flowgraph
@@ -276,6 +284,14 @@ module Flowgraph = struct
           parents lfg; parents rfg
         | Pause | Finish -> ()
       in memo_rec (module Fgtbl) parents fg
+
+    let test_eq t1 t2 =
+      match t1, t2 with
+      | Signal (s1, a1), Signal (s2, a2) ->
+        s1.ident.content = s2.ident.content && a1 = a2
+      | Selection i1, Selection i2 -> i1 = i2
+      | Sync (il1, ir1), Sync (il2, ir2) -> il1 = il2 && ir1 = ir2
+      | _ -> false
 
     let rec emits s (act : action) =
       match act with
@@ -521,7 +537,7 @@ module Of_ast = struct
       exits : Fg.t StringMap.t;
       exit_nodes : Fg.t Fg.Fgtblid.t;
       under_suspend : bool;
-      synctbl : (int * int, Fg.t) Hashtbl.t;
+      synctbl : Fg.t Fg.Synctbl.t;
       (* A Sync is the same flow, both in S and D,
          so there is a special table for this *)
       parents : (Fg.t list) Fg.Fgtbl.t
@@ -632,10 +648,12 @@ module Of_ast = struct
             @@ test_node env (Is_paused (id, sigs, loc)) (pause, endrun, None))
 
         | Par (q, r) ->
-          let syn = try Hashtbl.find env.synctbl (q.id, r.id) with
+          let syn = try
+              Synctbl.find env.synctbl (q.id, r.id)
+            with
             | Not_found ->
-              let n = sync_node env (q.id, r.id) (pause, exit_node env p endp, None)
-              in Hashtbl.add env.synctbl (q.id, r.id) n; n
+              let n = sync_node env (q.id, r.id) (pause, exit_node env p endp, None) in 
+              Synctbl.add env.synctbl (q.id, r.id) n; n
           in
           enter_node env p @@
           Fork (
@@ -688,10 +706,13 @@ module Of_ast = struct
             test_node env (Selection q.id) (depth_q, depth_r, Some pause)
 
         | Par (q, r) ->
-          let syn = try Hashtbl.find env.synctbl (q.id, r.id) with
+          let syn = try
+              let syn = Synctbl.find env.synctbl (q.id, r.id) in
+              syn
+            with
             | Not_found ->
-              let n = sync_node env (q.id, r.id) (pause, exit_node env p endp, None)
-              in Hashtbl.add env.synctbl (q.id, r.id) n; n
+              let n = sync_node env (q.id, r.id) (pause, exit_node env p endp, None) in
+              Synctbl.add env.synctbl (q.id, r.id) n; n
           in
           Fork (
             test_node env (Selection q.id) (
@@ -743,7 +764,7 @@ module Of_ast = struct
       let env = {
         under_suspend = false;
         exits = StringMap.empty;
-        synctbl = Hashtbl.create 17;
+        synctbl = Synctbl.create 17;
         parents = Fgtbl.create 17;
         exit_nodes = Fgtblid.create 17;
       } in
@@ -791,13 +812,8 @@ module Schedule = struct
     val check_causality_cycles : 'a * Fg.t -> Fg.t list Ast.SignalMap.t
     val tag_tested_stmts : St.t -> Fg.t -> unit
     val find : ?stop:Fg.t -> bool -> Fg.t -> Fg.t -> Fg.t option
-    val find_and_replace :
-      (Fg.t -> Fg.t) ->
-      Fg.t -> Fg.t -> bool * Fg.t
 
     val find_join : bool -> Fg.t -> Fg.t -> Fg.t option
-    val replace_join : Fg.t -> Fg.t -> (Fg.t -> Fg.t)
-      -> Fg.t * Fg.t
     val children: Fg.t -> Fg.t -> Fg.t -> Fg.t
     val interleave: StringSet.t -> Fg.Ast.Tagged.env -> Fg.t -> Fg.t
 
@@ -1011,190 +1027,164 @@ module Schedule = struct
       end
 
 
-    let rec replace_join fg1 fg2 replf =
-      let rec aux aux (fg1, fg2) =
-        let res, fg2' = find_and_replace replf fg2 fg1 in
-        if res then replf fg1, fg2'
-        else
-          match fg1 with
-          | Call(a, t) ->
-            let t, fg2' = aux (t, fg2) in
-            let fg1' = Call (a, t) in
-            fg1', fg2'
-          | Test (_, t1, t2, _) | Fork (t1, t2, _) ->
-            let fg2_r = ref fg2 in
-            let t1, t2 = replace_join t1 t2 (fun x ->
-                let x', fg2' = aux (x, fg2) in
-                fg2_r := fg2'; x')
+    type test_op = F of test_value | T of test_value
+
+    module DTbl = Hashtbl.Make (struct
+        type t = (Fg.action * ((test_op * Fg.t) list)) list
+        let hash = Hashtbl.hash
+        let equal = (==)
+      end)
+
+    let rec compressed_to_list f acc a =
+      match a with
+      | Compressed (a1, a2) ->
+        compressed_to_list f (compressed_to_list f acc a1) a2
+      | a -> f a :: acc
+
+    let pp_test fmt t =
+      let op, t= match t with F t, _ -> "F", t | T t, _ -> "T", t in
+      Format.fprintf fmt "%s(%a)%d" op pp_test_value t (Obj.magic t)
+    let pp_tests fmt = MList.pp_iter ~sep:" " pp_test fmt
+    let pp_signals fmt set =
+      MList.pp_iter ~sep:"," (fun fmt x -> Format.fprintf fmt "%s" x.ident.content) fmt
+        (SignalSet.elements set)
+
+    let pp_dline ?wr () fmt (a, ts) =
+      match wr with
+      | Some (w, r) ->
+        Format.fprintf fmt "%a (%a | %a) : %a\n"
+          pp_action a pp_signals r pp_signals w pp_tests ts
+      | None ->
+        Format.fprintf fmt "%a :\t\t %a\n" pp_action a pp_tests ts
+
+    let extract_emits_tests_sets =
+      let open SignalSet in
+      let h = DTbl.create 19 in
+      let rec extract_mem acc l =
+        try DTbl.find h l with | Not_found ->
+          match l with
+          | [] -> SignalSet.empty, SignalSet.empty
+          | (a, tests) :: l ->
+            let writes, reads = extract_mem acc l in
+            let sig_tests = List.fold_left (fun acc test ->
+                match test with
+                | F (Signal (s, _)), _ | T (Signal (s, _)), _ -> add s acc
+                | _ -> acc
+              ) empty tests
             in
-            let fg1' = children fg1 t1 t2 in
-            fg1', !fg2_r
-          | Pause | Finish -> fg1, fg2
-      in memo_rec (module Fgtbl2) aux (fg1, fg2)
+            let emits = match a with Emit sv -> add sv.signal writes | _ -> writes in
+            emits, sig_tests
+      in extract_mem
 
+    let pp_destruct b fmt l =
+      let rec f fmt l =
+        match l with
+        | [] -> Format.fprintf fmt "\n"
+        | (a, ts) :: l' ->
+          if b then pp_dline ~wr:(extract_emits_tests_sets [] l) () fmt (a, ts)
+          else pp_dline  () fmt (a, ts);
+          f fmt l'
+      in f fmt l
 
-    (* type action = *)
-    (*   | Emit of valued_signal *)
-    (*   | Atom of atom *)
-    (*   | Enter of int *)
-    (*   | Exit of int *)
-    (*   | Local_signal of valued_signal *)
-    (*   | Instantiate_run of ident * signal run_param list * loc *)
-    (*   | Compressed of action * action *)
-
-    (* type test_value = *)
-    (*   | Signal of signal * atom option *)
-    (*   | Selection of int *)
-    (*   | Sync of (int * int) *)
-    (*   | Is_paused of ident * signal run_param list * loc *)
-    (*   | Finished *)
-
-    (* type t = *)
-    (*   | Call of action * t *)
-    (*   | Test of test_value * t * t * t option (\* then * else * join_value *\) *)
-    (*   | Fork of t * t * t (\* left * right * sync *\) *)
-    (*   | Pause *)
-    (*   | Finish *)
-
-    type flowgraph_heap =
-      | FHleaf of Fg.t
-      | FHnode of Fg.t * flowgraph_heap * flowgraph_heap
-
-
-    let context_interleaving options env fg1 (tv1, l1, r1) fg2 (tv2, l2, r2) =
-      assert false
-
-    let inner_interleave options env fork_tbl =
-      let rec interleave (stop: Fg.t) fg1 fg2 =
-        try Fgtbl2.find fork_tbl (fg1, fg2) with | Not_found ->
-        try Fgtbl2.find fork_tbl (fg2, fg1) with | Not_found ->
-          let fg = match fg1, fg2 with
-            | fg1, fg2 when eq_fork_id fg1 stop -> fg2
-            | fg1, fg2 when eq_fork_id fg2 stop -> fg1
-            | Call (action, t), fg | fg, Call (action, t) ->
-              Call (action, interleave stop fg t)
-            | Test (tv1, l1, r1, _), Test (tv2, l2, r2, _) ->
-              interleave_test stop fg1 (tv1, l1, r1) fg2 (tv2, l2, r2)
-            | Fork _, fg | fg, Fork _ ->
-              (* Impossible by construction *)
+    let destruct env stop fg =
+      let rec destruct (acc : 'a list) stop tests fg =
+        let tests = match tests with
+          | [] -> tests
+          | (T h, join) :: t | (F h, join) :: t -> if join == fg then t else tests
+        in
+        match fg with
+        | fg when fg == stop -> acc
+        | Call (Compressed (a1, a2) as a, t) ->
+          let acc' = compressed_to_list (fun a -> a, List.rev tests) acc a in
+          destruct acc' stop tests t
+        | Call (a, t) -> destruct ((a, List.rev tests) :: acc) stop tests t
+        | Test (test, l, r, join) ->
+          let stop' = match find_join true l r with
+            | None ->
               Fg.error ~loc:Ast.Tagged.(env.pname.loc)
-                (Invariant_violation (fg, "Fork reached while interleaving"))
-            | (Finish | Pause), fg | fg, (Finish | Pause) ->
-              (* Impossible by construction *)
-              Fg.error ~loc:Ast.Tagged.(env.pname.loc)
-                (Invariant_violation (fg, "Parallel leads to pause or exit"))
-          in Fgtbl2.add fork_tbl (fg1, fg2) fg; fg
-
-      and interleave_test stop fg1 (tv1, l1, r1) fg2 (tv2, l2, r2) =
-        match tv1, tv2 with
-        | Finished, tv | tv, Finished -> Fg.error ~loc:Ast.Tagged.(env.pname.loc)
-            (Invariant_violation (r2, "Finished reached from interleaving"))
-
-        | Signal (s1, _) as t1, (Signal (s2, _) as t2) ->
-          let l, r, fg, t =
-            if emits options fg1 stop s2 then
-              if emits options fg2 stop s1 then
-                Fg.(error ~loc:s1.ident.loc
-                    @@ Cyclic_causality (fg1, [s1; s2]))
-              else l1, r1, fg2, t1 else l2, r2, fg1, t2
+                (Invariant_violation (fg, "Finished reached from interleaving"))
+            | Some s -> s
           in
-          let l', r' = replace_join l r (fun x -> interleave stop fg x) in
-          Test (t, l', r', None)
+          let dl = destruct acc stop' ((T test, stop') :: tests) l in
+          destruct dl stop ((F test, stop') :: tests) r
+        | Fork _ ->
+          (* Impossible by construction *)
+          Fg.error ~loc:Ast.Tagged.(env.pname.loc)
+            (Invariant_violation (fg, "Fork reached while interleaving"))
+        | Finish | Pause ->
+          (* Impossible by construction *)
+          Fg.error ~loc:Ast.Tagged.(env.pname.loc)
+            (Invariant_violation (fg, "Parallel leads to pause or exit"))
+      in destruct [] stop [] fg
 
-        | Signal (s, _), tv | tv, Signal (s, _)->
-          context_interleaving options env fg1 (tv1, l1, r1) fg2 (tv2, l2, r2)
+    (* emit, read *)
 
+    let interleave_lists env ld rd =
+      let rec inter acc ld rd =
+        match ld, rd with
+        | [], [] -> acc
+        | [], at :: d | at :: d, [] -> inter (at :: acc) d []
+        | (_, [] as la) :: ld, (_, [] as ra) :: rd -> inter (la :: ra :: acc) ld rd
+        | at :: d, ((_, []) :: _ as d') | ((_, []) :: _ as d'), at :: d -> inter (at :: acc) d d'
+        | ((la, lt) as lat) :: ld', ((ra, rt) as rat) :: rd' ->
+          let ld_writes, ld_reads = extract_emits_tests_sets [] ld in
+          let rd_writes, rd_reads = extract_emits_tests_sets [] rd in
 
+          let inter_ldr_rdw = SignalSet.inter ld_reads rd_writes in
+          if inter_ldr_rdw = SignalSet.empty then
+            inter (lat :: acc) ld' rd
+          else
+            let inter_rdr_ldw = SignalSet.inter rd_reads ld_writes in
+            if inter_rdr_ldw = SignalSet.empty then
+              inter (rat :: acc) ld rd'
+            else
+              let signals = SignalSet.(elements (union inter_ldr_rdw inter_rdr_ldw)) in
+              Fg.(error ~loc:Ast.Tagged.(env.pname.loc) @@ Cyclic_causality (Finish, signals))
+      in List.rev @@ inter [] ld rd
 
-        | Selection i, tv | tv, Selection i -> assert false
-        | Sync (i1, i2), tv | tv, Sync (i1, i2) -> assert false
-        | Is_paused _, tv -> assert false (* TODO *)
-
-    in interleave
-
-    let inner_interleave options env fork_tbl =
-      let rec interleave (stop: Fg.t) fg1 fg2 =
-        try Fgtbl2.find fork_tbl (fg1, fg2) with | Not_found ->
-        try Fgtbl2.find fork_tbl (fg2, fg1) with | Not_found ->
-          let fg = match fg1, fg2 with
-            | fg1, fg2 when fork_id fg1 = fork_id stop -> fg2
-            | fg1, fg2 when fork_id fg2 = fork_id stop -> fg1
-
-            | (Finish | Pause ), fg
-            | fg, (Finish | Pause) ->
-              Fg.error ~loc:Ast.Tagged.(env.pname.loc) (Par_leads_to_finish fg2)
-
-            | (Call (Instantiate_run _, _) as fg1), Call (action, t2)
-            | Call (action, t2), (Call (Instantiate_run _, _) as fg1) ->
-              Call (action, interleave stop fg1 t2)
-
-            | Call (action, t), fg2 ->
-              Call (action, interleave stop fg2 t)
-
-            | (Fork (t1, t2, sync)), _
-            | _, (Fork (t1, t2, sync)) ->
-              let fg1 = interleave sync t1 t2 in
-              interleave stop fg1 fg2
-
-            | Test (Signal (s, atopt), t1, t2, join), fg2 ->
-
-              (* if StringSet.mem "new_feature" options then *)
-              (*   Format.eprintf "debug_grc: %a %a\n" pp_head fg1 pp_head fg2; *)
-
-              (* let can_emit = emits options fg2 stop s in *)
-              (* if StringSet.mem "new_feature" options then *)
-              (*   Format.printf "%a emit %s before %a : %B\n" *)
-              (*     pp_head fg2 s.ident.content pp_head stop can_emit; *)
-
-              if emits options fg2 stop s then
-                match fg2 with
-                | Call (a, t) ->
-                  Call (a, interleave stop t fg1)
-                | Pause | Finish -> assert false
-                | Test (test, t1, t2, joinfg2) ->
-                  let t1, t2 = replace_join t1 t2 (fun x ->
-                      interleave stop fg1 x
-                    )
-                  in
-                  Test(test, t1, t2, joinfg2)
-                | Fork (t1, t2, sync) ->
-                  let fg2 = interleave stop t1 t2 in
-                  interleave sync fg1 fg2
-              else (
-                let t1, t2 = replace_join t1 t2 (fun x -> interleave stop x fg2) in
-                children fg1 t1 t2
-              )
-
-            | Test (test, t1, t2, joinfg1) as fg1, fg2 ->
-
-              let open SignalSet in
-              let fg1_emits, fg1_tests = extract_emits_tests_sets fg1 stop in
-              let fg2_emits, fg2_tests = extract_emits_tests_sets fg2 stop in
-              let inter1 = inter fg2_emits fg1_tests in
-              let inter2 = inter fg1_emits fg2_tests in
-
-              if inter1 <> empty then
-                if inter2 <> empty then begin
-                  Fg.(error ~loc:Ast.Tagged.(env.pname.loc)
-                      @@ Cyclic_causality
-                        (fg1, (SignalSet.fold List.cons (union inter1 inter2) [])))
-                end
-                else
-                  interleave stop fg2 fg1
-              else
-                let t1, t2 = replace_join t1 t2 (fun x ->
-                    interleave stop fg2 x
-                  )
-                in Test(test, t1, t2, joinfg1)
-
-          in Fgtbl2.add fork_tbl (fg1, fg2) fg; fg
-      in interleave
+    let rebuild_destruct env fg l =
+      let gen_tests acc (a, ts) =
+        let old_acc = acc in
+        List.fold_left (fun acc x -> match x with
+            | T test, _ -> Test (test, acc, old_acc, Some old_acc)
+            | F test, _ -> Test (test, old_acc, acc, Some old_acc)
+          ) (Call (a, acc)) ts
+      in
+      let rec visit_tests (a, ts) acc t t_path f_path endt =
+        match ts with
+        | [] -> assert false
+        | (T t', _) :: ts' ->
+          if Fg.test_eq t t' then
+            Test (t, rebuild t_path [a, ts'], f_path, endt)
+          else gen_tests acc (a, ts)
+        | (F t', _) :: ts' ->
+          if Fg.test_eq t' t then
+            Test (t, t_path, rebuild f_path [a, ts'], endt)
+          else gen_tests acc (a, ts)
+      and rebuild acc l =
+        match l with
+        | [] -> acc
+        | (a, []) :: l ->
+          begin match acc with
+            | Call (a', fg) ->
+              (rebuild (Call (Compressed (a, a'), fg)) l)
+            | _ -> rebuild (Call (a, acc)) l
+          end
+        | (a, ts) :: l ->
+          begin match acc with
+            | Call _ -> rebuild (gen_tests acc (a, ts)) l
+            | Test (t, t_path, f_path, endt) ->
+              let visited = visit_tests (a, ts) acc t t_path f_path endt in
+              rebuild visited l
+            | _ -> Fg.error ~loc:Ast.Tagged.(env.pname.loc)
+            (Invariant_violation (fg, "Fork reached while interleaving"))
+          end
+      in
+      rebuild fg @@ List.rev l
 
 
     let interleave options env fg =
-      let fork_tbl = Fgtbl2.create 17 in
       let visit_tbl = Fgtbl.create 17 in
-      let interleave = inner_interleave options env fork_tbl in
       let rec visit fg =
         try
           Fgtbl.find visit_tbl fg
@@ -1203,7 +1193,18 @@ module Schedule = struct
             | Call (a, t) -> Call (a, visit t)
             | Test (tv, t1, t2, tend) ->
               Test (tv, visit t1, visit t2, Option.map visit tend)
-            | Fork (t1, t2, sync) -> interleave sync (visit t1) (visit t2)
+            | Fork (t1, t2, sync) ->
+              let t1, t2 = visit t1, visit t2 in
+              let sync = visit sync in
+
+              let l = List.rev @@ destruct env sync t1 in
+              let r = List.rev @@ destruct env sync t2 in
+              let inter_r_l = interleave_lists env l r in
+              (* Format.printf "%a\n" (pp_destruct true) l; *)
+              (* Format.printf "%a\n" (pp_destruct true) r; *)
+              (* Format.printf "----------\n%a\n----------" (pp_destruct false) inter_r_l; *)
+              rebuild_destruct env sync inter_r_l
+
             | Pause -> Pause
             | Finish -> Finish
           in

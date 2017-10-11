@@ -80,6 +80,7 @@ module Flowgraph : sig
     type flowgraph = t
 
     module Fgtbl : Hashtbl.S with type key = flowgraph
+    module Synctbl : Hashtbl.S with type key = int * int
     module FgEmitsTbl : Hashtbl.S with type key = flowgraph * flowgraph * Ast.signal
     module Fgtbl2 : Hashtbl.S with type key = flowgraph * flowgraph
     module Fgtblid : Hashtbl.S with type key = int * flowgraph
@@ -93,6 +94,8 @@ module Flowgraph : sig
     val compress : ?env:(t list Fgtbl.t) -> t -> t
 
     val emits : Ast.signal -> action -> bool
+
+    val test_eq : test_value -> test_value -> bool
 
     type error =
       | Unbound_label of string
@@ -155,13 +158,9 @@ module Schedule : sig
 
     val tag_tested_stmts : St.t -> Fg.t -> unit
     val find : ?stop:Fg.t -> bool -> Fg.t -> Fg.t -> Fg.t option
-    val find_and_replace :
-      (Fg.t -> Fg.t) ->
-      Fg.t -> Fg.t -> bool * Fg.t
 
     val find_join : bool -> Fg.t -> Fg.t -> Fg.t option
-    val replace_join : Fg.t -> Fg.t -> (Fg.t -> Fg.t)
-      -> Fg.t * Fg.t
+
     val children: Fg.t -> Fg.t -> Fg.t -> Fg.t
 
     val interleave: Utils.StringSet.t -> Fg.Ast.Tagged.env -> Fg.t -> Fg.t
