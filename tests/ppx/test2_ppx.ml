@@ -47,6 +47,7 @@ let dummyatom () = Format.printf "Hello\n"
 (*   ) *)
 
 
+(* cannot *)
 let%sync many_par =
   loop pause
   || loop pause
@@ -67,22 +68,22 @@ let%sync many_par =
   || loop pause
   || loop pause
   || loop pause
-  (* || loop pause *)
-  (* || loop pause *)
-  (* || loop pause *)
-  (* || loop pause *)
-  (* || loop pause *)
-  (* || loop pause *)
-  (* || loop pause *)
-  (* || loop pause *)
-  (* || loop pause *)
-  (* || loop pause *)
-  (* || loop pause *)
-  (* || loop pause *)
-  (* || loop pause *)
-  (* || loop pause *)
-  (* || loop pause *)
-  (* || loop pause *)
+  || loop pause
+  || loop pause
+  || loop pause
+  || loop pause
+  || loop pause
+  || loop pause
+  || loop pause
+  || loop pause
+  || loop pause
+  || loop pause
+  || loop pause
+  || loop pause
+  || loop pause
+  || loop pause
+  || loop pause
+  || loop pause
   (* || loop pause *)
   (* || loop pause *)
   (* || loop pause *)

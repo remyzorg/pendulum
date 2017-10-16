@@ -1043,7 +1043,7 @@ module Schedule = struct
 
     let pp_test fmt t =
       let op, t= match t with F t, _ -> "F", t | T t, _ -> "T", t in
-      Format.fprintf fmt "%s(%a)%d" op pp_test_value t (Obj.magic t)
+      Format.fprintf fmt "%s(%a)" op pp_test_value t
     let pp_tests fmt = MList.pp_iter ~sep:" " pp_test fmt
     let pp_signals fmt set =
       MList.pp_iter ~sep:"," (fun fmt x -> Format.fprintf fmt "%s" x.ident.content) fmt
@@ -1080,9 +1080,7 @@ module Schedule = struct
       let rec f fmt l =
         match l with
         | [] -> Format.fprintf fmt "\n"
-        | (a, ts) :: l' ->
-          if b then pp_dline ~wr:(extract_emits_tests_sets [] l) () fmt (a, ts)
-          else pp_dline  () fmt (a, ts);
+        | (a, ts) :: l' -> pp_dline () fmt (a, ts);
           f fmt l'
       in f fmt l
 
@@ -1097,7 +1095,8 @@ module Schedule = struct
         | Call (Compressed (a1, a2) as a, t) ->
           let acc' = compressed_to_list (fun a -> a, List.rev tests) acc a in
           destruct acc' stop tests t
-        | Call (a, t) -> destruct ((a, List.rev tests) :: acc) stop tests t
+        | Call (a, t) ->
+          destruct ((a, tests) :: acc) stop tests t
         | Test (test, l, r, join) ->
           let stop' = match find_join true l r with
             | None ->
@@ -1119,6 +1118,14 @@ module Schedule = struct
 
     (* emit, read *)
 
+    (*
+       Idea to avoid the quadratic complexity in general case :
+       - annonce when a list may emit eventually in a Hashtbl indiced by signals
+       - Read the lists with the same rules as two lists
+       - if there is a signal test, check the table to see which list is needed, put it in first
+
+     *)
+
     let interleave_lists env ld rd =
       let rec inter acc ld rd =
         match ld, rd with
@@ -1129,13 +1136,14 @@ module Schedule = struct
         | ((la, lt) as lat) :: ld', ((ra, rt) as rat) :: rd' ->
           let ld_writes, ld_reads = extract_emits_tests_sets [] ld in
           let rd_writes, rd_reads = extract_emits_tests_sets [] rd in
-
           let inter_ldr_rdw = SignalSet.inter ld_reads rd_writes in
           if inter_ldr_rdw = SignalSet.empty then
+            (* let lat = la, List.rev lt in *)
             inter (lat :: acc) ld' rd
           else
             let inter_rdr_ldw = SignalSet.inter rd_reads ld_writes in
             if inter_rdr_ldw = SignalSet.empty then
+              (* let rat = ra, List.rev rt in *)
               inter (rat :: acc) ld rd'
             else
               let signals = SignalSet.(elements (union inter_ldr_rdw inter_rdr_ldw)) in
@@ -1185,6 +1193,13 @@ module Schedule = struct
 
     let interleave options env fg =
       let visit_tbl = Fgtbl.create 17 in
+      let destruct_tbl = Fgtbl.create 17 in
+      let destruct env sync fg =
+        try Fgtbl.find destruct_tbl fg with
+        | Not_found ->
+          let d = destruct env sync fg in
+          Fgtbl.add destruct_tbl fg d; d
+      in
       let rec visit fg =
         try
           Fgtbl.find visit_tbl fg
@@ -1196,14 +1211,23 @@ module Schedule = struct
             | Fork (t1, t2, sync) ->
               let t1, t2 = visit t1, visit t2 in
               let sync = visit sync in
-
+              let t0 = Unix.gettimeofday () in
+              Format.printf "Init %f@\n" t0;
               let l = List.rev @@ destruct env sync t1 in
               let r = List.rev @@ destruct env sync t2 in
+              let t1 = Unix.gettimeofday () in
+              Format.printf "Destruct %f@\n" (t1 -. t0);
               let inter_r_l = interleave_lists env l r in
+              let t2 = Unix.gettimeofday () in
+              Format.printf "Interleave %f@\n" (t2 -. t1);
               (* Format.printf "%a\n" (pp_destruct true) l; *)
               (* Format.printf "%a\n" (pp_destruct true) r; *)
               (* Format.printf "----------\n%a\n----------" (pp_destruct false) inter_r_l; *)
-              rebuild_destruct env sync inter_r_l
+              let r = rebuild_destruct env sync inter_r_l in
+              Fgtbl.add destruct_tbl r inter_r_l;
+              let t3 = Unix.gettimeofday () in
+              Format.printf "Rebuild %f@\n" (t3 -. t2);
+              r
 
             | Pause -> Pause
             | Finish -> Finish
