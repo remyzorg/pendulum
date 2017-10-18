@@ -66,20 +66,21 @@ module Flowgraph : sig
     type test_value =
       | Signal of Ast.signal * Ast.atom option
       | Selection of int
-      | Sync of (int * int)
+      | Sync of int list
       | Is_paused of Ast.ident * Ast.signal Ast.run_param list * Ast.loc
       | Finished
 
     type t =
       | Call of action * t
       | Test of test_value * t * t * t option (* then * else *)
-      | Fork of t * t * t (* left * right * sync *)
+      | Fork of t list * t (* left * right * sync *)
       | Pause
       | Finish
 
     type flowgraph = t
 
     module Fgtbl : Hashtbl.S with type key = flowgraph
+    module Synctbl : Hashtbl.S with type key = int list
     module FgEmitsTbl : Hashtbl.S with type key = flowgraph * flowgraph * Ast.signal
     module Fgtbl2 : Hashtbl.S with type key = flowgraph * flowgraph
     module Fgtblid : Hashtbl.S with type key = int * flowgraph
@@ -93,6 +94,8 @@ module Flowgraph : sig
     val compress : ?env:(t list Fgtbl.t) -> t -> t
 
     val emits : Ast.signal -> action -> bool
+
+    val test_eq : test_value -> test_value -> bool
 
     type error =
       | Unbound_label of string
@@ -110,6 +113,7 @@ module Flowgraph : sig
     val pp_head : Format.formatter -> t -> unit
     val pp_dot : Format.formatter -> t -> unit
     val pp_test_value : Format.formatter -> test_value -> unit
+    val pp_test_value_dot : Format.formatter -> test_value -> unit
     val pp_action: Format.formatter -> action -> unit
   end
 
@@ -151,17 +155,11 @@ module Schedule : sig
     module Fg : Flowgraph.S
     module St : Selection_tree.S
 
-    val check_causality_cycles : 'a * Fg.t -> Fg.t list Ast.SignalMap.t
-
     val tag_tested_stmts : St.t -> Fg.t -> unit
     val find : ?stop:Fg.t -> bool -> Fg.t -> Fg.t -> Fg.t option
-    val find_and_replace :
-      (Fg.t -> Fg.t) ->
-      Fg.t -> Fg.t -> bool * Fg.t
 
     val find_join : bool -> Fg.t -> Fg.t -> Fg.t option
-    val replace_join : Fg.t -> Fg.t -> (Fg.t -> Fg.t)
-      -> Fg.t * Fg.t
+
     val children: Fg.t -> Fg.t -> Fg.t -> Fg.t
 
     val interleave: Utils.StringSet.t -> Fg.Ast.Tagged.env -> Fg.t -> Fg.t

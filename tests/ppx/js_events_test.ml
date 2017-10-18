@@ -64,7 +64,8 @@ let%sync test_animate ~animate =
     pause
   end
 
-let%sync reactive_player =
+
+let%sync reactive_player ~print:pdf =
   input play_pause;
   input progress_bar;
   input media;
@@ -90,6 +91,7 @@ let%sync reactive_player =
       ||
       !(dummyatom ())
     ); pause)
+
 
 
 let%sync mouse_react  =

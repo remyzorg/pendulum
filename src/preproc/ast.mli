@@ -54,7 +54,7 @@ module type S = sig
   type signal = {
     ident : ident; (** located signal identifier *)
     origin : signal_origin; (** denote where it's been defined. *)
-    bind : signal_binder; (** a tag used in signal expressions for a spcial usage of a signal*)
+    bind : signal_binder; (** a tag used in signal expressions for a special usage of a signal*)
     gatherer : gatherer (** gathering function *)
   }
 

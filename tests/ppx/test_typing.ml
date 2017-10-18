@@ -13,17 +13,17 @@ let () = p#a 10; ignore @@ p#react
 (* 'a -> < react : Pendulum.Program.state; x : 'a -> unit > *)
 
 let%sync p2 = loop pause
-let _ : < react : state > = p2#create
-let _ : < react : state > = p2#create_run
-let%sync p2' s = loop begin
+let _ : < react : unit; status : state> = p2#create
+let _ : < react : unit; status : state> = p2#create_run
+let%sync p2' ~dsource s = loop begin
     run p2
   ; pause
   end
-let _ : 'a -> < react : state; s : 'a -> unit > = p2'#create
-let _ : ('a, 'b) signal -> < react : state; s : 'a -> unit > = p2'#create_run
+let _ : 'a -> < react : unit; status : state; s : 'a -> unit > = p2'#create
+let _ : ('a, 'b) signal -> < react : unit; status : state; s : 'a -> unit > = p2'#create_run
 let%sync p3 s = loop begin run p2' !("test" ^ !!s); pause end
-let _ : string -> < react : state; s : string -> unit > = p2'#create
-let _ : (string, string) signal -> < react : state; s : string -> unit > = p2'#create_run
+let _ : string -> < react : unit; status : state; s : string -> unit > = p2'#create
+let _ : (string, string) signal -> < react : unit; status : state; s : string -> unit > = p2'#create_run
 
 
 let%sync p_out = input s; output o;
@@ -31,11 +31,11 @@ let%sync p_out = input s; output o;
     emit o
   ; pause
   end
-let _ : 'a -> unit * ('b -> unit) -> < react : state; s : 'a -> unit > = p_out#create
+let _ : 'a -> unit * ('b -> unit) -> < react : unit; status : state; s : 'a -> unit > = p_out#create
 let _ :
   ('a, 'c) signal ->
   (unit, unit) signal * (unit -> unit) ->
-  < react : state; s : 'a -> unit >
+  < react : unit; status : state; s : 'a -> unit >
   = p_out#create_run
 
 let%sync mouse =
