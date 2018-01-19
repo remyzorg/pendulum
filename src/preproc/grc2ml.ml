@@ -216,7 +216,7 @@ let mk_test_expr mr tv =
   | Signal (vs, Some at) ->
     mr := SignalSet.add vs !mr; MLand (MLsig vs, MLboolexpr at)
   | Selection i -> MLselect i
-  | Sync l -> MLor (List.map (fun x -> MLselect x) l)
+  | Sync (lid, _) -> MLor (List.map (fun x -> MLselect x) lid)
   | Finished -> MLfinished
   | Is_paused (id, sigs, loc) -> MLis_pause (MLcall (id, sigs, loc))
 
@@ -233,7 +233,7 @@ let grc2ml dep_array fg =
         | Test (tv, t1, t2, endt) ->
           let res =
             match endt with
-            | None -> Schedule.find_join true t1 t2
+            | None -> Schedule.find_join t1 t2
             | Some endt' -> endt
           in
           begin

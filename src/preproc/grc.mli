@@ -66,11 +66,11 @@ module Flowgraph : sig
     type test_value =
       | Signal of Ast.signal * Ast.atom option
       | Selection of int
-      | Sync of int list
+      | Sync of (int list * t list Utils.IntMap.t)
       | Is_paused of Ast.ident * Ast.signal Ast.run_param list * Ast.loc
       | Finished
 
-    type t =
+    and t =
       | Call of action * t
       | Test of test_value * t * t * t option (* then * else *)
       | Fork of t list * t (* left * right * sync *)
@@ -87,6 +87,22 @@ module Flowgraph : sig
     module Grctbl : Hashtbl.S with type key = Ast.Tagged.t * flowgraph * flowgraph
     module Fgtbl3 : Hashtbl.S with type key = flowgraph * flowgraph * flowgraph
     module Fgstbl : Hashtbl.S with type key = flowgraph list
+    module Acttbl : Hashtbl.S with type key = action
+    module TestValueSet : Set.S with type elt = test_value
+
+    type env = {
+      exits : flowgraph list Utils.IntMap.t;
+      exit_nodes : flowgraph Fgtblid.t;
+      under_suspend : bool;
+      synctbl : flowgraph Synctbl.t;
+      (* A Sync is the same flow, both in S and D,
+         so there is a special table for this *)
+      runtbl : (string, flowgraph) Hashtbl.t;
+      awaittbl : (int, flowgraph) Hashtbl.t;
+      parents : (flowgraph list) Fgtbl.t;
+    }
+
+    val init_grcenv : unit -> env
 
     val memo_rec : (module Hashtbl.S with type key = 'a) ->
       (('a -> 'b) -> 'a -> 'b) -> 'a -> 'b
@@ -99,6 +115,7 @@ module Flowgraph : sig
 
     type error =
       | Unbound_label of string
+      | Empty_exits
       | Cyclic_causality of t * Ast.signal list
       | Par_leads_to_finish of t
       | Invariant_violation of t * string
@@ -114,6 +131,7 @@ module Flowgraph : sig
     val pp_dot : Format.formatter -> t -> unit
     val pp_test_value : Format.formatter -> test_value -> unit
     val pp_test_value_dot : Format.formatter -> test_value -> unit
+    val pp_test_value_short : Format.formatter -> test_value -> unit
     val pp_action: Format.formatter -> action -> unit
   end
 
@@ -131,10 +149,10 @@ module Of_ast : sig
     module St : Selection_tree.S
     open Utils
 
-    val flowgraph : Ast.Tagged.env -> Options.t -> Ast.Tagged.t -> Fg.t
+    val flowgraph : Ast.Tagged.env -> Fg.env -> Options.t -> Ast.Tagged.t -> Fg.t
     (** construct only the flowgraph *)
 
-    val construct : Ast.Tagged.env -> Options.t -> Ast.Tagged.t -> St.t * Fg.t
+    val construct : Ast.Tagged.env -> Fg.env -> Options.t -> Ast.Tagged.t -> St.t * Fg.t
     (** construct the grc structure from the ast and returns both
      the flowgraph and the selection tree *)
 
@@ -158,11 +176,11 @@ module Schedule : sig
     val tag_tested_stmts : St.t -> Fg.t -> unit
     val find : ?stop:Fg.t -> bool -> Fg.t -> Fg.t -> Fg.t option
 
-    val find_join : bool -> Fg.t -> Fg.t -> Fg.t option
+    val find_join : Fg.t -> Fg.t -> Fg.t option
 
     val children: Fg.t -> Fg.t -> Fg.t -> Fg.t
 
-    val interleave: Utils.StringSet.t -> Fg.Ast.Tagged.env -> Fg.t -> Fg.t
+    val interleave: Utils.StringSet.t -> Fg.Ast.Tagged.env -> Fg.env -> Fg.t -> Fg.t
     (** It basically linearize the flowgraph by removing all the Fork
         The algorithm is rather naive and could be optimized.*)
 

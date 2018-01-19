@@ -42,14 +42,14 @@ let compile ast =
       let signal = mk_ident s.ident in
       [%expr rml_control' [%e signal] [%e compile t]]
 
-    | Trap (Label label, t) ->
+    | Trap (TLabel (label, _), t) ->
       [%expr
         rml_signal (fun [%p mk_pat_var label] ->
             rml_until [%e mk_ident label]
               [%e compile t]
           )]
 
-    | Exit (Label label) ->
+    | Exit (TLabel (label, _)) ->
       let signal = mk_ident label in
       [%expr rml_emit [%e signal]]
 

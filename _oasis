@@ -13,7 +13,7 @@ Flag all
 
 Flag react
   Description: build and install react related exemples
-  Default: false
+  Default$: flag(all)
 
 Flag ppx
   Description: Build the ppx syntax extension
@@ -83,4 +83,4 @@ Executable "test_ppx_react"
  CompiledObject: byte
  MainIs: test_ppx_react.ml
  BuildTools: ppx_pendulum
- BuildDepends: react, oUnit, pendulum
+ BuildDepends: js_of_ocaml.ppx, js_of_ocaml, react, oUnit, pendulum

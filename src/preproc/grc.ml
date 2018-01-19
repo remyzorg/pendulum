@@ -106,11 +106,11 @@ module Flowgraph = struct
     type test_value =
       | Signal of Ast.signal * Ast.atom option
       | Selection of int
-      | Sync of int list
+      | Sync of (int list * t list Utils.IntMap.t)
       | Is_paused of Ast.ident * Ast.signal Ast.run_param list * Ast.loc
       | Finished
 
-    type t =
+    and t =
       | Call of action * t
       | Test of test_value * t * t * t option (* then * else * end *)
       | Fork of t list * t (* n branches * sync *)
@@ -127,6 +127,22 @@ module Flowgraph = struct
     module Grctbl : Hashtbl.S with type key = Ast.Tagged.t * flowgraph * flowgraph
     module Fgtbl3 : Hashtbl.S with type key = flowgraph * flowgraph * flowgraph
     module Fgstbl : Hashtbl.S with type key = flowgraph list
+    module Acttbl : Hashtbl.S with type key = action
+    module TestValueSet : Set.S with type elt = test_value
+
+    type env = {
+      exits : flowgraph list Utils.IntMap.t;
+      exit_nodes : flowgraph Fgtblid.t;
+      under_suspend : bool;
+      synctbl : flowgraph Synctbl.t;
+      (* A Sync is the same flow, both in S and D,
+         so there is a special table for this *)
+      runtbl : (string, flowgraph) Hashtbl.t;
+      awaittbl : (int, flowgraph) Hashtbl.t;
+      parents : (flowgraph list) Fgtbl.t;
+    }
+
+    val init_grcenv : unit -> env
 
     val memo_rec : (module Hashtbl.S with type key = 'a) ->
       (('a -> 'b) -> 'a -> 'b) -> 'a -> 'b
@@ -138,6 +154,7 @@ module Flowgraph = struct
 
     type error =
       | Unbound_label of string
+      | Empty_exits
       | Cyclic_causality of t * Ast.signal list
       | Par_leads_to_finish of t
       | Invariant_violation of t * string
@@ -153,6 +170,7 @@ module Flowgraph = struct
     val pp_dot : Format.formatter -> t -> unit
     val pp_test_value : Format.formatter -> test_value -> unit
     val pp_test_value_dot : Format.formatter -> test_value -> unit
+    val pp_test_value_short : Format.formatter -> test_value -> unit
     val pp_action: Format.formatter -> action -> unit
   end
 
@@ -174,11 +192,11 @@ module Flowgraph = struct
     type test_value =
       | Signal of signal * atom option
       | Selection of int
-      | Sync of int list
+      | Sync of (int list * t list IntMap.t)
       | Is_paused of ident * signal run_param list * loc
       | Finished
 
-    type t =
+    and t =
       | Call of action * t
       | Test of test_value * t * t * t option (* then * else * join_value *)
       | Fork of t list * t (* left * right * sync *)
@@ -240,6 +258,13 @@ module Flowgraph = struct
         let equal (a1, b1, c1) (a2, b2, c2) = (a1 == a2) && (b1 == b2) && (c1 == c2)
       end)
 
+    module Acttbl = Hashtbl.Make (struct
+        type t = action
+        let hash = Hashtbl.hash
+        let equal = (==)
+      end)
+
+
     module Fgstbl = Hashtbl.Make(struct
         type t = flowgraph list
         let hash = Hashtbl.hash
@@ -252,6 +277,35 @@ module Flowgraph = struct
           | x1 :: t1, x2 :: t2  -> x1 == x2 && equal t1 t2
           | [], _ | _, [] -> false
       end)
+
+
+    module TestValueSet =
+      Set.Make(struct
+        type t = test_value
+        let compare t1 t2 = if t1 == t2 then 0 else compare t1 t2
+      end)
+
+    type env = {
+      exits : flowgraph list Utils.IntMap.t;
+      exit_nodes : flowgraph Fgtblid.t;
+      under_suspend : bool;
+      synctbl : flowgraph Synctbl.t;
+      (* A Sync is the same flow, both in S and D,
+         so there is a special table for this *)
+      runtbl : (string, flowgraph) Hashtbl.t;
+      awaittbl : (int, flowgraph) Hashtbl.t;
+      parents : (flowgraph list) Fgtbl.t;
+    }
+
+    let init_grcenv () = {
+      under_suspend = false;
+      exits = IntMap.empty;
+      synctbl = Synctbl.create 17;
+      runtbl = Hashtbl.create 17;
+      awaittbl = Hashtbl.create 17;
+      parents = Fgtbl.create 17;
+      exit_nodes = Fgtblid.create 17;
+    }
 
     let memo_rec (type a) (module H : Hashtbl.S with type key = a) =
       let h = H.create 87 in
@@ -343,7 +397,7 @@ module Flowgraph = struct
             Dot_pp.(font blue (fun fmt x -> fprintf fmt "%s ?" x)) s.ident.content
           | Selection i -> fprintf fmt "%d ?" i
           | Finished -> fprintf fmt "finished ?"
-          | Sync l -> fprintf fmt "sync(%a)" (MList.pp_iter ~sep:", " Format.pp_print_int) l
+          | Sync (lid, _) -> fprintf fmt "sync(%a)" (MList.pp_iter ~sep:", " Format.pp_print_int) lid
           | Is_paused (id, _, _) -> fprintf fmt "paused %s ?" id.content
         end)
 
@@ -380,9 +434,21 @@ module Flowgraph = struct
           | Signal (s, Some at) ->
             fprintf fmt "Signal (%s, %a) " s.ident.content printexp at.exp
           | Selection i -> fprintf fmt "Selection %d" i
-          | Sync l -> fprintf fmt "Sync(%a)" (MList.pp_iter ~sep:", " Format.pp_print_int) l
+          | Sync (lid, _) -> fprintf fmt "Sync(%a)" (MList.pp_iter ~sep:", " Format.pp_print_int) lid
           | Finished -> fprintf fmt "Finished"
           | Is_paused (id, _, _) -> fprintf fmt "Is_paused %s" id.content
+        end)
+
+    let pp_test_value_short fmt tv =
+      Format.(begin
+          match tv with
+          | Signal (s, None) -> fprintf fmt "%s?" s.ident.content
+          | Signal (s, Some at) ->
+            fprintf fmt "(%s, %a)?" s.ident.content printexp at.exp
+          | Selection i -> fprintf fmt "%d" i
+          | Sync (lid, _) -> fprintf fmt "(%a)" (MList.pp_iter ~sep:", " Format.pp_print_int) lid
+          | Finished -> fprintf fmt "f"
+          | Is_paused (id, _, _) -> fprintf fmt "p(%s)?" id.content
         end)
 
     let rec pp_action fmt a =
@@ -405,9 +471,9 @@ module Flowgraph = struct
         | Call (a, t) ->
           fprintf fmt "%sCall([%a],\n%a)"
             indent pp_action a (aux (lvl + 1)) t
-        | Test(Sync l, t1, t2, _) ->
+        | Test(Sync (lid, _), t1, t2, _) ->
           fprintf fmt "%sSync((%a),\n%a,\n%a)" indent
-            (MList.pp_iter ~sep:", " Format.pp_print_int) l
+            (MList.pp_iter ~sep:", " Format.pp_print_int) lid
             (aux @@ lvl + 1) t1 (aux @@ lvl + 1) t2
         | Test (tv, t1, t2, _) ->
           fprintf fmt "%sTest(%a,\n%a,\n%a) "
@@ -423,8 +489,8 @@ module Flowgraph = struct
       match t with
       | Call (a, t) ->
         fprintf fmt "Call([%a],_)" pp_action a
-      | Test(Sync l, t1, t2, _) ->
-        fprintf fmt "Sync((%a),_,_)" (MList.pp_iter ~sep:", " Format.pp_print_int) l
+      | Test(Sync (lid, _), t1, t2, _) ->
+        fprintf fmt "Sync((%a),_,_)" (MList.pp_iter ~sep:", " Format.pp_print_int) lid
       | Test (tv, t1, t2, _) ->
         fprintf fmt "Test(%a,_,_) " pp_test_value tv
       | Fork (l, _) ->
@@ -488,6 +554,7 @@ module Flowgraph = struct
 
     type error =
       | Unbound_label of string
+      | Empty_exits
       | Cyclic_causality of t * Ast.signal list
       | Par_leads_to_finish of t
       | Invariant_violation of t * string
@@ -499,6 +566,7 @@ module Flowgraph = struct
       fprintf fmt "Error: %a @\n" (fun fmt e ->
         begin match e with
           | Unbound_label s -> fprintf fmt "unbound label %s" s
+          | Empty_exits -> fprintf fmt "empty exits"
           | Cyclic_causality (fg, sigs) ->
             fprintf fmt "Cyclic causality on [%a]"
               (MList.pp_iter ~sep:"; "
@@ -526,8 +594,9 @@ module Of_ast = struct
     module St : Selection_tree.S
     open Utils
 
-    val flowgraph : Ast.Tagged.env -> Options.t -> Ast.Tagged.t -> Fg.t
-    val construct : Ast.Tagged.env -> Options.t -> Ast.Tagged.t -> St.t * Fg.t
+
+    val flowgraph : Ast.Tagged.env -> Fg.env -> Options.t -> Ast.Tagged.t -> Fg.t
+    val construct : Ast.Tagged.env -> Fg.env -> Options.t -> Ast.Tagged.t -> St.t * Fg.t
 
 
   end
@@ -539,17 +608,7 @@ module Of_ast = struct
     module Ast = Fg.Ast
     open Ast
 
-    type env = {
-      exits : Fg.t StringMap.t;
-      exit_nodes : Fg.t Fg.Fgtblid.t;
-      under_suspend : bool;
-      synctbl : Fg.t Fg.Synctbl.t;
-      runtbl : (string, Fg.t) Hashtbl.t;
-      awaittbl : (int, Fg.t) Hashtbl.t;
-      (* A Sync is the same flow, both in S and D,
-         so there is a special table for this *)
-      parents : (Fg.t list) Fg.Fgtbl.t
-    }
+    type env = Fg.env
 
     let get_parents parents fg =
       try Fg.Fgtbl.find parents fg with Not_found -> []
@@ -568,15 +627,17 @@ module Of_ast = struct
         test
 
     let call env s fg =
-      let c = Fg.Call (s, fg) in
+      let open Fg in
+      let c = Call (s, fg) in
       add_parent env.parents fg c; c
 
     let exit_node env p next =
       let open Tagged in
-      try Fg.Fgtblid.find env.exit_nodes (p.id, next) with
+      let open Fg in
+      try Fgtblid.find env.exit_nodes (p.id, next) with
       | Not_found ->
-        let ex = call env (Fg.Exit p.id) next in
-        Fg.Fgtblid.add env.exit_nodes (p.id, next) ex; ex
+        let ex = call env (Exit p.id) next in
+        Fgtblid.add env.exit_nodes (p.id, next) ex; ex
 
 
     let enter_node env p next = call env (Fg.Enter p.Tagged.id) next
@@ -644,8 +705,9 @@ module Of_ast = struct
 
         | Present ((s, atopt), q, r) ->
           let end_pres = exit_node env p endp in
+          let t = (Signal (s, atopt)) in
           enter_node env p
-          @@ test_node env (Signal (s, atopt)) (
+          @@ test_node env t (
             surface env q pause end_pres,
             surface env r pause end_pres,
             None
@@ -667,22 +729,28 @@ module Of_ast = struct
               Synctbl.find env.synctbl lid
             with
             | Not_found ->
-              let n = sync_node env lid (pause, exit_node env p endp, None) in
+              let n = sync_node env (lid, env.exits) (pause, exit_node env p endp, None) in
               Synctbl.add env.synctbl lid n; n
           in
+          let exits = IntMap.(fold (fun k v m ->
+              add k (syn :: v) m
+            ) empty) env.exits
+          in
+          let env = { env with exits } in
           enter_node env p @@
           Fork (List.map (fun x -> surface env x syn syn) l, syn)
-
-        | Exit (Label s) ->
-          begin try StringMap.find s.content env.exits
-            with Not_found -> error ~loc:(Ast.dummy_loc()) @@ Unbound_label s.content
+        | Exit (TLabel (s, n)) ->
+          begin try
+              List.hd (IntMap.find n env.exits)
+            with
+            | Not_found -> error ~loc:(Ast.dummy_loc ()) @@ Unbound_label s.content
+            | Failure _ -> error ~loc:(Ast.dummy_loc ()) @@ Empty_exits
           end
-
-        | Trap (Label s, q) ->
+        | Trap (TLabel (_, n), q) ->
           let end_trap = exit_node env p endp in
           enter_node env p
           @@ surface {env with exits =
-              (StringMap.add s.content end_trap env.exits)} q pause end_trap
+              (IntMap.add n [end_trap] env.exits)} q pause end_trap
       in
       memo_rec_build h surface
 
@@ -713,7 +781,8 @@ module Of_ast = struct
         | Seq (q, r) ->
           let end_seq = exit_node env p endp in
           let depth_r = depth env r pause end_seq in
-          if Ast.Analysis.non_blocking q then depth_r else
+          if Ast.Analysis.non_blocking q then depth_r
+          else
             let surf_r = surface env r pause end_seq in
             let depth_q = depth env q pause surf_r in
             test_node env (Selection q.id) (depth_q, depth_r, Some pause)
@@ -722,24 +791,29 @@ module Of_ast = struct
           let lid = List.map (fun x -> x.id) l in
           let syn = try Synctbl.find env.synctbl lid with
             | Not_found ->
-              let n = sync_node env lid (pause, exit_node env p endp, None) in
+              let n = sync_node env (lid, env.exits) (pause, exit_node env p endp, None) in
               Synctbl.add env.synctbl lid n; n
           in
-          Fork (
-            List.map (fun x ->
-            test_node env (Selection x.id) (
-              depth env x syn syn,
-              syn,
-              None
-            )) l, syn)
-
+          let exits = IntMap.(fold (fun k v m ->
+              add k (syn :: v) m
+            ) empty) env.exits
+          in
+          let env = { env with exits } in
+          Fork (List.map (fun x ->
+              let t = Selection x.id in
+              test_node env t (
+                depth env x syn syn,
+                syn,
+                None
+              )) l, syn)
 
         | Present (s, q, r) ->
           let end_pres = exit_node env p endp in
+          let t = (Selection q.id) in
           if Ast.Analysis.non_blocking q then
             depth env r pause end_pres
           else
-            test_node env (Selection q.id) (
+            test_node env t (
               depth env q pause end_pres,
               depth env r pause end_pres,
               None
@@ -763,51 +837,40 @@ module Of_ast = struct
             None
           )
 
-        | Trap (Label s, q) ->
+        | Trap (TLabel (_, n), q) ->
           let end_trap = exit_node env p endp in
-          depth {env with
-                 exits = StringMap.add s.content end_trap env.exits} q pause end_trap
+          let exits = IntMap.add n [end_trap] env.exits in
+          depth { env with exits } q pause end_trap
       in memo_rec_build h depth
 
-
-
-    let flowgraph astenv options p =
+    let flowgraph astenv grcenv options p =
       let open Fg in
       let open Tagged in
-      let env = {
-        under_suspend = false;
-        exits = StringMap.empty;
-        synctbl = Synctbl.create 17;
-        runtbl = Hashtbl.create 17;
-        awaittbl = Hashtbl.create 17;
-        parents = Fgtbl.create 17;
-        exit_nodes = Fgtblid.create 17;
-      } in
 
       let depthtbl, surftbl = Grctbl.create 30, Grctbl.create 30 in
       (* creates the surface function with the table, to be passed to depth *)
       let surf = surface options surftbl in
       let dep = depth options depthtbl in
-      let s = surf env p Pause Finish in
-      let d = dep surf env p Pause Finish in
+      let s = surf grcenv p Pause Finish in
+      let d = dep surf grcenv p Pause Finish in
 
       let endsync = match d with
         | Fork (_, sync) -> Some sync
         | _ -> Some Finish
       in
       (* the init part of the flowgraph *)
-      let result_fg = test_node env Finished (
+      let result_fg = test_node grcenv Finished (
           Finish,
           (* Tests if the first stmt is selection : is the the first
              execution or not *)
-          test_node env (Selection p.id) (d, s, endsync),
+          test_node grcenv (Selection p.id) (d, s, endsync),
           Some Finish
         )
       in
-      Fg.compress ~env:env.parents result_fg
+      result_fg
 
-    let construct env options p =
-      St.of_ast p, flowgraph env options p
+    let construct astenv grcenv options p =
+      St.of_ast p, flowgraph grcenv grcenv options p
 
   end
 end
@@ -827,9 +890,9 @@ module Schedule = struct
     val tag_tested_stmts : St.t -> Fg.t -> unit
     val find : ?stop:Fg.t -> bool -> Fg.t -> Fg.t -> Fg.t option
 
-    val find_join : bool -> Fg.t -> Fg.t -> Fg.t option
+    val find_join : Fg.t -> Fg.t -> Fg.t option
     val children: Fg.t -> Fg.t -> Fg.t -> Fg.t
-    val interleave: StringSet.t -> Fg.Ast.Tagged.env -> Fg.t -> Fg.t
+    val interleave: StringSet.t -> Fg.Ast.Tagged.env -> Fg.env -> Fg.t -> Fg.t
 
     module Stats : sig
       val size : Fg.t -> int
@@ -860,7 +923,7 @@ module Schedule = struct
         | Call (_, t) -> aux t
         | Test (Selection i, t1, t2, _) ->
           lr := i :: !lr
-        | Test (Sync l , t1, t2, _) -> lr := List.(fold_left (fun acc x -> x :: acc) !lr l)
+        | Test (Sync (lid, _), t1, t2, _) -> lr := List.(fold_left (fun acc x -> x :: acc) !lr lid)
         | Test (_, t1, t2, _) -> aux t1; aux t2
         | Fork (l, _)  -> List.iter aux l
         | Pause | Finish -> ()
@@ -910,7 +973,7 @@ module Schedule = struct
       in memo_rec (module Fgtbl3) children (fg, t1, t2)
 
     let fork_id = function
-      | (Fg.Test (Fg.Sync c, _, _, _)) -> c
+      | (Fg.Test (Fg.Sync (lid, _), _, _, _)) -> lid
       | _ -> []
 
     let eq_fork_id fg1 fg2 = fork_id fg1 = fork_id fg2
@@ -940,7 +1003,7 @@ module Schedule = struct
       in memo_rec (module Fgtbl2) aux (fg, t)
 
 
-    let rec find_join2 fg1 fg2 =
+    let rec find_join fg1 fg2 =
       let tbl1 = Fgtbl.create 17 in
       let tbl2 = Fgtbl.create 17 in
       let explore tbl1 tbl2 fg =
@@ -953,7 +1016,7 @@ module Schedule = struct
               explore t
             | Test (_, t1, t2, _) ->
               Fgtbl.add tbl1 fg ();
-              begin match find_join2 t1 t2 with
+              begin match find_join t1 t2 with
                 | None -> None
                 | Some j' -> explore j'
               end
@@ -967,26 +1030,11 @@ module Schedule = struct
       ignore @@ explore tbl1 tbl2 fg1;
       explore tbl2 tbl1 fg2
 
-    let rec find_join nopause fg1 fg2 =
-      Option.mapn (find nopause fg2 fg1) begin fun () ->
-        match fg1 with
-        | Call(a, t) -> find_join nopause fg2 t
-        | Test (_, t1, t2, _) (* | Fork (t1, t2, _) *) ->
-          begin match (find_join nopause fg2 t1), (find_join nopause fg2 t2) with
-          | Some v1, Some v2 when v1 == v2 && v1 <> Pause && v1 <> Finish -> Some v1
-          | _ -> None
-          end
-        | Pause | Finish -> None
-        | Fork _ ->
-          Fg.error ~loc:(Ast.dummy_loc ())
-            (Invariant_violation (fg1, "Finished reached from interleaving : find_join"))
-      end
-
 
     type test_op = F of test_value | T of test_value
 
     module DTbl = Hashtbl.Make (struct
-        type t = (Fg.action * ((test_op * Fg.t) list)) list
+        type t = (Fg.action * (test_op list)) list
         let hash = Hashtbl.hash
         let equal = (==)
       end)
@@ -998,8 +1046,8 @@ module Schedule = struct
       | a -> f a :: acc
 
     let pp_test fmt t =
-      let op, t= match t with F t, _ -> "F", t | T t, _ -> "T", t in
-      Format.fprintf fmt "%s(%a)" op pp_test_value t
+      let op, t= match t with F t -> "F", t | T t -> "T", t in
+      Format.fprintf fmt "%s(%a)" op pp_test_value_short t
     let pp_tests fmt = MList.pp_iter ~sep:" " pp_test fmt
     let pp_signals fmt set =
       MList.pp_iter ~sep:"," (fun fmt x -> Format.fprintf fmt "%s" x.ident.content) fmt
@@ -1016,20 +1064,21 @@ module Schedule = struct
     let extract_emits_tests_sets =
       let open SignalSet in
       let h = DTbl.create 19 in
-      let rec extract_mem acc l =
+      let rec extract_mem l =
         try DTbl.find h l with | Not_found ->
           match l with
           | [] -> SignalSet.empty, SignalSet.empty
-          | (a, tests) :: l ->
-            let writes, reads = extract_mem acc l in
+          | (a, tests) :: l' ->
+            let writes, reads = extract_mem l' in
             let sig_tests = List.fold_left (fun acc test ->
                 match test with
-                | F (Signal (s, _)), _ | T (Signal (s, _)), _ -> add s acc
+                | F (Signal (s, _)) | T (Signal (s, _)) -> add s acc
                 | _ -> acc
               ) empty tests
             in
             let emits = match a with Emit sv -> add sv.signal writes | _ -> writes in
-            emits, sig_tests
+            let r = emits, sig_tests in
+            DTbl.add h l r;r
       in extract_mem
 
     let pp_destruct b fmt l =
@@ -1038,45 +1087,77 @@ module Schedule = struct
         | [] -> ()
         | (a, ts) :: l' ->
           Format.fprintf fmt "%a\n"
-            (if b then pp_dline ~wr:(extract_emits_tests_sets [] l) () else pp_dline ()) (a, ts) ;
+            (if b then pp_dline ~wr:(extract_emits_tests_sets l) () else pp_dline ()) (a, ts) ;
           f fmt l'
       in f fmt l
 
+(* L ← Empty list that will contain the sorted elements *)
+(* S ← Set of all nodes with no incoming edge *)
+(* while S is non-empty do *)
+(*     remove a node n from S *)
+(*     add n to tail of L *)
+(*     for each node m with an edge e from n to m do *)
+(*         remove edge e from the graph *)
+(*         if m has no other incoming edges then *)
+(*             insert m into S *)
+(* if graph has edges then *)
+(*     return error (graph has at least one cycle) *)
+(* else  *)
+(*     return L (a topologically sorted order) *)
+
+
+    (* let actions_graph stop acc fg = *)
+    (*   let visited = Fgtbl.create 17 in *)
+    (*   let rec build_rel acc fg = *)
+    (*     try Fgtbl.find visited fg @ acc with | Not_found -> *)
+    (*       let r = begin match fg with *)
+    (*         | fg when fg  == stop -> [] *)
+    (*         | Call (act, fg') -> *)
+    (*           let acts = build_rel [] fg' in *)
+    (*           List.iter (Acttbl.add rels act) acts; *)
+    (*           act :: acc *)
+    (*         | Test (_, tb, fb, _) -> *)
+    (*           build_rel (build_rel acc tb) fb *)
+    (*         | Fork _ | Pause | Finish -> *)
+    (*           Fg.error ~loc:Ast.Tagged.(env.pname.loc) *)
+    (*             (Invariant_violation (fg, "Fork or end reached while interleaving")) *)
+    (*       end in *)
+    (*       Fgtbl.add visited fg r; *)
+    (*       r *)
+    (*   in *)
+    (*   ignore @@ build_rel [] fg *)
+
+    (* let action_topological_sort env stop fg = *)
+    (*   let open Fg in *)
+    (*   let rels = ActTbl.create 17 in *)
+
+
+
     let destruct env stop fg =
       let rec destruct (acc : 'a list) stop tests fg =
-        (* if Fgtbl.mem h fg then acc else *)
-          begin
-          (* Fgtbl.add h fg (); *)
-          let tests = match tests with
-            | [] -> tests
-            | (T h, join) :: t | (F h, join) :: t -> if join == fg then t else tests
+        match fg with
+        | fg when fg == stop -> acc
+        | Call (a, t) ->
+          destruct ((a, tests) :: acc) stop tests t
+        | Test (test, l, r, _) ->
+          let stop' =
+            match find_join l r with
+            | None ->
+              Fg.error ~loc:Ast.Tagged.(env.pname.loc)
+                (Invariant_violation (fg, "No join after test"))
+            | Some s -> s
           in
-          match fg with
-          | fg when fg == stop -> acc
-          | Call (Compressed (a1, a2) as a, t) ->
-            let acc' = compressed_to_list (fun a -> a, tests) acc a in
-            destruct acc' stop tests t
-          | Call (a, t) ->
-            destruct ((a, tests) :: acc) stop tests t
-          | Test (test, l, r, join) ->
-            let stop' =
-              match find_join2 l r with
-              | None ->
-                Fg.error ~loc:Ast.Tagged.(env.pname.loc)
-                  (Invariant_violation (fg, "No join after test"))
-              | Some s -> s
-            in
-            let dl = destruct acc stop' ((T test, stop') :: tests) l in
-            destruct dl stop ((F test, stop') :: tests) r
-          | Fork _ ->
-            (* Impossible by construction *)
-            Fg.error ~loc:Ast.Tagged.(env.pname.loc)
-              (Invariant_violation (fg, "Fork reached while interleaving"))
-          | Finish | Pause ->
-            (* Impossible by construction *)
-            Fg.error ~loc:Ast.Tagged.(env.pname.loc)
-              (Invariant_violation (fg, "Parallel leads to pause or exit"))
-        end
+          let dl = destruct acc stop' (T test :: tests) l in
+          let dr = destruct dl stop' (F test :: tests) r in
+          destruct dr stop tests stop'
+        | Fork _ ->
+          (* Impossible by construction *)
+          Fg.error ~loc:Ast.Tagged.(env.pname.loc)
+            (Invariant_violation (fg, "Fork reached while interleaving"))
+        | Finish | Pause ->
+          (* Impossible by construction *)
+          Fg.error ~loc:Ast.Tagged.(env.pname.loc)
+            (Invariant_violation (fg, "Parallel leads to pause or exit"))
       in destruct [] stop [] fg
 
     (* emit, read *)
@@ -1089,31 +1170,29 @@ module Schedule = struct
 
      *)
 
-
     let interleave_lists env d1 d2 =
       let rec inter acc d1 d2 =
         match d1, d2 with
         (* cas de fin *)
         | [], [] -> acc
         (* une des liste est vide *)
-        | [], d | d, [] -> List.fold_left (fun acc at -> at :: acc) acc d
+        | [], d | d, [] ->
+          List.fold_left (fun acc (a, t) -> (a, List.rev t) :: acc) acc d
         (* aucune branche ne dépend d'un test*)
-        | (_, [] as a1) :: d1, (_, [] as a2) :: d2 -> inter (a1 :: a2 :: acc) d1 d2
+        | (_, [] as at1) :: d1, (_, [] as at2) :: d2 -> inter (at1 :: at2 :: acc) d1 d2
         (* Une branche n'a pas de test *)
         | d1, ((_, [] as at) :: d2) | ((_, [] as at) :: d2), d1 -> inter (at :: acc) d1 d2
         (* Les deux ont un test *)
         | (a1, t1) :: d1', (a2, t2) :: d2' ->
-          let d1_writes, d1_reads = extract_emits_tests_sets [] d1 in
-          let d2_writes, d2_reads = extract_emits_tests_sets [] d2 in
+          let d1_writes, d1_reads = extract_emits_tests_sets d1 in
+          let d2_writes, d2_reads = extract_emits_tests_sets d2 in
           let inter_d1r_d2w = SignalSet.inter d1_reads d2_writes in
           if inter_d1r_d2w = SignalSet.empty then
-            let at1 = a1, List.rev t1 in
-            inter (at1 :: acc) d1' d2
+            inter ((a1, List.rev t1) :: acc) d1' d2
           else
             let inter_d2r_d1w = SignalSet.inter d2_reads d1_writes in
             if inter_d2r_d1w = SignalSet.empty then
-              let at2 = a2, List.rev t2 in
-              inter (at2 :: acc) d1 d2'
+              inter ((a2, List.rev t2) :: acc) d1 d2'
             else
               let signals = SignalSet.(elements (union inter_d1r_d2w inter_d2r_d1w)) in
               Fg.(error ~loc:Ast.Tagged.(env.pname.loc) @@ Cyclic_causality (Finish, signals))
@@ -1125,18 +1204,21 @@ module Schedule = struct
       let gen_tests acc (a, ts) =
         let old_acc = acc in
         List.fold_left (fun acc x -> match x with
-            | T test, _ -> Test (test, acc, old_acc, Some old_acc)
-            | F test, _ -> Test (test, old_acc, acc, Some old_acc)
+            | T test -> Test (test, acc, old_acc, Some old_acc)
+            | F test -> Test (test, old_acc, acc, Some old_acc)
           ) (Call (a, acc)) (List.rev ts)
       in
       let rec visit_tests (a, ts) acc t t_path f_path endt =
+
+        (* List. *)
+
         match ts with
         | [] -> assert false
-        | (T t', _) :: ts' ->
+        | T t' :: ts' ->
           if Fg.test_eq t t' then
             Test (t, rebuild t_path [a, ts'], f_path, endt)
           else gen_tests acc (a, ts)
-        | (F t', _) :: ts' ->
+        | F t' :: ts' ->
           if Fg.test_eq t' t then
             Test (t, t_path, rebuild f_path [a,ts'], endt)
           else gen_tests acc (a, ts)
@@ -1162,7 +1244,7 @@ module Schedule = struct
       rebuild fg @@ List.rev l
 
 
-    let interleave options env fg =
+    let interleave options env grcenv fg =
       let visit_tbl = Fgtbl.create 17 in
       let rec visit fg =
         try
@@ -1171,33 +1253,47 @@ module Schedule = struct
           let fg' = match fg with
             | Call (a, t) -> Call (a, visit t)
             | Test (tv, t1, t2, tend) ->
+              let tv = match tv with
+                | Sync (lid, exits) ->
+                  let map = IntMap.(
+                      fold (fun k v m -> add k (List.map visit v) m) IntMap.empty exits
+                    )
+                  in Sync (lid, map)
+                | tv -> tv
+              in
               Test (tv, visit t1, visit t2, Option.map visit tend)
-
             | Fork (l, sync) ->
               let visited = List.map visit l in
               let sync = visit sync in
 
-              (* let t0 = Unix.gettimeofday () in *)
-              (* Format.printf "Init %f@\n" t0; *)
+              (* action_topological_sort env sync (List.hd visited); *)
+
+              let t0 = Unix.gettimeofday () in
+              Format.printf "Init @\n";
+
+              Format.printf "stop : %a\n" Fg.pp_head sync;
+              Format.printf "start : %a\n" Fg.pp_head (List.hd visited);
 
               let destruct d = List.rev @@ destruct env sync d in
+
+
               let destructed = List.map destruct visited in
 
-              (* let t1 = Unix.gettimeofday () in *)
-              (* Format.printf "Destruct %f@\n" (t1 -. t0); *)
+              let t1 = Unix.gettimeofday () in
+              Format.printf "Destruct %f@\n" (t1 -. t0);
               let inter_r_l = List.fold_left (interleave_lists env) [] destructed in
 
 
-              (* let t2 = Unix.gettimeofday () in *)
-              (* Format.printf "Interleave %f@\n" (t2 -. t1); *)
+              let t2 = Unix.gettimeofday () in
+              Format.printf "Interleave %f@\n" (t2 -. t1);
 
-              (* Format.printf "%a" (MList.pp_iter ~sep:"---\n" (pp_destruct true)) destructed; *)
+              Format.printf "%a" (MList.pp_iter ~sep:"---\n" (pp_destruct true)) destructed;
 
               Format.printf "----------\n%a#########\n\n" (pp_destruct false) inter_r_l;
 
               let r = rebuild_destruct env sync inter_r_l in
-              (* let t3 = Unix.gettimeofday () in *)
-              (* Format.printf "Rebuild %f@\n" (t3 -. t2); *)
+              let t3 = Unix.gettimeofday () in
+              Format.printf "Rebuild %f@\n" (t3 -. t2);
               r
 
             | Pause -> Pause

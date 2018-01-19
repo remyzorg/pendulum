@@ -129,6 +129,7 @@ module type S = sig
 
   module Tagged : sig
 
+    type tlabel = TLabel of ident * int
     type t = {id : int; st : tagged}
     and test = signal * atom option
     and tagged_ast =
@@ -139,8 +140,8 @@ module type S = sig
       | Nothing
       | Pause
       | Suspend of t * test
-      | Trap of label * t
-      | Exit of label
+      | Trap of tlabel * t
+      | Exit of tlabel
       | Present of test * t * t
       | Atom of atom
       | Signal of valued_signal * t
@@ -152,6 +153,7 @@ module type S = sig
    type env = {
       pname : ident;
       args_signals : (signal * core_type option) list;
+      nlabels : int ref;
       (** inputs and outputs signals *)
       labels : int IdentMap.t;
       (** scoped preemption labels *)

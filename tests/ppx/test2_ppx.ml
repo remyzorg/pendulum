@@ -3,6 +3,13 @@ open Pendulum.Runtime_ast
 
 let dummyatom () = Format.printf "Hello\n"
 
+let%sync reset ~print:pdf ~animate =
+  trap reset (
+    exit reset
+    ||
+    exit reset
+  )
+
 (* let%sync p1 = *)
 (*   input s; *)
 (*   let s' = !!s + 1 in *)
@@ -17,11 +24,11 @@ let dummyatom () = Format.printf "Hello\n"
 (*   end *)
 (*   || loop (emit b; pause) *)
 
-let%sync incr =
-  input s;
-  input s2;
-  emit s (!!s + 1 + !!s2);
-  atom (Format.printf "%d" !!s)
+(* let%sync incr = *)
+(*   input s; *)
+(*   input s2; *)
+(*   emit s (!!s + 1 + !!s2); *)
+(*   atom (Format.printf "%d" !!s) *)
 
 
 (* let%sync crazy s x = *)
@@ -57,48 +64,54 @@ let%sync incr =
 
 (* cannot *)
 
-(* let%sync many_par = *)
+
+
+(* let%sync many_par s s2 = *)
 (*   loop pause *)
-(*   || loop pause *)
-(*   || loop pause *)
-(*   || loop pause *)
-(*   || loop pause *)
-(*   || loop pause *)
-(*   || loop pause *)
-  (* || loop pause *)
-  (* || loop pause *)
-  (* || loop pause *)
-  (* || loop pause *)
-  (* || loop pause *)
-  (* || loop pause *)
-  (* || loop pause *)
-  (* || loop pause *)
-  (* || loop pause *)
-  (* || loop pause *)
-  (* || loop pause *)
-  (* || loop pause *)
-  (* || loop pause *)
-  (* || loop pause *)
-  (* || loop pause *)
-  (* || loop pause *)
-  (* || loop pause *)
-  (* || loop pause *)
-  (* || loop pause *)
-  (* || loop pause *)
-  (* || loop pause *)
-  (* || loop pause *)
-  (* || loop pause *)
-  (* || loop pause *)
-  (* || loop pause *)
-  (* || loop pause *)
-  (* || loop pause *)
-  (* || loop pause *)
-  (* || loop pause *)
-  (* || loop pause *)
-  (* || loop pause *)
-  (* || loop pause *)
-  (* || loop pause *)
-  (* || loop pause *)
+(*   || loop begin *)
+(*     emit s; *)
+(*     pause *)
+(*   end *)
+(*   || loop begin *)
+(*     emit s; *)
+(*     pause *)
+(*   end *)
+(*   || loop begin *)
+(*     emit s; *)
+(*     pause *)
+(*   end *)
+(*   || loop begin *)
+(*     emit s; *)
+(*     pause *)
+(*   end *)
+(*   || loop begin *)
+(*     emit s; *)
+(*     pause *)
+(*   end *)
+(*   || loop begin *)
+(*     present s (emit s2); *)
+(*     pause *)
+(*   end *)
+(*   || loop begin *)
+(*     present s (emit s2); *)
+(*     pause *)
+(*   end *)
+(*   || loop begin *)
+(*     present s (emit s2); *)
+(*     pause *)
+(*   end *)
+(*   || loop begin *)
+(*     present s (emit s2); *)
+(*     pause *)
+(*   end *)
+(*   || loop begin *)
+(*     present s (emit s2); *)
+(*     pause *)
+(*   end *)
+(*   || loop begin *)
+(*     present s (emit s2); *)
+(*     pause *)
+(*   end *)
 
 
 
@@ -314,20 +327,64 @@ let%sync incr =
 (*   end *)
 
 
-(* let%sync test_sched2 ~print:pdf s1 s2 s3 = *)
-(*     present s1 ( *)
-(*       emit s2; *)
-(*       present s3 !(print_endline "hello3") *)
-(*     ) *)
-(*   || *)
-(*   present s1 ( *)
-(*     present s2 ( *)
-(*       !(print_endline "hello2"); *)
-(*       emit s3 *)
-(*     ) *)
-(*   ) *)
+let%sync p =
+  input (a : int); emit a 1
+  let p_m = p#create 1
 
 
+
+let%sync test_sched2 ~print:(pdf,dot) s1 s2 s3 s4 =
+  let slol = 0 in
+  (* loop begin *)
+  (*   present s1 ( *)
+  (*     pause; *)
+  (*     emit s2;); *)
+  (*   pause; *)
+  (* end *)
+  (* || *)
+  (* loop begin *)
+  (*   present s2 ( *)
+  (*     pause; *)
+  (*     emit s1); *)
+  (*   pause; *)
+  (* end *)
+
+  present s1 (emit s2;
+    present s3
+      !(print_endline "hello3"))
+  ||
+  present s4 (present s2 (
+    !(print_endline "hello2");
+    emit s3))
+
+
+
+
+  (* loop begin *)
+  (*   present s1 (pause) *)
+  (* ;pause *)
+  (* end *)
+  (* || *)
+  (* pause *)
+
+
+(* begin *)
+  (*   present s1 ( *)
+  (*     pause; *)
+  (*     emit s2; *)
+  (*     present s3 !(print_endline "hello3") *)
+  (*   ); *)
+  (* end *)
+  (* || *)
+  (* begin *)
+  (*   present s1 ( *)
+  (*     pause; *)
+  (*     present s2 ( *)
+  (*       !(print_endline "hello2"); *)
+  (*       emit s3 *)
+  (*     ) *)
+  (*   ); *)
+  (* end *)
 
 (* Cyclic causality *)
 (* let%sync test_sched2 ~new_feature ~print:(pdf, dot) s1 s2 = *)
@@ -372,3 +429,5 @@ let%sync incr =
 (*   (present s1 pause (emit s2); pause) *)
 (*   || *)
 (*   present s2 (emit s3) pause *)
+
+

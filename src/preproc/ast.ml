@@ -101,6 +101,8 @@ module type S = sig
 
   module Tagged : sig
 
+    type tlabel = TLabel of ident * int
+
     type t = {id : int; st : tagged}
     and test = signal * atom option
     and tagged_ast =
@@ -111,8 +113,8 @@ module type S = sig
       | Nothing
       | Pause
       | Suspend of t * test
-      | Trap of label * t
-      | Exit of label
+      | Trap of tlabel * t
+      | Exit of tlabel
       | Present of test * t * t
       | Atom of atom
       | Signal of valued_signal * t
@@ -123,6 +125,7 @@ module type S = sig
     type env = {
       pname : ident;
       args_signals : (signal * core_type option) list;
+      nlabels : int ref;
       labels : int IdentMap.t;
       global_occurences : int IdentMap.t ref;
       scope : (int * signal_origin * signal_binder * gatherer) SignalMap.t;
@@ -273,6 +276,8 @@ module Make (E : Exp) = struct
 
   module Tagged = struct
 
+    type tlabel = TLabel of ident * int
+
     type t = {id : int; st : tagged}
     and test = signal * atom option
     and tagged_ast =
@@ -283,8 +288,8 @@ module Make (E : Exp) = struct
       | Nothing
       | Pause
       | Suspend of t * test
-      | Trap of label * t
-      | Exit of label
+      | Trap of tlabel * t
+      | Exit of tlabel
       | Present of test * t * t
       | Atom of atom
       | Signal of valued_signal * t
@@ -298,6 +303,7 @@ module Make (E : Exp) = struct
     type env = {
       pname : ident;
       args_signals : (signal * core_type option) list;
+      nlabels : int ref;
       labels : int IdentMap.t;
       global_occurences : int IdentMap.t ref;
       scope : (int * signal_origin * signal_binder * gatherer) SignalMap.t;
@@ -336,17 +342,17 @@ module Make (E : Exp) = struct
       {env with scope; local_only_scope = vs :: env.local_only_scope}, vs
 
 
-    let add_label env s = IdentMap.(match find s env with
-        | exception Not_found -> add s 0 env, s
-        | i -> add s (i + 1) env,
-               {s with content = Format.sprintf "%s%d" s.content (i + 1)})
+    let add_label env (Label s) = IdentMap.(
+        let n = !+(env.nlabels) in
+        { env with labels = add s n env.labels },
+        TLabel ({s with content = Format.sprintf "%s%d" s.content n}, n)
+      )
 
-    let rename_ident env s p =
+    let rename_ident env (Label s) p =
       IdentMap.(match find s env with
-          | exception Not_found ->
-            error ~loc:p.loc @@ Unbound_identifier s.content
-          | 0 -> s
-          | i -> {s with content = Format.sprintf "%s~%d" s.content i})
+          | exception Not_found -> error ~loc:p.loc @@ Unbound_identifier s.content
+          | n -> TLabel ({s with content = Format.sprintf "%s~%d" s.content n}, n)
+        )
 
     let add_rename_machine env s args =
       IdentMap.(match find s !env with
@@ -395,6 +401,7 @@ module Make (E : Exp) = struct
 
 
     let create_env pname sigs binders = {
+      nlabels = ref 0;
       pname;
       args_signals = sigs;
       labels = IdentMap.empty;
@@ -472,12 +479,12 @@ module Make (E : Exp) = struct
           let locals = (List.map (fun x -> x.signal) env.local_only_scope) in
           mk_tagged (Suspend (visit env t, (s, Option.map (mk_atom ~locals) expopt))) !+id
 
-        | Derived.Trap (Label s, t) ->
-          let labels, s = add_label env.labels s in
-          mk_tagged (Trap (Label s, visit {env with labels} t)) !+id
+        | Derived.(Trap (lbl, t)) ->
+          let env, lbl = add_label env lbl in
+          mk_tagged (Trap (lbl, visit env t)) !+id
 
-        | Derived.Exit (Label s) ->
-          mk_tagged (Exit (Label (rename_ident env.labels s ast))) !+id
+        | Derived.Exit lbl ->
+          mk_tagged (Exit (rename_ident env.labels lbl ast)) !+id
 
         | Derived.Present ((s, tag, expopt), t1, t2) ->
           let typ = match tag with Some e -> Event (e, None) | None -> No_binding in
@@ -512,7 +519,8 @@ module Make (E : Exp) = struct
         | Derived.Present_then (test, st) ->
           visit env Derived.(mkl @@ Present (test, st, mkl @@ Nothing))
         | Derived.Await_imm s ->
-          mk_tagged (Trap (trap_signal,
+          let env, lbl = add_label env trap_signal in
+          mk_tagged (Trap (lbl,
                            mk_tagged (Loop (
                                mk_tagged (Seq (
                                    visit env Derived.(mkl @@ Present_then (s, mkl @@ Exit trap_signal)),
@@ -521,17 +529,19 @@ module Make (E : Exp) = struct
           visit env Derived.(mkl @@ Suspend ((
               mkl @@ Present_then (s, mkl @@ Seq (mkl Pause, st))), s))
         | Derived.Abort (st, s) ->
-          mk_tagged (Trap (trap_signal, mk_tagged (
+          let env, lbl = add_label env trap_signal in
+          mk_tagged (Trap (lbl, mk_tagged (
               Par [
                 mk_tagged (Seq (visit env (mkl @@ Derived.Suspend_imm (st, s)),
-                                mk_tagged (Exit trap_signal) !+id)) !+id
+                                mk_tagged (Exit lbl) !+id)) !+id
                 ; mk_tagged (Seq (visit env (mkl @@ Derived.Await s),
-                                mk_tagged (Exit trap_signal) !+id)) !+id
+                                mk_tagged (Exit lbl) !+id)) !+id
               ]
             ) !+id)) !+id
         | Derived.Weak_abort (st, s) ->
-          mk_tagged (Trap (trap_signal, mk_tagged (
-              Par [visit env st; mk_tagged (Seq (visit env (mkl @@ Derived.Await s), mk_tagged (Exit trap_signal) !+id))
+          let env, lbl = add_label env trap_signal in
+          mk_tagged (Trap (lbl, mk_tagged (
+              Par [visit env st; mk_tagged (Seq (visit env (mkl @@ Derived.Await s), mk_tagged (Exit lbl) !+id))
                   !+id]) !+id)) !+id
         | Derived.Loop_each (st, s) ->
           mk_tagged (Loop (
@@ -552,7 +562,7 @@ module Make (E : Exp) = struct
         | Emit vs -> fprintf fmt "emit %s " vs.signal.ident.content
         | Nothing  -> fprintf fmt "nothing"
         | Pause  -> fprintf fmt "pause"
-        | Exit (Label s) -> fprintf fmt "exit %s " s.content
+        | Exit (TLabel (s, n)) -> fprintf fmt "exit %s " s.content
         | Atom f -> fprintf fmt "atom"
         | Await (s, _) -> fprintf fmt "await %s " s.ident.content
         | Run (id, sigs, _) ->
@@ -561,7 +571,7 @@ module Make (E : Exp) = struct
         | Loop st -> fprintf fmt "loop"
         | Signal (vs, st) -> fprintf fmt "signal(%s)" vs.signal.ident.content
         | Suspend (st, (s, _)) -> fprintf fmt "suspend %s "  s.ident.content
-        | Trap (Label s, st) -> fprintf fmt "trap %s "  s.content
+        | Trap (TLabel (s, n), st) -> fprintf fmt "trap %s "  s.content
 
         | Seq _ -> fprintf fmt "seq"
         | Par _ -> fprintf fmt "par"

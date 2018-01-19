@@ -18,7 +18,7 @@ let%sync mouse =
   element w {
     onmousemove = "", (fun x ev -> sprintf "%d,%d" ev##.clientX ev##.clientY);
   };
-  output write react;
+  react write;
   loop begin
     present w##onmousemove
       (emit write !!(w##onmousemove))
@@ -29,13 +29,15 @@ let onload _ =
   (* let sp = createSpan document in *)
   (* let write_f v = sp##.textContent := Js.(some (string v)) in *)
 
-  let mysig, setme = React.S.create "" in
+  (* let mysig, setme = React.S.create "" in *)
 
-  let msyg2 = React.S.map (fun (x : string) -> [Html5.pcdata x]) mysig in
+  let _m = mouse#create window ("") in
 
-  let sp5 = R.Html5.(span @@ ReactiveData.RList.from_signal msyg2) in
+  let sp5 = R.Html5.(span @@ ReactiveData.RList.from_signal (
+      React.S.map (fun (x : string) -> [Html5.pcdata x]) _m#write
+    ))
+  in
   Dom.appendChild document##.body (Tyxml_js.To_dom.of_span sp5);
-  let _m = mouse#create window ("", setme ?step:None) in
   Js._false
 ;;
 

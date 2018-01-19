@@ -94,7 +94,7 @@ let%sync reactive_player ~print:pdf =
 
 
 
-let%sync mouse_react  =
+let%sync mouse_react ~animate ~dsource =
   input span {
     onclick = 0, (fun acc ev -> acc + 1);
   };
