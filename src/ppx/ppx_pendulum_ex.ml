@@ -41,7 +41,7 @@ let parse_and_generate options atom_mapper vb =
       if has_opt "rml" then Ast2rml.generate pname options env tast
       else Ml2ocaml.generate pname options env tast
     in
-    if has_opt "dsource" then Format.printf "%a@." Pprintast.expression ocaml_expr;
+    if has_opt "dsource" then Format.eprintf "%a@." Pprintast.expression ocaml_expr;
     if has_opt "print_only" then gen_ast_as_ocaml e else [%expr [%e ocaml_expr]]
 
 
