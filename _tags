@@ -1,7 +1,7 @@
 <examples>: -traverse
 <tests/ppx/*>: ppx_pendulum
 # OASIS_START
-# DO NOT EDIT (digest: 12109e4431341e205eb08dd8c125b735)
+# DO NOT EDIT (digest: 62b651e5d9103ef7e30dec163421288e)
 # Ignore VCS directories, you can use the same kind of rule outside
 # OASIS_START/STOP if you want to exclude directories that contains
 # useless stuff for the build process
@@ -22,25 +22,36 @@ true: annot, bin_annot
 "src/runtime/runtime_misc.cmx": for-pack(Pendulum)
 "src/runtime/signal.cmx": for-pack(Pendulum)
 "src/runtime/program.cmx": for-pack(Pendulum)
-# Library pendulum_compiler
-"src/preproc/pendulum_compiler.cmxs": use_pendulum_compiler
-"src/preproc/utils.cmx": for-pack(Pendulum_compiler)
-"src/preproc/ast.cmx": for-pack(Pendulum_compiler)
-"src/preproc/grc.cmx": for-pack(Pendulum_compiler)
-"src/preproc/sync2ml.cmx": for-pack(Pendulum_compiler)
+# Library compiler
+"src/preproc/compiler.cmxs": use_compiler
+"src/preproc/utils.cmx": for-pack(Compiler)
+"src/preproc/ast.cmx": for-pack(Compiler)
+"src/preproc/grc.cmx": for-pack(Compiler)
+"src/preproc/grc2ml.cmx": for-pack(Compiler)
+"src/preproc/ml2ocaml.cmx": for-pack(Compiler)
+"src/preproc/gen_names.cmx": for-pack(Compiler)
+"src/preproc/gen_utils.cmx": for-pack(Compiler)
 <src/preproc/*.ml{,i,y}>: pkg_ppx_tools.metaquot
 <src/preproc/*.ml{,i,y}>: pkg_unix
+# Library rml_backend
+"src/rml/rml_backend.cmxs": use_rml_backend
+"src/rml/ast2rml.cmx": for-pack(Rml_backend)
+<src/rml/*.ml{,i,y}>: pkg_ppx_tools.metaquot
+<src/rml/*.ml{,i,y}>: pkg_unix
+<src/rml/*.ml{,i,y}>: use_compiler
 # Library ppx
 "src/ppx/ppx.cmxs": use_ppx
 # Executable ppx_pendulum
 <src/ppx/ppx_pendulum_ex.{native,byte}>: pkg_compiler-libs.common
 <src/ppx/ppx_pendulum_ex.{native,byte}>: pkg_ppx_tools.metaquot
 <src/ppx/ppx_pendulum_ex.{native,byte}>: pkg_unix
-<src/ppx/ppx_pendulum_ex.{native,byte}>: use_pendulum_compiler
+<src/ppx/ppx_pendulum_ex.{native,byte}>: use_compiler
+<src/ppx/ppx_pendulum_ex.{native,byte}>: use_rml_backend
 <src/ppx/*.ml{,i,y}>: pkg_compiler-libs.common
 <src/ppx/*.ml{,i,y}>: pkg_ppx_tools.metaquot
 <src/ppx/*.ml{,i,y}>: pkg_unix
-<src/ppx/*.ml{,i,y}>: use_pendulum_compiler
+<src/ppx/*.ml{,i,y}>: use_compiler
+<src/ppx/*.ml{,i,y}>: use_rml_backend
 # Executable test_ppx
 "tests/ppx/test_ppx.byte": pkg_compiler-libs.common
 "tests/ppx/test_ppx.byte": pkg_js_of_ocaml
@@ -48,14 +59,26 @@ true: annot, bin_annot
 "tests/ppx/test_ppx.byte": pkg_oUnit
 "tests/ppx/test_ppx.byte": pkg_ppx_tools.metaquot
 "tests/ppx/test_ppx.byte": pkg_unix
+"tests/ppx/test_ppx.byte": use_compiler
 "tests/ppx/test_ppx.byte": use_pendulum
-"tests/ppx/test_ppx.byte": use_pendulum_compiler
-<tests/ppx/*.ml{,i,y}>: pkg_compiler-libs.common
+"tests/ppx/test_ppx.byte": use_rml_backend
 <tests/ppx/*.ml{,i,y}>: pkg_js_of_ocaml
 <tests/ppx/*.ml{,i,y}>: pkg_js_of_ocaml.ppx
+# Executable test_ppx_react
+"tests/ppx/test_ppx_react.byte": pkg_compiler-libs.common
+"tests/ppx/test_ppx_react.byte": pkg_oUnit
+"tests/ppx/test_ppx_react.byte": pkg_ppx_tools.metaquot
+"tests/ppx/test_ppx_react.byte": pkg_react
+"tests/ppx/test_ppx_react.byte": pkg_unix
+"tests/ppx/test_ppx_react.byte": use_compiler
+"tests/ppx/test_ppx_react.byte": use_pendulum
+"tests/ppx/test_ppx_react.byte": use_rml_backend
+<tests/ppx/*.ml{,i,y}>: pkg_compiler-libs.common
 <tests/ppx/*.ml{,i,y}>: pkg_oUnit
 <tests/ppx/*.ml{,i,y}>: pkg_ppx_tools.metaquot
+<tests/ppx/*.ml{,i,y}>: pkg_react
 <tests/ppx/*.ml{,i,y}>: pkg_unix
+<tests/ppx/*.ml{,i,y}>: use_compiler
 <tests/ppx/*.ml{,i,y}>: use_pendulum
-<tests/ppx/*.ml{,i,y}>: use_pendulum_compiler
+<tests/ppx/*.ml{,i,y}>: use_rml_backend
 # OASIS_STOP
