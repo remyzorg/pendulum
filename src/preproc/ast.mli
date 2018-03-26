@@ -1,4 +1,3 @@
-
 (** Ast module
 
     This is functor interface to create an Esterel-like asbtract syntax tree
@@ -10,9 +9,7 @@
 
     In Tagged, the non-core statements of Esterel are remove, and all the statement are
     indexed uniquely. During the transformation, Derived->Tagged, the system a bit of semantic
-    (like unbound signals, labels, and so on).
-
-*)
+    (like unbound signals, labels, and so on).*)
 
 
 module type Location = sig
@@ -107,7 +104,7 @@ module type S = sig
       | Signal of valued_ident * statement
       | Run of ident * (ident * ident option) run_param list * loc
 
-      (** Non-core statements *)
+      (* Non-core statements *)
       | Halt
       | Sustain of valued_ident
       | Present_then of test * statement

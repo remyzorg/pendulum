@@ -1,3 +1,5 @@
+[@@@warning "-9"]
+
 module Expression = struct
   type t = Parsetree.expression
   type core_type = Parsetree.core_type
@@ -95,7 +97,7 @@ and pp_type_ml_ast lvl fmt =
         (pp_type_ml_sequence (lvl + 2)) mlseq1
         (pp_type_ml_sequence (lvl + 2)) mlseq2
     | MLassign_signal (s, ml) -> fprintf fmt "%sMLassign (%s, %a)" indent s.content (pp_type_ml_ast 0) ml
-    | MLassign_machine (s, (id, sigs, loc)) ->
+    | MLassign_machine (_, (id, sigs, loc)) ->
       pp_type_ml_ast lvl fmt (MLassign_signal (id, MLcall (id, sigs, loc)))
     | MLenter i -> fprintf fmt "%sEnter %d" indent i
     | MLexit i -> fprintf fmt "%sExit %d" indent i
@@ -226,14 +228,14 @@ let grc2ml dep_array fg =
   let tbl = Fgtbl.create 19 in
   let sigs = ref SignalSet.empty in
   let rec mk stop fg =
-    let rec aux stop fg =
+    let aux stop fg =
       let res = begin match fg with
         | Call (a, t) -> mk_ml_action dep_array sigs a ++ mk stop t
         | Test (tv, t1, t2, endt) ->
           let res =
             match endt with
             | None -> Schedule.find_join true t1 t2
-            | Some endt' -> endt
+            | Some _ -> endt
           in
           begin
             match res with
@@ -249,7 +251,7 @@ let grc2ml dep_array fg =
               mls @@ MLif
                 (mk_test_expr sigs tv, mk None t1, mk None t2)
           end
-        | Fork (t1, t2, sync) -> assert false
+        | Fork (_, _, _) -> assert false
         | Pause -> mls MLpause
         | Finish -> mls MLfinish
       end
@@ -316,12 +318,11 @@ module ML_optimize = struct
     let open Ast_mapper in
     let open Parsetree in
     let open Longident in
-    let open Asttypes in
     let mapper lres htbl =
       {default_mapper with
        expr = (fun mapper exp ->
            match exp with
-           | {pexp_desc = Pexp_ident {txt = Lident content; loc}}
+           | {pexp_desc = Pexp_ident {txt = Lident content}}
              when Hashtbl.mem htbl content ->
              let s, r = Hashtbl.find htbl content in
              if r then ()

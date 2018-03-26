@@ -42,15 +42,15 @@ module MList = struct
 
   let rec fold_left_single f1 f2 acc = function
     | [] -> acc
-    | h :: [] -> (f1 acc)
-    | h :: t -> fold_left_single f1 f2 (f2 acc) t
+    | _ :: [] -> (f1 acc)
+    | _ :: t -> fold_left_single f1 f2 (f2 acc) t
 
   let rec pp_iter ?(sep="") pp_element fmt = function
     | [h] -> Format.fprintf fmt "%a" pp_element h
     | h :: t -> Format.fprintf fmt "%a%s%a" pp_element h sep (pp_iter ~sep pp_element) t
     | [] -> ()
 
-  let rec pp_iter_nobreak ?(sep="") pp_element fmt = function
+  let pp_iter_nobreak ?(sep="") pp_element fmt = function
     | [h] -> Format.fprintf fmt "%a" pp_element h
     | h :: t -> Format.fprintf fmt "%a%s%a" pp_element h sep (pp_iter ~sep pp_element) t
     | [] -> ()

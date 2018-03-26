@@ -1,5 +1,11 @@
-REC
-PKG compiler-libs
-PKG ppx_tools
-PKG ppx_tools.metaquot
-
+B ../../_build/default/src/ppx/.ppx.objs
+B ../../_build/default/src/preproc/.compiler.objs
+B /home/remy/.opam/4.06.0/lib/ocaml
+B /home/remy/.opam/4.06.0/lib/ocaml/compiler-libs
+B /home/remy/.opam/4.06.0/lib/ppx_tools
+FLG -open Ppx -w @a-4-29-40-41-42-44-45-48-58-59-60-40 -strict-sequence -strict-formats -short-paths -keep-locs
+S .
+S ../preproc
+S /home/remy/.opam/4.06.0/lib/ocaml
+S /home/remy/.opam/4.06.0/lib/ocaml/compiler-libs
+S /home/remy/.opam/4.06.0/lib/ppx_tools

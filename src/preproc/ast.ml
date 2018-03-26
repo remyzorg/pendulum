@@ -1,3 +1,4 @@
+[@@@warning "-9"]
 open Utils
 
 module type Location = sig
@@ -314,7 +315,7 @@ module Make (E : Exp) = struct
     fprintf fmt "\nmachine_runs: \n";
     IdentMap.iter (fun k (cntinst, insts) ->
         fprintf fmt "  mach(%s) (%d) : " k.content cntinst;
-        List.iter (fun (int_id, args) -> fprintf fmt "%d, " int_id) insts;
+        List.iter (fun (int_id, _) -> fprintf fmt "%d, " int_id) insts;
         fprintf fmt "\n"
       ) (!(e.machine_runs));
     fprintf fmt "\n====================\n"
@@ -416,7 +417,7 @@ module Make (E : Exp) = struct
       machine_runs = ref IdentMap.empty
     }
 
-    let rec of_ast ?(sigs=[]) ?(binders=[]) pname ast =
+    let of_ast ?(sigs=[]) ?(binders=[]) pname ast =
       let id = ref 0 in
       let start_env = create_env pname sigs binders in
       let rec visit : env -> Derived.statement -> t = fun env ast ->
@@ -441,7 +442,7 @@ module Make (E : Exp) = struct
           let locals = List.map (fun x -> x.signal) env.local_only_scope in
           let typ = match s.fields with
             | [] -> No_binding
-            | l -> Access (s.sname, s.fields)
+            | _ -> Access (s.sname, s.fields)
           in
           let s' = rename ~loc env typ s.sname in
           mk_tagged (Emit {signal = s';
@@ -542,21 +543,21 @@ module Make (E : Exp) = struct
         | Nothing  -> fprintf fmt "nothing"
         | Pause  -> fprintf fmt "pause"
         | Exit (Label s) -> fprintf fmt "exit %s " s.content
-        | Atom f -> fprintf fmt "atom"
+        | Atom _ -> fprintf fmt "atom"
         | Await (s, _) -> fprintf fmt "await %s " s.ident.content
         | Run (id, sigs, _) ->
           fprintf fmt "run %s %s" id.content
             (String.concat " " @@ filter_param (fun x -> x.ident.content) sigs) 
-        | Loop st -> fprintf fmt "loop"
-        | Signal (vs, st) -> fprintf fmt "signal(%s)" vs.signal.ident.content
-        | Suspend (st, (s, _)) -> fprintf fmt "suspend %s "  s.ident.content
-        | Trap (Label s, st) -> fprintf fmt "trap %s "  s.content
+        | Loop _ -> fprintf fmt "loop"
+        | Signal (vs, _) -> fprintf fmt "signal(%s)" vs.signal.ident.content
+        | Suspend (_, (s, _)) -> fprintf fmt "suspend %s "  s.ident.content
+        | Trap (Label s, _) -> fprintf fmt "trap %s "  s.content
 
-        | Seq (st1, st2) ->
+        | Seq (_, _) ->
           fprintf fmt "seq" ;
-        | Par (st1, st2) ->
+        | Par (_, _) ->
           fprintf fmt "par" ;
-        | Present ((s, _), st1, st2) ->
+        | Present ((s, _), _, _) ->
           fprintf fmt "present %s "  s.ident.content
 
     let pp_dot fmt tagged =
@@ -603,13 +604,13 @@ module Make (E : Exp) = struct
       | Present (_,t1,t2) -> blocking t1 && blocking t2
       | Atom _ -> false
       | Signal (_,t) -> blocking t
-      | Await s -> true
+      | Await _ -> true
       | Run _ -> true
 
     let rec non_blocking t =
       let open Tagged in
       match t.st.content with
-      | Loop t -> false
+      | Loop _ -> false
       | Seq (t1,t2) -> non_blocking t1 && non_blocking t2
       | Par (t1,t2) -> non_blocking t1 && non_blocking t2
       | Emit _ -> true
@@ -621,7 +622,7 @@ module Make (E : Exp) = struct
       | Present (_,t1,t2) -> non_blocking t1 && non_blocking t2
       | Atom _ -> true
       | Signal (_,t) -> non_blocking t
-      | Await s -> false
+      | Await _  -> false
       | Run _ -> false
 
     let change t st =

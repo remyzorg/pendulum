@@ -78,8 +78,8 @@ Executable "test_ppx"
  Install: false
  CompiledObject: byte
  MainIs: test_ppx.ml
- BuildTools: ppx_pendulum
- BuildDepends: js_of_ocaml.ppx, oUnit, js_of_ocaml, pendulum
+ BuildTools: pendulum.ppx
+ BuildDepends: js_of_ocaml.ppx, oUnit, js_of_ocaml, pendulum, pendulum.ppx
 
 Executable "test_ppx_react"
  Path: tests/ppx
