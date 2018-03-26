@@ -1,0 +1,14 @@
+(jbuild_version 1)
+
+(library
+ ((name        ppx)
+  (public_name pendulum-ppx)
+  (libraries (compiler-libs.common
+              ppx_tools.metaquot
+              ; pendulum.rml_backend
+              compiler))
+  (modules (ppx_pendulum))
+  (kind ppx_rewriter)
+  (ppx_runtime_libraries (runtime))
+
+))
