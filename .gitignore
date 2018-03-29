@@ -7,4 +7,5 @@ setup.data
 *.mldylib
 *.mllib
 *.mlpack
+*.install
 src/runtime/META

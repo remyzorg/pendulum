@@ -1,3 +1,4 @@
+[@@@warning "-9"]
 
 open Ast_mapper
 open Ast_helper
@@ -38,8 +39,8 @@ let parse_and_generate options atom_mapper vb =
       (has_opt "dot") (has_opt "pdf") (has_opt "png") pname tast;
 
     let ocaml_expr =
-      if has_opt "rml" then Ast2rml.generate pname options env tast
-      else Ml2ocaml.generate pname options env tast
+      (* if has_opt "rml" then Ast2rml.generate pname options env tast else *)
+        Ml2ocaml.generate pname options env tast
     in
     if has_opt "dsource" then Format.eprintf "%a@." Pprintast.expression ocaml_expr;
     if has_opt "print_only" then gen_ast_as_ocaml e else [%expr [%e ocaml_expr]]
@@ -83,21 +84,20 @@ let tagged_signals_mapper =
      );
   }
 
-let pendulum_mapper argv =
-  let open Grc2ml in
+let pendulum_mapper _argv =
   {default_mapper with
    structure_item = try_compile_error (fun mapper stri ->
        match stri with
 
        | { pstr_desc = Pstr_extension (({ txt = "rml" }, PStr [
-           { pstr_desc = Pstr_value (Nonrecursive, vbs) }]), attrs); pstr_loc } ->
+           { pstr_desc = Pstr_value (Nonrecursive, vbs) }]), _) } ->
 
          Str.value Nonrecursive
          @@ gen_bindings (StringSet.singleton "rml")
            (tagged_signals_mapper.expr tagged_signals_mapper) vbs
 
        | { pstr_desc = Pstr_extension (({ txt = "sync" }, PStr [
-           { pstr_desc = Pstr_value (Nonrecursive, vbs) }]), attrs); pstr_loc } ->
+           { pstr_desc = Pstr_value (Nonrecursive, vbs) }]), _) } ->
 
          Str.value Nonrecursive
          @@ gen_bindings StringSet.empty
@@ -114,14 +114,14 @@ let pendulum_mapper argv =
        match exp with
        | { pexp_desc = Pexp_extension ({ txt = "sync"; loc }, e)} ->
          begin match e with
-           | PStr [{ pstr_desc = Pstr_eval (e, _); pstr_loc}] ->
+           | PStr [{ pstr_desc = Pstr_eval (e, _)}] ->
              begin match e.pexp_desc with
                | Pexp_let (Nonrecursive, vbl, e) ->
                  Exp.let_ Nonrecursive
                    (gen_bindings StringSet.empty
                       (tagged_signals_mapper.expr tagged_signals_mapper) vbl)
                  @@ mapper.expr mapper e
-               | Pexp_let (Recursive, vbl, e) ->
+               | Pexp_let (Recursive, _, _) ->
                  Error.(error ~loc Non_recursive_let)
                | _ ->
                  Error.(error ~loc Only_on_let)

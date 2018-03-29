@@ -1,10 +1,10 @@
 
+
 module Ast = Grc2ml.Ast
 
 open Ast_helper
 open Parsetree
 
-open Utils
 open Ast
 
 
@@ -19,9 +19,9 @@ let int_const i = Exp.constant (Ast_helper.Const.int i)
 let string_const s = Exp.constant (Ast_helper.Const.string s)
 
 let mk_pat_var ?t s =
-  let pvar = Pat.(Asttypes.(var @@ Location.mkloc s.content s.loc)) in
+  let pvar = Pat.((var @@ Location.mkloc s.content s.loc)) in
   match t with None -> pvar | Some t ->
-    Pat.(Asttypes.(constraint_ ~loc:s.loc pvar t))
+    Pat.((constraint_ ~loc:s.loc pvar t))
 
 let signaltype_of_type t =
   [%type: ([%t t], _) Pendulum.Signal.signal]

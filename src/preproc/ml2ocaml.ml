@@ -77,7 +77,7 @@ let mk_local_signals_definitions env e = List.fold_left (fun acc vs ->
 
 let signal_to_creation_expr init_val s =
   match s.bind with
-  | Event (e, gopt) ->
+  | Event (_e, gopt) ->
     Option.casefv gopt (fun g ->
         [%expr make_signal_gather ([%e g] :> _ * ( _ -> #Dom_html.event Js.t -> _ ))]
       ) [%expr make_event_signal [%e init_val]]
@@ -265,7 +265,7 @@ let mk_running_env debug nstmts body =
              ref 0 in [%e body]]
   else body
 
-let mk_constructor_reactfun env animate d body =
+let mk_constructor_reactfun _env animate d body =
   let reactfun = [%expr
     fun () -> try [%e body] with
       | Pause_exc -> set_absent (); Pause
@@ -286,6 +286,7 @@ let mk_constructor_reactfun env animate d body =
 let mk_createfun_outputs_expr env =
   build_tuple Exp.tuple (
     fun ?t s ->
+      let _t = t in
       let initexpr, output =
         match s.origin with
         | Output ->
@@ -302,7 +303,9 @@ let mk_createfun_outputs_expr env =
 
 let mk_createfun_inputs_expr env =
   build_tuple Exp.tuple (
-    fun ?t s -> mk_notbind env mk_ident (fun _ ->
+    fun ?t s ->
+      let _t = t in
+      mk_notbind env mk_ident (fun _ ->
         signal_to_creation_expr (mk_ident s.ident) s) s
   ) [%expr ()]
 
@@ -327,13 +330,13 @@ let mk_constructor_create_fun env =
     match inputs, outputs with
     | [], [] ->
       [%expr create_local () ()], [%expr create_local () ()]
-    | inputs, [] ->
+    | _, [] ->
       [%expr fun [%p createfun_inputs_pat] -> create_local [%e ins] ()],
       [%expr fun ins -> create_local ins ()]
-    | [], outputs ->
+    | [], _outputs ->
       [%expr fun [%p createfun_outputs_pat] -> create_local () [%e outs]],
       [%expr fun outs -> create_local]
-    | inputs, outputs ->
+    | _, _ ->
       [%expr fun [%p createfun_inputs_pat] [%p createfun_outputs_pat]
         -> create_local [%e ins] [%e outs]], [%expr create_local]
   in createfun_run_inputs_pat, createfun_run_outputs_pat,
@@ -341,7 +344,6 @@ let mk_constructor_create_fun env =
 
 
 let mk_constructor options nstmts env reactfun_body =
-  let open Tagged in
   let animate = StringSet.mem "animate" options in
   let d = StringSet.mem "debug" options in
   let mk_reactfun_let, reactfun_ident =
@@ -388,11 +390,11 @@ let rec mk_test env depl test =
   | MLboolexpr pexpr ->
     rebind_locals_let pexpr.locals pexpr.exp
   | MLfinished -> [%expr Bitset.mem [%e select_env_ident] 0]
-  | MLis_pause (MLcall (id, args, loc)) ->
+  | MLis_pause (MLcall (id, _, _)) ->
     let step_ident = {id with content = Format.sprintf "%s~step" id.content} in
     let step_eq_pause = [%expr ![%e mk_ident step_ident]#react == Pause] in
     step_eq_pause
-  | MLis_pause e -> assert false
+  | MLis_pause _ -> assert false
 
 and mk_sequence env depl mlseq =
   let open Grc2ml in
@@ -439,7 +441,7 @@ and mk_ml_ast env depl ast =
       | mlseq1, (Seqlist [] | Seq (Seqlist [], Seqlist [])) ->
         [%expr if [%e mk_test env depl test]
           then [%e mk_sequence env depl mlseq1]]
-      | (Seqlist [] | Seq (Seqlist [], Seqlist [])), mseq2 ->
+      | (Seqlist [] | Seq (Seqlist [], Seqlist [])), mlseq2 ->
         [%expr if not [%e mk_test env depl test]
           then [%e mk_sequence env depl mlseq2]]
       | _ ->
@@ -448,7 +450,7 @@ and mk_ml_ast env depl ast =
           else [%e mk_sequence env depl mlseq2]]
     end
 
-  | MLassign_machine (inst_int_id, (machine_ident, sigs, loc)) ->
+  | MLassign_machine (inst_int_id, (machine_ident, sigs, _)) ->
     let prog_ident, machine_call = mk_machine_instantiation machine_ident inst_int_id sigs in
     [%expr [%e mk_ident prog_ident] := [%e machine_call]]
 
@@ -509,7 +511,7 @@ let generate pname options env tast =
 
   let interleaved_cfg = Schedule.interleave options env flowgraph in
   let t_inter = Sys.time () -. t_check in
-  let maxid, deps = Grc2ml.deplist selection_tree in
+  let maxid, _ = Grc2ml.deplist selection_tree in
   let dep_array = Array.make (maxid + 1) [] in
   let ml_ast = Grc2ml.grc2ml dep_array interleaved_cfg in
   let t_ml = Sys.time () -. t_inter in

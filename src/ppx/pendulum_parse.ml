@@ -1,5 +1,5 @@
-open Ast_mapper
-open Ast_helper
+[@@@warning "-9"]
+
 open Asttypes
 open Parsetree
 open Longident
@@ -26,13 +26,13 @@ let check_pat_ident e =
 
 let check_signal_expr exn =
   let open Ast in function
-  | { pexp_desc = Pexp_ident {txt = Lident content; loc} } -> {loc; content}, None
+  | { pexp_desc = Pexp_ident {txt = Lident content; loc}; _ } -> {loc; content}, None
   | [%expr [%e? elt] ##
-             [%e? {pexp_desc = Pexp_ident {txt = Lident content; loc}} ]]
+             [%e? {pexp_desc = Pexp_ident {txt = Lident content; loc}; _} ]]
   | {pexp_desc = Pexp_field (elt, {txt = Lident content; loc})} ->
     check_expr_ident elt, Some {loc; content}
 
-  | [%expr [%e? elt] ## [%e? err]] ->
+  | [%expr [%e? _] ## [%e? err]] ->
     Error.(syntax_error ~loc:err.pexp_loc Event_name)
   | e -> Error.(syntax_error ~loc:e.pexp_loc exn)
 
@@ -42,20 +42,18 @@ let check_run_param exn =
   | e -> Sig_param (check_signal_expr exn e)
 
 let signal_tuple_to_list e =
-  let open Ast in
   match e with
   | { pexp_desc = Pexp_tuple exprs } -> List.map (check_run_param Error.Signal_expr) exprs
   | e -> [check_run_param Error.Run_params e]
 
-let rec check_signal_presence_expr atom_mapper e =
-  let open Ast in
+let check_signal_presence_expr atom_mapper e =
   Tuple.tr_of_db @@ match e with
   | [%expr [%e? sigexpr] & ([%e? boolexpr])] ->
     check_signal_expr Error.Signal_test sigexpr, Some (atom_mapper boolexpr)
   | e -> check_signal_expr Error.Signal_test e, None
 
 
-let rec check_signal_emit_expr acc atom_mapper e =
+let check_signal_emit_expr e =
   let open Ast in
   let rec aux acc e =
     match e with
@@ -81,7 +79,7 @@ let origin =
   ] |> StringMap.of_assoc
 
 let get_orig = function
-| { pexp_desc = Pexp_ident {txt = Lident content; loc} } ->
+| { pexp_desc = Pexp_ident {txt = Lident content} } ->
     StringMap.find content origin
   | _ -> raise Not_found
 
@@ -141,7 +139,7 @@ let ast_of_expr atom_mapper e =
 
     | [%expr emit [%e? signal] [%e? e_value]] ->
       let signal, fields =
-        match check_signal_emit_expr [] atom_mapper signal
+        match check_signal_emit_expr signal
         with | [] -> assert false | hd :: tl -> hd, tl
       in
       Emit (Ast.mk_vid ~fields signal @@ atom_mapper e_value)
@@ -260,7 +258,7 @@ let rec parse_args options inputs exp =
 
   | [%expr fun ~print:[%p? pp_params] -> [%e? exp']] as prt_param ->
     let check_param opts = function
-      | {ppat_desc = Ppat_var {txt = content; loc}} ->
+      | {ppat_desc = Ppat_var {txt = content}} ->
         StringSet.add (match content with
             | "pdf" | "png" | "dot" -> content
             | _ -> Error.(error ~loc:prt_param.pexp_loc Wrong_argument_values)
