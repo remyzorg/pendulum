@@ -1,6 +1,10 @@
 .PHONY: default
 default: build
 
+.PHONY: test
+test: build
+	jbuilder runtest --dev -j 1 --no-buffer
+
 .PHONY: build
 build:
 	jbuilder build --dev
@@ -8,3 +12,4 @@ build:
 .PHONY: clean
 clean:
 	jbuilder clean
+

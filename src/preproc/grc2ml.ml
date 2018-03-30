@@ -2,9 +2,17 @@
 
 module Expression = struct
 
+  open Migrate_parsetree
+  open OCaml_405.Ast
+
+  let migration =
+    Versions.migrate Versions.ocaml_405 Versions.ocaml_current
+
   type t = Parsetree.expression
   type core_type = Parsetree.core_type
-  let print = Pprintast.expression
+  let print fmt (e : t) =
+    migration.copy_expression e
+    |> Pprintast.expression fmt
   module Location = Location
 end
 
@@ -269,6 +277,13 @@ let grc2ml dep_array fg =
 
 module ML_optimize = struct
 
+  open Migrate_parsetree
+  open Ast_405
+  open Ast_mapper
+  open Asttypes
+  open Longident
+
+
   let mk_enters_exits maxid = (Bitset.make maxid false, Bitset.make maxid true)
   let gather_enter_exits mlseq maxid =
     let rec aux_gather acc mlseq =
@@ -316,9 +331,6 @@ module ML_optimize = struct
     mlseq
 
   let rm_atom_deps =
-    let open Ast_mapper in
-    let open Parsetree in
-    let open Longident in
     let mapper lres htbl =
       {default_mapper with
        expr = (fun mapper exp ->

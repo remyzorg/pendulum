@@ -1,5 +1,8 @@
 [@@@warning "-9"]
 
+open Migrate_parsetree
+open Ast_405
+
 open Asttypes
 open Parsetree
 open Longident

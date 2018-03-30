@@ -10,7 +10,7 @@
     compiler
   ))
   (kind ppx_rewriter)
-  (preprocess (pps (ppx_tools_versioned.metaquot_406)))
-  (ppx_runtime_libraries (runtime))
+  (preprocess (pps (ppx_tools_versioned.metaquot_405)))
+  (ppx_runtime_libraries (pendulum))
 
 ))

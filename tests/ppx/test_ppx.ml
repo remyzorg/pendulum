@@ -4,8 +4,6 @@ open Pendulum.Runtime_ast
 
 open Js_events_test
 
-
-
 let test_loop_pause ctx =
   let%sync ast ~ast = loop begin pause end
   in assert_equal ast (loop [pause])

@@ -1,7 +1,7 @@
 (jbuild_version 1)
 
 (library
- ((name        runtime)
+ ((name        pendulum)
   (public_name pendulum-lib)
 ))
 

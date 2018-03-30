@@ -1,16 +1,22 @@
 [@@@warning "-9"]
 
+open Migrate_parsetree
+open Ast_405
+
 open Ast_mapper
 open Ast_helper
 open Asttypes
-open Parsetree
 open Longident
+
+open Parsetree
 
 open Compiler
 open Compiler.Utils
 
 module Ast = Ml2ocaml.Ast
 
+let migration =
+  Versions.migrate Versions.ocaml_405 Versions.ocaml_current
 
 let parse_and_generate options atom_mapper vb =
   Ast.set_dummy_loc vb.pvb_loc;
@@ -42,7 +48,11 @@ let parse_and_generate options atom_mapper vb =
       (* if has_opt "rml" then Ast2rml.generate pname options env tast else *)
         Ml2ocaml.generate pname options env tast
     in
-    if has_opt "dsource" then Format.eprintf "%a@." Pprintast.expression ocaml_expr;
+    let print fmt e =
+      migration.copy_expression e
+      |> Pprintast.expression fmt
+    in
+    if has_opt "dsource" then Format.eprintf "%a@." print ocaml_expr;
     if has_opt "print_only" then gen_ast_as_ocaml e else [%expr [%e ocaml_expr]]
 
 
@@ -84,7 +94,7 @@ let tagged_signals_mapper =
      );
   }
 
-let pendulum_mapper _argv =
+let pendulum_mapper _config _cookies =
   {default_mapper with
    structure_item = try_compile_error (fun mapper stri ->
        match stri with
@@ -133,4 +143,6 @@ let pendulum_mapper _argv =
   }
 
 let () =
-  register "pendulum" pendulum_mapper
+  Driver.register ~name:"pendulum" ~args:[] Versions.ocaml_405
+    pendulum_mapper
+    (* register "pendulum" pendulum_mapper *)

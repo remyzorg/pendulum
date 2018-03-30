@@ -1,3 +1,6 @@
+[@@@warning "-27"]
+[@@@warning "-32"]
+[@@@warning "-33"]
 
 open Pendulum
 open Program

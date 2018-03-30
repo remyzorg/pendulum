@@ -7,6 +7,9 @@ module Selection_tree = Grc2ml.Selection_tree
 module Schedule = Grc2ml.Schedule
 module Of_ast = Grc2ml.Of_ast
 
+open Migrate_parsetree
+open Ast_405
+
 open Ast_helper
 open Parsetree
 open Utils

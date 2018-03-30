@@ -5,7 +5,7 @@ B /home/remy/.opam/4.06.0/lib/ocaml/compiler-libs
 B /home/remy/.opam/4.06.0/lib/ppx_tools_versioned
 B /home/remy/.opam/4.06.0/lib/result
 FLG -open Compiler -w @a-4-29-40-41-42-44-45-48-58-59-60-40 -strict-sequence -strict-formats -short-paths -keep-locs
-FLG -ppx '/home/remy/dev/pendulum/_build/default/.ppx/ppx_tools_versioned.metaquot_406/ppx.exe --as-ppx --cookie '\''library-name="compiler"'\'''
+FLG -ppx '/home/remy/dev/pendulum/_build/default/.ppx/ppx_tools_versioned.metaquot_405/ppx.exe --as-ppx --cookie '\''library-name="compiler"'\'''
 S .
 S /home/remy/.opam/4.06.0/lib/ocaml
 S /home/remy/.opam/4.06.0/lib/ocaml-migrate-parsetree
