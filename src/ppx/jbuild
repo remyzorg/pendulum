@@ -7,10 +7,10 @@
     compiler-libs.common
     ppx_tools_versioned
     ocaml-migrate-parsetree
-    compiler
+    pendulum-compiler
   ))
   (kind ppx_rewriter)
   (preprocess (pps (ppx_tools_versioned.metaquot_405)))
-  (ppx_runtime_libraries (pendulum))
+  (ppx_runtime_libraries (pendulum-lib))
 
 ))

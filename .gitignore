@@ -9,3 +9,5 @@ setup.data
 *.mlpack
 *.install
 src/runtime/META
+
+tests/ppx/.merlin
