@@ -1,6 +1,10 @@
+[@@@warning "-27"]
+[@@@warning "-32"]
+[@@@warning "-33"]
 
 open Pendulum.Runtime_ast
 
+let dummyatom () = Format.printf "Hello\n"
 
 let%sync basic =
   input elt;
@@ -17,37 +21,127 @@ let%sync basic =
   end
 
 
+let%sync emit_basic elt elt2 =
+  input (elt3 : int);
+  loop begin
+    present elt##onmouseover
+      (emit elt2##.textContent (Js.string "lol"));
+    pause
+  end
+  ||
+  loop begin
+    present elt##onmouseover
+      (emit elt2##.textContent (Js.string "lol"));
+    pause
+  end
 
-let%sync emit_basic =
-  input elt;
-  input elt2;
+let%sync reactive_player =
+  input a;
+  input b;
+  loop (
+    present a !(dummyatom ());
+    pause
+  )
+  ||
+  loop (
+    present b (emit a (not !!a));
+    pause
+  )
+  ||
+  loop pause
+
+let%sync test_animate ~animate =
+  input btn;
+  let loca = Dom_html.(createDiv document) in
+  let localol = 0 in
+  loop begin
+    present btn##onclick !(
+      let newitem = Dom_html.(createButton document) in
+      (newitem##.onclick) :=
+        (Dom_html.handler
+           (fun ev  ->
+              set_present_value localol (!!localol + 1);
+              animate ();
+              Js._true));
+    );
+    pause
+  end
+
+let%sync reactive_player =
+  input play_pause;
+  input progress_bar;
+  input media;
+  input time_a;
+
+  let no_update = () in
+  let state = Js.to_bool media##.paused in
+  loop (
+    present media##onplay !(dummyatom ()); pause)
+  || loop (present play_pause##onclick (emit state (not !!state)); pause)
+  || loop (present state !(dummyatom ()); pause)
+  || loop (
+    await progress_bar##onmousedown;
+    trap t' (loop (
+        emit no_update ();
+        present progress_bar##onmouseup
+          (!(dummyatom ()); exit t');
+        pause)
+      ); pause)
+  || loop (
+    present media##onprogress (
+      present no_update nothing !(dummyatom ())
+      ||
+      !(dummyatom ())
+    ); pause)
+
+
+let%sync mouse_react  =
+  input span {
+    onclick = 0, (fun acc ev -> acc + 1);
+  };
+  input w {
+    onmousemove = "", fun x ev ->
+        Format.sprintf "%d,%d" ev##.clientX ev##.clientY;
+  };
 
   loop begin
-    present elt2##onmouseover
-      (emit elt2##.value##.textcontent (Js.string "lol"));
+    present w##onmousemove (
+      emit span##.textContent
+        Js.(some (string !!(w##onmousemove)))
+    ); pause
+  end
+
+
+let%sync mouse_react =
+  input span {
+    onclick = 0, (fun acc ev -> acc + 1);
+  };
+
+  loop begin
     pause
   end
 
 
-let%sync instant_abs =
-  input a;
-  signal b begin
-    signal w begin
-      loop begin
-        present a##click begin
-          present b nothing begin
-            emit w
-          end
-        end;
-        pause
-      end
-      ||
-      loop begin
-        present w
-          (atom (write state)) (* side effect *)
-      end
-    end
-  end
+
+(* let%sync instant_abs =
+ *   input a;
+ *   signal b begin
+ *     signal w begin
+ *       loop begin
+ *         present a##click begin
+ *           present b nothing begin
+ *             emit w
+ *           end
+ *         end;
+ *         pause
+ *       end
+ *       ||
+ *       loop begin
+ *         present w
+ *           (atom (write state)) (\* side effect *\)
+ *       end
+ *     end
+ *   end *)
 
 
 

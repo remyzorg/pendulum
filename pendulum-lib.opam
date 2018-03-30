@@ -1,0 +1,17 @@
+
+opam-version: "1.2"
+name: "pendulum"
+version: "dev"
+maintainer: "Rémy El Sibaie <remy.el-sibaie@lip6.fr>"
+authors: "Rémy El Sibaie <remy.el-sibaie@lip6.fr>"
+homepage: "http://github.com/remyzorg/pendulum"
+bug-reports: "http://github.com/remyzorg/pendulum/issues"
+dev-repo: "https://github.com/remyzorg/pendulum.git"
+
+depends: [
+  "jbuilder"
+  "ppx_tools"
+]
+build: [
+  ["jbuilder" "build" "-p" name "-j" jobs]
+]

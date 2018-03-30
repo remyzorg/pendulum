@@ -1,0 +1,16 @@
+(jbuild_version 1)
+
+(executable
+ ((name test_ppx)
+  (libraries (oUnit ppx pendulum react))
+  (preprocess (pps (ppx)))
+))
+
+(alias
+ ((name runtest)
+  (action (run ./test_ppx.exe))))
+
+; (alias
+;  ((name runtest)
+;   (package lwt_react)
+;   (action (run ${exe:main.exe}))))

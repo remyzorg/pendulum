@@ -1,5 +1,4 @@
 
-open Ast
 open Utils
 
 
@@ -39,8 +38,6 @@ module Selection_tree = struct
       | Excl of t list
       | Ref of t
 
-    let none = {label = 0; t = Excl []; tested = false}
-
     let mk_tree stt id = {
       t = stt;
       label = id;
@@ -61,7 +58,7 @@ module Selection_tree = struct
         | Suspend (st, _) -> mk_tree (Ref (visit st)) tagged.id
         | Signal (_, st) -> mk_tree (Ref (visit st)) tagged.id
         | Trap (_, st) -> mk_tree (Ref (visit st)) tagged.id
-        | Await s -> mk_tree Pause tagged.id
+        | Await _ -> mk_tree Pause tagged.id
       in
       visit ast
 
@@ -194,7 +191,7 @@ module Flowgraph = struct
     module Fgtblid = Hashtbl.Make(struct
         type t = int * flowgraph
         let hash = Hashtbl.hash
-        let equal (id, fg) (id', fg') = id = id && fg == fg'
+        let equal (id, fg) (_, fg') = id = id && fg == fg'
       end)
 
     module Grctbl = Hashtbl.Make(struct
@@ -265,12 +262,12 @@ module Flowgraph = struct
 
     let parents ph fg =
       let parents parents fg = match fg with
-        | Call (a, child) ->
+        | Call (_, child) ->
           add_parent ph child fg; parents child
-        | Test (test_value, then_br, else_br, end_fg_opt) ->
+        | Test (_, then_br, else_br, _) ->
           add_parent ph then_br fg; add_parent ph else_br fg;
           parents then_br; parents else_br
-        | Fork (lfg, rfg, sync_fg) ->
+        | Fork (lfg, rfg, _) ->
           add_parent ph lfg fg;
           add_parent ph rfg fg;
           parents lfg; parents rfg
@@ -299,7 +296,7 @@ module Flowgraph = struct
             begin match get_parents env child with
               | [parent] when fg == parent ->
                 Call (Compressed (a, a'), next_child)
-              | l ->
+              | _ ->
                 Call (a, child_comp)
             end
           | _ -> Call (a, child_comp)
@@ -322,7 +319,7 @@ module Flowgraph = struct
     let pp_test_value_dot fmt tv =
       Format.(begin
           match tv with
-          | Signal (s, exp) ->
+          | Signal (s, _) ->
             fprintf fmt "%a"
             Dot_pp.(font blue (fun fmt x -> fprintf fmt "%s ?" x)) s.ident.content
           | Selection i -> fprintf fmt "%d ?" i
@@ -338,7 +335,7 @@ module Flowgraph = struct
       | Emit vs ->
         fprintf fmt "%a"
           (font blue (bold str)) vs.signal.ident.content
-      | Atom e -> fprintf fmt "atom"
+      | Atom _ -> fprintf fmt "atom"
       | Enter i -> fprintf fmt "%a" (bold @@ font darkgreen int) i
       | Exit i -> fprintf fmt "%a" (bold @@ font red int) i
       | Instantiate_run (id, _, _) ->
@@ -374,7 +371,7 @@ module Flowgraph = struct
       Format.(
           match a with
           | Emit vs -> fprintf fmt "Emit %s" vs.signal.ident.content
-          | Atom e -> fprintf fmt "Atom"
+          | Atom _ -> fprintf fmt "Atom"
           | Enter i -> fprintf fmt "Enter %d" i
           | Exit i -> fprintf fmt "Exit %d" i
           | Instantiate_run (id, _, _) -> fprintf fmt "Instantiate_run %s" id.content
@@ -382,7 +379,7 @@ module Flowgraph = struct
           | Compressed (a, a') -> fprintf fmt "%a; %a" pp_action a pp_action a'
       )
 
-    let rec pp fmt t =
+    let pp fmt t =
       let rec aux lvl fmt t =
         let indent = String.init lvl (fun _ -> ' ') in
         let open Format in
@@ -406,11 +403,11 @@ module Flowgraph = struct
     let rec pp_head fmt t =
       let open Format in
       match t with
-      | Call (a, t) ->
+      | Call (a, _) ->
         fprintf fmt "Call([%a],_)" pp_action a
-      | Test(Sync (i1, i2), t1, t2, _) ->
+      | Test(Sync (i1, i2), _, _, _) ->
         fprintf fmt "Sync((%d, %d),_,_)" i1 i2
-      | Test (tv, t1, t2, _) ->
+      | Test (tv, _, _, _) ->
         fprintf fmt "Test(%a,_,_) " pp_test_value tv
       | Fork (t1, t2, _) ->
         fprintf fmt "Fork(%a, %a)" pp_head t1 pp_head t2
@@ -418,7 +415,7 @@ module Flowgraph = struct
       | Finish -> fprintf fmt "Finish"
 
     let style_of_node = function
-      | Call (a, _) -> "shape=oval "
+      | Call (_, _) -> "shape=oval "
       | Test (Sync _, _, _, _) -> "shape=invtrapezium"
       | Test _ -> "shape=box, "
       | Finish -> ", fontcolor=red, "
@@ -433,7 +430,7 @@ module Flowgraph = struct
         try Fgtbl.find h fg with
         | Not_found ->
           let id = begin match fg with
-            | Call (action, t) ->
+            | Call (_, t) ->
               let my_id = id () in
               fprintf fmt "N%d [%slabel=<%a>]; @\n" my_id (style_of_node fg) pp_dot fg;
               let fg_id = visit t in
@@ -451,7 +448,7 @@ module Flowgraph = struct
               my_id
           end in Fgtbl.add h fg id; id
 
-      and print_branches_to_dot fmt shape fg t1 t2 end_br =
+      and print_branches_to_dot fmt shape fg t1 t2 _ =
         let open Format in
         let my_id = id () in
         fprintf fmt "N%d [%s label=<%a>]; @\n" my_id (style_of_node fg) pp_dot fg;
@@ -477,11 +474,11 @@ module Flowgraph = struct
       fprintf fmt "Error: %a @\n" (fun fmt e ->
         begin match e with
           | Unbound_label s -> fprintf fmt "unbound label %s" s
-          | Cyclic_causality (fg, sigs) ->
+          | Cyclic_causality (_, sigs) ->
             fprintf fmt "Cyclic causality on [%a]"
               (MList.pp_iter ~sep:"; "
                  (fun fmt s -> fprintf fmt "%s" s.ident.content)) sigs
-          | Par_leads_to_finish fg ->
+          | Par_leads_to_finish _ ->
             fprintf fmt "Parallel leads to pause or exit"
           | Invariant_violation (fg, err) ->
             fprintf fmt "An invariant is broken. %s. %a" err pp fg
@@ -527,9 +524,6 @@ module Of_ast = struct
       parents : (Fg.t list) Fg.Fgtbl.t
     }
 
-    let get_parents parents fg =
-      try Fg.Fgtbl.find parents fg with Not_found -> []
-
     let add_parent parents_tbl fg parent =
       let parents =
         try Fg.Fgtbl.find parents_tbl fg with Not_found -> []
@@ -566,7 +560,6 @@ module Of_ast = struct
     *)
 
     let memo_rec_build h f =
-      let open Tagged in
       let rec g env x p e =
         try Fg.Grctbl.find h (x, p, e) with
         | Not_found ->
@@ -576,7 +569,7 @@ module Of_ast = struct
 
 
     (** See the compiling rules in documentation *)
-    let surface options h =
+    let surface _o h =
       let open Tagged in let open Fg in
       let surface surface env p pause endp =
         match p.st.content with
@@ -657,7 +650,7 @@ module Of_ast = struct
       in
       memo_rec_build h surface
 
-    let depth options h surface =
+    let depth _o h surface =
       let open Tagged in let open Fg in
       let depth depth env p pause endp =
         match p.st.content with
@@ -668,7 +661,7 @@ module Of_ast = struct
 
         | Pause -> call env (Exit p.id) endp
 
-        | Await (s, atopt) ->
+        | Await (_, _) ->
           begin match surface env p pause endp with
             | Call (_, fg) -> fg
             | _ -> assert false
@@ -705,7 +698,7 @@ module Of_ast = struct
               None
             ), syn)
 
-        | Present (s, q, r) ->
+        | Present (_, q, r) ->
           let end_pres = exit_node env p endp in
           if Ast.Analysis.non_blocking q then
             depth env r pause end_pres
@@ -720,7 +713,7 @@ module Of_ast = struct
           let endrun = exit_node env p endp in
           test_node env (Is_paused (id, sigs, loc)) (pause, endrun, None)
 
-        | Signal (s,q) ->
+        | Signal (_, q) ->
           depth env q pause @@ exit_node env p endp
         | Suspend (q, (s, atopt)) ->
           test_node env (Signal (s, atopt)) (
@@ -737,7 +730,7 @@ module Of_ast = struct
 
 
 
-    let flowgraph astenv options p =
+    let flowgraph _env options p =
       let open Fg in
       let open Tagged in
       let env = {
@@ -822,7 +815,7 @@ module Schedule = struct
 
     let check_causality_cycles grc =
       let open Ast.SignalMap in
-      let st, fg = grc in
+      let _, fg = grc in
       let rec visit m fg =
         match fg with
         | Test (Signal (s, _), t1, t2, _) ->
@@ -830,7 +823,7 @@ module Schedule = struct
           let m' = add s (fg :: prev) m in
           let m1 = visit m t1 in
           let m2 = visit m' t2 in
-          merge (fun k v1 v2 ->
+          merge (fun _ v1 v2 ->
               match v1, v2 with
               | Some v1, Some v2 -> Some (v1 @ v2)
               | Some v, None | None, Some v -> Some v
@@ -840,22 +833,22 @@ module Schedule = struct
         | Fork (t1, t2, _) | Test (Sync _, t1, t2, _) ->
           let m1 = visit m t1 in
           let m2 = visit m t2 in
-          merge (fun k v1 v2 ->
+          merge (fun _ v1 v2 ->
               match v1, v2 with
               | Some v1, Some v2 -> Some (v1 @ v2)
               | Some v, None | None, Some v -> Some v
               | _ -> None
             ) m1 m2
 
-        | Call(Emit s, t) ->
+        | Call(Emit s, _) ->
           begin match find s.signal m with
-            | h :: fgs ->
+            | h :: _ ->
               Fg.(error ~loc:s.signal.ident.loc @@ Cyclic_causality (h, [s.signal]))
             | [] -> m
             | exception Not_found -> m
           end
         | Call (Instantiate_run _, _) -> assert false (* TODO *)
-        | Test (Is_paused _, t1, t2, _) -> assert false (* TODO *)
+        | Test (Is_paused _, _, _, _) -> assert false (* TODO *)
         | _ -> m
       in
       visit empty fg
@@ -867,9 +860,9 @@ module Schedule = struct
       let rec aux fg =
         match fg with
         | Call (_, t) -> aux t
-        | Test (Selection i, t1, t2, _) ->
+        | Test (Selection i, _, _, _) ->
           lr := i :: !lr
-        | Test (Sync (i1, i2) , t1, t2, _) ->
+        | Test (Sync (i1, i2) , _, _, _) ->
           lr := i1 :: i2 :: !lr
         | Test (_, t1, t2, _) | Fork (t1, t2, _)  ->
           aux t1; aux t2
@@ -886,11 +879,11 @@ module Schedule = struct
       aux fg; aux_sel sel
 
 
-    let emits options fg stop s =
+    let emits _o fg stop s =
       let aux aux (fg, stop, (s : Ast.signal)) =
         match fg with
         | fg when fg = stop -> false
-        | Call (act, t) when Fg.emits s act -> true
+        | Call (act, _) when Fg.emits s act -> true
 
         | Call (Instantiate_run (_, sigs, _) , t) ->
           List.exists (fun s' -> s.ident.content = s'.ident.content)
@@ -932,7 +925,7 @@ module Schedule = struct
           fold_set (union emits1 emits2) sigs, fold_set (union tests1 tests2) sigs
 
         | Call (_, t) -> aux (t, stop)
-        | Test (Signal (s, atopt), t1, t2, _) ->
+        | Test (Signal (s, _), t1, t2, _) ->
           let emits1, tests1 = aux (t1, stop) in
           let emits2, tests2 = aux (t2, stop) in
           union emits1 emits2, add s (union tests1 tests2)
@@ -967,7 +960,7 @@ module Schedule = struct
           if nofinish && (fg == Pause || fg == Finish) then None
           else Some fg
         else match fg with
-          | Call (a, t) -> aux (t, elt)
+          | Call (_, t) -> aux (t, elt)
 
           | Test (Sync _, t1, t2, _)  ->
             begin match stop with
@@ -985,7 +978,7 @@ module Schedule = struct
       let aux aux (fg, elt) =
         if fg == elt then true, replf fg
         else match fg with
-          | Call (a, t) ->
+          | Call (_, t) ->
             let res, t' = aux (t, elt) in
             let t = if res then t' else t in
             res, children fg t t
@@ -1001,7 +994,7 @@ module Schedule = struct
     let rec find_join nopause fg1 fg2 =
       Option.mapn (find nopause fg2 fg1) begin fun () ->
         match fg1 with
-        | Call(a, t) -> find_join nopause fg2 t
+        | Call(_, t) -> find_join nopause fg2 t
         | Test (_, t1, t2, _) | Fork (t1, t2, _) ->
           begin match (find_join nopause fg2 t1), (find_join nopause fg2 t2) with
           | Some v1, Some v2 when v1 == v2 && v1 <> Pause && v1 <> Finish -> Some v1
@@ -1012,7 +1005,7 @@ module Schedule = struct
 
 
     let rec replace_join fg1 fg2 replf =
-      let rec aux aux (fg1, fg2) =
+      let aux aux (fg1, fg2) =
         let res, fg2' = find_and_replace replf fg2 fg1 in
         if res then replf fg1, fg2'
         else
@@ -1033,84 +1026,54 @@ module Schedule = struct
       in memo_rec (module Fgtbl2) aux (fg1, fg2)
 
 
-    (* type action = *)
-    (*   | Emit of valued_signal *)
-    (*   | Atom of atom *)
-    (*   | Enter of int *)
-    (*   | Exit of int *)
-    (*   | Local_signal of valued_signal *)
-    (*   | Instantiate_run of ident * signal run_param list * loc *)
-    (*   | Compressed of action * action *)
-
-    (* type test_value = *)
-    (*   | Signal of signal * atom option *)
-    (*   | Selection of int *)
-    (*   | Sync of (int * int) *)
-    (*   | Is_paused of ident * signal run_param list * loc *)
-    (*   | Finished *)
-
-    (* type t = *)
-    (*   | Call of action * t *)
-    (*   | Test of test_value * t * t * t option (\* then * else * join_value *\) *)
-    (*   | Fork of t * t * t (\* left * right * sync *\) *)
-    (*   | Pause *)
-    (*   | Finish *)
-
-    type flowgraph_heap =
-      | FHleaf of Fg.t
-      | FHnode of Fg.t * flowgraph_heap * flowgraph_heap
-
-
-    let context_interleaving options env fg1 (tv1, l1, r1) fg2 (tv2, l2, r2) =
-      assert false
-
-    let inner_interleave options env fork_tbl =
-      let rec interleave (stop: Fg.t) fg1 fg2 =
-        try Fgtbl2.find fork_tbl (fg1, fg2) with | Not_found ->
-        try Fgtbl2.find fork_tbl (fg2, fg1) with | Not_found ->
-          let fg = match fg1, fg2 with
-            | fg1, fg2 when eq_fork_id fg1 stop -> fg2
-            | fg1, fg2 when eq_fork_id fg2 stop -> fg1
-            | Call (action, t), fg | fg, Call (action, t) ->
-              Call (action, interleave stop fg t)
-            | Test (tv1, l1, r1, _), Test (tv2, l2, r2, _) ->
-              interleave_test stop fg1 (tv1, l1, r1) fg2 (tv2, l2, r2)
-            | Fork _, fg | fg, Fork _ ->
-              (* Impossible by construction *)
-              Fg.error ~loc:Ast.Tagged.(env.pname.loc)
-                (Invariant_violation (fg, "Fork reached while interleaving"))
-            | (Finish | Pause), fg | fg, (Finish | Pause) ->
-              (* Impossible by construction *)
-              Fg.error ~loc:Ast.Tagged.(env.pname.loc)
-                (Invariant_violation (fg, "Parallel leads to pause or exit"))
-          in Fgtbl2.add fork_tbl (fg1, fg2) fg; fg
-
-      and interleave_test stop fg1 (tv1, l1, r1) fg2 (tv2, l2, r2) =
-        match tv1, tv2 with
-        | Finished, tv | tv, Finished -> Fg.error ~loc:Ast.Tagged.(env.pname.loc)
-            (Invariant_violation (r2, "Finished reached from interleaving"))
-
-        | Signal (s1, _) as t1, (Signal (s2, _) as t2) ->
-          let l, r, fg, t =
-            if emits options fg1 stop s2 then
-              if emits options fg2 stop s1 then
-                Fg.(error ~loc:s1.ident.loc
-                    @@ Cyclic_causality (fg1, [s1; s2]))
-              else l1, r1, fg2, t1 else l2, r2, fg1, t2
-          in
-          let l', r' = replace_join l r (fun x -> interleave stop fg x) in
-          Test (t, l', r', None)
-
-        | Signal (s, _), tv | tv, Signal (s, _)->
-          context_interleaving options env fg1 (tv1, l1, r1) fg2 (tv2, l2, r2)
-
-
-
-        | Selection i, tv | tv, Selection i -> assert false
-        | Sync (i1, i2), tv | tv, Sync (i1, i2) -> assert false
-        | Is_paused _, tv -> assert false (* TODO *)
-
-    in interleave
+    (* let context_interleaving _o env fg1 (tv1, l1, r1) fg2 (tv2, l2, r2) =
+     *   assert false
+     * 
+     * let inner_interleave options env fork_tbl =
+     *   let rec interleave (stop: Fg.t) fg1 fg2 =
+     *     try Fgtbl2.find fork_tbl (fg1, fg2) with | Not_found ->
+     *     try Fgtbl2.find fork_tbl (fg2, fg1) with | Not_found ->
+     *       let fg = match fg1, fg2 with
+     *         | fg1, fg2 when eq_fork_id fg1 stop -> fg2
+     *         | fg1, fg2 when eq_fork_id fg2 stop -> fg1
+     *         | Call (action, t), fg | fg, Call (action, t) ->
+     *           Call (action, interleave stop fg t)
+     *         | Test (tv1, l1, r1, _), Test (tv2, l2, r2, _) ->
+     *           interleave_test stop fg1 (tv1, l1, r1) fg2 (tv2, l2, r2)
+     *         | Fork _, fg | fg, Fork _ ->
+     *           (\* Impossible by construction *\)
+     *           Fg.error ~loc:Ast.Tagged.(env.pname.loc)
+     *             (Invariant_violation (fg, "Fork reached while interleaving"))
+     *         | (Finish | Pause), fg | fg, (Finish | Pause) ->
+     *           (\* Impossible by construction *\)
+     *           Fg.error ~loc:Ast.Tagged.(env.pname.loc)
+     *             (Invariant_violation (fg, "Parallel leads to pause or exit"))
+     *       in Fgtbl2.add fork_tbl (fg1, fg2) fg; fg
+     * 
+     *   and interleave_test stop fg1 (tv1, l1, r1) fg2 (tv2, l2, r2) =
+     *     match tv1, tv2 with
+     *     | Finished, tv | tv, Finished -> Fg.error ~loc:Ast.Tagged.(env.pname.loc)
+     *         (Invariant_violation (r2, "Finished reached from interleaving"))
+     * 
+     *     | Signal (s1, _) as t1, (Signal (s2, _) as t2) ->
+     *       let l, r, fg, t =
+     *         if emits options fg1 stop s2 then
+     *           if emits options fg2 stop s1 then
+     *             Fg.(error ~loc:s1.ident.loc
+     *                 @@ Cyclic_causality (fg1, [s1; s2]))
+     *           else l1, r1, fg2, t1 else l2, r2, fg1, t2
+     *       in
+     *       let l', r' = replace_join l r (fun x -> interleave stop fg x) in
+     *       Test (t, l', r', None)
+     * 
+     *     | Signal (s, _), tv | tv, Signal (s, _)->
+     *       context_interleaving options env fg1 (tv1, l1, r1) fg2 (tv2, l2, r2)
+     * 
+     *     | Selection i, tv | tv, Selection i -> assert false
+     *     | Sync (i1, i2), tv | tv, Sync (i1, i2) -> assert false
+     *     | Is_paused _, tv -> assert false (\* TODO *\)
+     * 
+     * in interleave *)
 
     let inner_interleave options env fork_tbl =
       let rec interleave (stop: Fg.t) fg1 fg2 =
@@ -1120,8 +1083,8 @@ module Schedule = struct
             | fg1, fg2 when fork_id fg1 = fork_id stop -> fg2
             | fg1, fg2 when fork_id fg2 = fork_id stop -> fg1
 
-            | (Finish | Pause ), fg
-            | fg, (Finish | Pause) ->
+            | (Finish | Pause ), _
+            | _, (Finish | Pause) ->
               Fg.error ~loc:Ast.Tagged.(env.pname.loc) (Par_leads_to_finish fg2)
 
             | (Call (Instantiate_run _, _) as fg1), Call (action, t2)
@@ -1136,7 +1099,7 @@ module Schedule = struct
               let fg1 = interleave sync t1 t2 in
               interleave stop fg1 fg2
 
-            | Test (Signal (s, atopt), t1, t2, join), fg2 ->
+            | Test (Signal (s, _), t1, t2, _), fg2 ->
 
               (* if StringSet.mem "new_feature" options then *)
               (*   Format.eprintf "debug_grc: %a %a\n" pp_head fg1 pp_head fg2; *)
@@ -1212,29 +1175,6 @@ module Schedule = struct
       Fg.compress @@ visit fg
 
 
-    module Scheduler = struct
-
-      type state =
-        | Nop
-        | Branch of test_value * state * state
-        | Fg of Fg.t
-
-      type scheduling = { left : state; right : state }
-
-
-      let rec open_tests state =
-        match state with
-        | Fg (Test (tv, lb, rb, _)) -> Branch (tv, Fg lb, Fg rb)
-        | Nop | Fg _ -> state
-        | Branch (_, Nop, Nop) -> Nop
-        | Branch (tv, lb, rb) -> Branch (tv, open_tests lb, open_tests rb)
-
-
-    end
-
-
-
-
     module Stats = struct
 
       let size fg =
@@ -1244,8 +1184,8 @@ module Schedule = struct
           | Not_found ->
             Fgtbl.add h fg ();
             begin match fg with
-              | Call (Exit n, t) -> aux t
-              | Call (a, t) -> aux t
+              | Call (Exit _, t) -> aux t
+              | Call (_, t) -> aux t
               | Test (_, t1, t2, _) | Fork (t1, t2, _) ->
                 aux t1; aux t2
               | Pause | Finish -> ()

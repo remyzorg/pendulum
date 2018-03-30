@@ -20,7 +20,7 @@ let set_present_value s v =
   setval s v;
   s.pre <- s.value
 
-let set_default acc x = x
+let set_default _acc x = x
 
 let make_signal value = {
   value; state = Absent; pre = value;

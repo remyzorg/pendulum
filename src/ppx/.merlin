@@ -1,5 +1,0 @@
-REC
-PKG compiler-libs
-PKG ppx_tools
-PKG ppx_tools.metaquot
-

@@ -1,0 +1,12 @@
+(jbuild_version 1)
+
+(library
+ ((name        compiler)
+  (public_name pendulum-compiler)
+  (libraries (
+    compiler-libs.common unix
+    ppx_tools_versioned
+    ocaml-migrate-parsetree
+  ))
+  (preprocess (pps (ppx_tools_versioned.metaquot_405)))
+))

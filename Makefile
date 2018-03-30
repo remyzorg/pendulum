@@ -1,51 +1,29 @@
-# OASIS_START
-# DO NOT EDIT (digest: a3c674b4239234cbbe53afe090018954)
+.PHONY: default
+default: build
 
-SETUP = ocaml setup.ml
+.PHONY: test
+test: build
+	jbuilder runtest --dev -j 7 tests/ppx
+	@rm -r _build/default/tests/ppx
 
-build: setup.data
-	$(SETUP) -build $(BUILDFLAGS)
+.PHONY: testjs
+testjs: build
+	jbuilder runtest --dev -j 7 tests/ppx_js
+	@rm -r _build/default/tests/ppx_js
 
-doc: setup.data build
-	$(SETUP) -doc $(DOCFLAGS)
+.PHONY: build
+build:
+	jbuilder build --dev
 
-test: setup.data build
-	$(SETUP) -test $(TESTFLAGS)
+.PHONY: install
+install: build
+	jbuilder install
 
-all:
-	$(SETUP) -all $(ALLFLAGS)
+.PHONY: uninstall
+uninstall:
+	jbuilder uninstall
 
-install: setup.data
-	$(SETUP) -install $(INSTALLFLAGS)
-
-uninstall: setup.data
-	$(SETUP) -uninstall $(UNINSTALLFLAGS)
-
-reinstall: setup.data
-	$(SETUP) -reinstall $(REINSTALLFLAGS)
-
+.PHONY: clean
 clean:
-	$(SETUP) -clean $(CLEANFLAGS)
+	jbuilder clean
 
-distclean:
-	$(SETUP) -distclean $(DISTCLEANFLAGS)
-
-setup.data:
-	$(SETUP) -configure $(CONFIGUREFLAGS)
-
-configure:
-	$(SETUP) -configure $(CONFIGUREFLAGS)
-
-.PHONY: build doc test all install uninstall reinstall clean distclean configure
-
-# OASIS_STOP
-
-clean-test: test
-	@rm -rf _build/tests
-
-
-pdfout: build
-	./main.native
-	dot -Tpdf tagged.dot -o tagged.pdf;
-	dot -Tpdf flowgraph.dot -o flowgraph.pdf;
-	pdftk tagged.pdf flowgraph.pdf cat output out.pdf

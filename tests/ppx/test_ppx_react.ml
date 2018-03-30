@@ -1,5 +1,5 @@
 
-let%sync react_prog =
+let%sync react_prog ~dsource =
   react e1;
   loop begin
     emit e1;

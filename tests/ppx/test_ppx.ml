@@ -1,10 +1,10 @@
+[@@@warning "-27"]
+[@@@warning "-32"]
+[@@@warning "-33"]
+
 
 open OUnit
 open Pendulum.Runtime_ast
-
-open Js_events_test
-
-
 
 let test_loop_pause ctx =
   let%sync ast ~ast = loop begin pause end
