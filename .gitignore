@@ -11,3 +11,7 @@ setup.data
 src/runtime/META
 
 tests/ppx/.merlin
+src/ppx/.merlin
+src/preproc/.merlin
+src/runtime/.merlin
+
