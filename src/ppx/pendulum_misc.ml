@@ -101,13 +101,3 @@ let filename loc =
     |> chop_extension
     |> basename
   )
-
-let print_to_dot env options todot topdf topng name e =
-  if not (topng || topdf || todot) then () else
-    let pr tag f t = print_to_dot_one todot topdf topng name tag f t in
-    pr "_tagged" Ast.Tagged.pp_dot e;
-    let sel, fg = Grc2ml.Of_ast.construct env options e in
-    pr "_sel" Grc2ml.Selection_tree.print_to_dot sel;
-    pr "_fg" Grc2ml.Flowgraph.print_to_dot fg;
-    let fg = Grc2ml.Schedule.interleave options env fg in
-    pr "_interfg" Grc2ml.Flowgraph.print_to_dot fg

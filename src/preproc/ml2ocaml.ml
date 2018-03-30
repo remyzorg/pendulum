@@ -159,10 +159,39 @@ let mk_set_all_absent_definition env e =
   in
   [%expr let set_absent () = [%e absent_setters] in [%e e]]
 
+let select_env_var = Location.(mkloc select_env_name (Ast.dummy_loc ()))
+let select_env_ident = mk_ident (Ast.mk_loc select_env_name)
 
 let mk_method loc str expr =
   Asttypes.(Cf.method_ {txt = str; loc}
               Public (Cfk_concrete (Fresh, expr)))
+let mk_basic_methods env reactfun =
+    let open Ast.Tagged in
+    [   (* React *)
+      (mk_method env.pname.loc
+         api_react_function_name
+         [%expr [%e reactfun] ()])
+
+      ; (* Status *)
+      (mk_method env.pname.loc
+         api_status_function_name
+         [%expr
+           if Bitset.mem [%e select_env_ident] 0 then
+             Finish else Pause
+         ])
+      ; (* Signal status *)
+      (* let args = args_signals_list env in *)
+
+      (* List.map  *)
+
+      (* (mk_method env.pname.loc *)
+      (*    api_present_signals_function_name begin *)
+      (*    (\* env.Ast.Tagged.args_signals *\) *)
+      (*    [%expr []] *)
+      (*    end *)
+      (* ) *)
+
+    ]
 
 let pcstr_fields mk_field env reactfun =
   let open Tagged in
@@ -175,8 +204,7 @@ let pcstr_fields mk_field env reactfun =
           @@ (mk_ident @@ ident_app_str s.ident api_React_output_signal)
          ) :: acc
        | Input | Local | Output | Element -> acc
-    ) [(mk_method env.pname.loc api_react_function_name
-          [%expr [%e reactfun] ()])] env.args_signals
+    ) (mk_basic_methods env reactfun) env.args_signals
 
 let mk_program_object env reactfun =
   let mk_field_setter s = mk_method s.ident.loc s.ident.content
@@ -254,8 +282,6 @@ let mk_animate_mutex animate body =
   if not animate then body else
     [%expr let [%p mk_pat_var @@ Ast.mk_loc animated_state_var_name] = ref false in [%e body]]
 
-let select_env_var = Location.(mkloc select_env_name (Ast.dummy_loc ()))
-let select_env_ident = mk_ident (Ast.mk_loc select_env_name)
 
 let mk_running_env debug nstmts body =
   let body = [%expr
@@ -271,9 +297,9 @@ let mk_running_env debug nstmts body =
 let mk_constructor_reactfun _env animate d body =
   let reactfun = [%expr
     fun () -> try [%e body] with
-      | Pause_exc -> set_absent (); Pause
+      | Pause_exc -> set_absent ()
       | Finish_exc -> set_absent ();
-        Bitset.add [%e select_env_ident] 0; Finish] in
+        Bitset.add [%e select_env_ident] 0 ] in
   let reactfun_ident = mk_loc reactfun_name in
   let reactfun_var_expr = mk_ident reactfun_ident in
   let recparam, anim, reactfun_var =
@@ -386,8 +412,11 @@ let rec mk_test env depl test =
   match test with
   | MLsig s -> [%expr !?[%e add_deref_local s]]
   | MLselect i -> [%expr Bitset.mem [%e select_env_ident] [%e int_const i]]
-  | MLor (mlte1, mlte2) ->
-    [%expr [%e mk_test env depl mlte1 ] || [%e mk_test env depl mlte2]]
+  | MLor [] -> [%expr true]
+  | MLor (h :: mltes) ->
+    List.fold_left (fun acc mlt ->
+        [%expr [%e acc ] || [%e mk_test env depl mlt]]
+      ) (mk_test env depl h) mltes
   | MLand (mlte1, mlte2) ->
     [%expr [%e mk_test env depl mlte1 ] && [%e mk_test env depl mlte2]]
   | MLboolexpr pexpr ->
@@ -395,7 +424,8 @@ let rec mk_test env depl test =
   | MLfinished -> [%expr Bitset.mem [%e select_env_ident] 0]
   | MLis_pause (MLcall (id, _, _)) ->
     let step_ident = {id with content = Format.sprintf "%s~step" id.content} in
-    let step_eq_pause = [%expr ![%e mk_ident step_ident]#react == Pause] in
+    let step_eq_pause = [%expr ![%e mk_ident step_ident]#react;
+      ![%e mk_ident step_ident]#status == Pause] in
     step_eq_pause
   | MLis_pause _ -> assert false
 
@@ -499,40 +529,3 @@ and mk_ml_ast env depl ast =
                               | l -> Ast_helper.Exp.tuple ~loc @@
                                 List.map (fun s -> [%expr [%e handle_param s].value]) l
     in [%expr [%e mk_ident ident] [%e tuple]]
-
-
-let generate pname options env tast =
-  let t0 = Sys.time () in
-
-  let selection_tree, flowgraph as grc = Of_ast.construct env options tast in
-  let t_cons = Sys.time () -. t0 in
-
-  Schedule.tag_tested_stmts selection_tree flowgraph;
-
-  let _deps = Schedule.check_causality_cycles grc in
-  let t_check = Sys.time () -. t_cons in
-
-  let interleaved_cfg = Schedule.interleave options env flowgraph in
-  let t_inter = Sys.time () -. t_check in
-  let maxid, _ = Grc2ml.deplist selection_tree in
-  let dep_array = Array.make (maxid + 1) [] in
-  let ml_ast = Grc2ml.grc2ml dep_array interleaved_cfg in
-  let t_ml = Sys.time () -. t_inter in
-
-  if StringSet.mem "stats" options then Schedule.Stats.(
-      Format.printf "======> %s\nfg:\t%a\nfg_sched:\t%a\n"
-        pname pp flowgraph pp interleaved_cfg
-    ; Format.printf "time: cons(%f); check (%f); inter(%f); ml(%f)\n"
-        t_cons t_check t_inter t_ml
-    ; Format.printf "<======\n"
-
-    );
-
-  let ml_ast' =
-    if not @@ StringSet.mem "nooptim" options then
-      Grc2ml.ML_optimize.gather_enter_exits ml_ast maxid
-      |> Grc2ml.ML_optimize.rm_useless_let_bindings
-    else ml_ast
-  in
-  mk_constructor options maxid env @@ mk_sequence env dep_array ml_ast'
-

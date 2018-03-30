@@ -6,7 +6,7 @@ open Pendulum.Runtime_ast
 
 let dummyatom () = Format.printf "Hello\n"
 
-let%sync basic =
+let%sync basic ~dsource =
   input elt;
   input elt2;
 

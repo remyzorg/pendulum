@@ -361,47 +361,35 @@ module Controller = struct
            selected_items !!visibility));
 
     loop (
-
       present removestorage##onclick !(Storage.clean_all ())
-
       || present (keydown_item & (snd !!keydown_item = 13 || snd !!keydown_item = 27)) (
         !(View.edited_item !!tasks (fst !!keydown_item));
         emit write;
       )
-
       || present selected_items (
         emit cntleft (!!cntleft + View.select_items !!tasks !!selected_items);
         emit write
       )
-
       || present blur_item !(View.edited_item !!tasks !!blur_item)
-
       || present deleted_items (
         emit cntleft (!!cntleft - View.remove_items !!tasks !!items_ul !!deleted_items);
         emit write
       )
-
       || present dblclick_item !(View.focus_iedit !!tasks !!dblclick_item)
-
-
       || present select_all##onclick (
         emit cntleft (View.select_all !!cntleft !!tasks);
         emit write;
       )
-
       || present clear_complete##onclick (
         !(View.clear_complete !!items_ul !!tasks);
         emit cntleft (!!cntleft);
         emit write;
       )
-
       || present all##onclick (emit visibility None)
       || present completed##onclick (emit visibility (Some true))
       || present active##onclick (emit visibility (Some false))
-
       || present visibility !(View.change_visiblity !!tasks
                                 (all, completed, active) !!visibility)
-
       || present (newit##onkeydown & !!(newit##onkeydown) <> []) (
         emit cntleft
           (!!cntleft + View.create_items cnt !!tasks animate !!items_ul
@@ -410,10 +398,8 @@ module Controller = struct
         emit newit##.value (Js.string "");
         emit write;
       )
-
       || present cntleft !(View.items_left !!tasks !!itemcnt
                              !!cntleft clear_complete select_all)
-
       || present write !(Model.write !!tasks);
       pause
     )

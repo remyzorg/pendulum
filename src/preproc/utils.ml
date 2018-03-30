@@ -55,6 +55,23 @@ module MList = struct
     | h :: t -> Format.fprintf fmt "%a%s%a" pp_element h sep (pp_iter ~sep pp_element) t
     | [] -> ()
 
+  let rec iter_pairs f f' l =
+    match l with
+    | [] -> ()
+    | h :: [] -> f' h
+    | h1 :: (h2 :: _ as t) -> f h1 h2; iter_pairs f f' t
+
+
+  (* let find_remove compare elt l = *)
+  (*   let rec acc f l = match l with *)
+  (*     | [] -> acc *)
+  (*     | elt' :: l' -> *)
+  (*       if compare elt elt' = 0 then *)
+  (*         find_remove *)
+
+
+
+
 end
 
 module StringMap =struct
@@ -70,6 +87,19 @@ module StringMap =struct
 
 end
 
+
+module IntMap =struct
+  include Map.Make(struct
+    type t = int
+    let compare = compare
+  end)
+
+  let of_assoc l =
+    List.fold_left (fun acc (k, v) ->
+        add k v acc
+      ) empty l
+
+end
 
 
 module StringSet = Set.Make(struct

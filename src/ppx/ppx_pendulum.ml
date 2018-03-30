@@ -18,6 +18,62 @@ module Ast = Ml2ocaml.Ast
 let migration =
   Versions.migrate Versions.ocaml_405 Versions.ocaml_current
 
+
+let generate pname options env tast =
+  let open Ml2ocaml in
+  let t0 = Sys.time () in
+
+  let has_opt s = StringSet.mem s options in
+  let todot, topdf, topng = has_opt "dot", has_opt "pdf", has_opt "png" in
+  let pr tag f t = Pendulum_misc.print_to_dot_one todot topdf topng pname tag f t in
+  let debug_print = topng || topdf || todot in
+
+  if debug_print then pr "_tagged" Ast.Tagged.pp_dot tast;
+
+  let grcenv = Grc2ml.Flowgraph.init_grcenv () in
+  let selection_tree, flowgraph = Of_ast.construct env grcenv options tast in
+  let t_cons = Sys.time () -. t0 in
+
+  (* Print selection tree and basic fg *)
+  if debug_print then begin
+    pr "_sel" Grc2ml.Selection_tree.print_to_dot selection_tree;
+    pr "_fg" Grc2ml.Flowgraph.print_to_dot flowgraph;
+  end;
+
+  (* Check which id is tested *)
+  Schedule.tag_tested_stmts selection_tree flowgraph;
+
+  let t_check = Sys.time () -. t_cons in
+
+  (* Scheduling *)
+  let interleaved_cfg = Schedule.interleave options env grcenv flowgraph in
+
+  (* Print scheduled graph *)
+  if debug_print then pr "_interfg" Grc2ml.Flowgraph.print_to_dot interleaved_cfg;
+
+  let t_inter = Sys.time () -. t_check in
+  let maxid, _ = Grc2ml.deplist selection_tree in
+  let dep_array = Array.make (maxid + 1) [] in
+  let ml_ast = Grc2ml.grc2ml dep_array interleaved_cfg in
+  let t_ml = Sys.time () -. t_inter in
+  if StringSet.mem "stats" options then Schedule.Stats.(
+      Format.printf "======> %s\nfg:\t%a\nfg_sched:\t%a\n"
+        pname pp flowgraph pp interleaved_cfg
+    ; Format.printf "time: cons(%f); check (%f); inter(%f); ml(%f)\n"
+        t_cons t_check t_inter t_ml
+    ; Format.printf "<======\n"
+
+    );
+  let ml_ast' =
+    if not @@ StringSet.mem "nooptim" options then
+      Grc2ml.ML_optimize.gather_enter_exits ml_ast maxid
+      |> Grc2ml.ML_optimize.rm_useless_let_bindings
+    else ml_ast
+  in
+  mk_constructor options maxid env @@ mk_sequence env dep_array ml_ast'
+
+
+
 let parse_and_generate options atom_mapper vb =
   Ast.set_dummy_loc vb.pvb_loc;
   let e, options, args = Pendulum_parse.parse_args options [] vb.pvb_expr in
@@ -41,12 +97,9 @@ let parse_and_generate options atom_mapper vb =
     let ast = Pendulum_parse.ast_of_expr atom_mapper e in
     let tast, env = Ast.Tagged.of_ast ~sigs ~binders Ast.{content = pname; loc = pat.loc} ast in
     let tast = Ast.Analysis.filter_dead_trees tast in
-    Pendulum_misc.print_to_dot env (StringSet.remove "debug" options)
-      (has_opt "dot") (has_opt "pdf") (has_opt "png") pname tast;
-
     let ocaml_expr =
       (* if has_opt "rml" then Ast2rml.generate pname options env tast else *)
-        Ml2ocaml.generate pname options env tast
+        generate pname options env tast
     in
     let print fmt e =
       migration.copy_expression e
@@ -54,6 +107,10 @@ let parse_and_generate options atom_mapper vb =
     in
     if has_opt "dsource" then Format.eprintf "%a@." print ocaml_expr;
     if has_opt "print_only" then gen_ast_as_ocaml e else [%expr [%e ocaml_expr]]
+
+
+
+
 
 
 let gen_bindings options atom_mapper vbl =

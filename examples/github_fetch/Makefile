@@ -6,7 +6,7 @@ all: main.ml
 		-package re \
 		-package js_of_ocaml \
 		-package js_of_ocaml.tyxml \
-		-package cohttp.js \
+		-package cohttp-lwt-jsoo \
 		-package yojson \
 		main.byte
 	js_of_ocaml +weak.js main.byte

@@ -24,8 +24,11 @@ let compile ast =
     match ast.st.content with
     | Loop t -> [%expr rml_loop [%e compile t]]
     | Seq (t1, t2) -> [%expr rml_seq [%e compile t1] [%e compile t2]]
-    | Par (t1, t2) -> [%expr rml_par [%e compile t1] [%e compile t2]]
-
+    | Par [] -> [%expr rml_nothing]
+    | Par (h :: l) ->
+      List.fold_left
+        (fun acc t -> [%expr rml_par [%e acc] [%e compile t]])
+        (compile h) l
     | Emit vs ->
       let signal = mk_ident vs.signal.ident in
       let value = vs.svalue.exp in
@@ -39,14 +42,14 @@ let compile ast =
       let signal = mk_ident s.ident in
       [%expr rml_control' [%e signal] [%e compile t]]
 
-    | Trap (Label label, t) ->
+    | Trap (TLabel (label, _), t) ->
       [%expr
         rml_signal (fun [%p mk_pat_var label] ->
             rml_until [%e mk_ident label]
               [%e compile t]
           )]
 
-    | Exit (Label label) ->
+    | Exit (TLabel (label, _)) ->
       let signal = mk_ident label in
       [%expr rml_emit [%e signal]]
 

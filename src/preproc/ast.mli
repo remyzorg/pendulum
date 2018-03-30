@@ -51,7 +51,7 @@ module type S = sig
   type signal = {
     ident : ident; (** located signal identifier *)
     origin : signal_origin; (** denote where it's been defined. *)
-    bind : signal_binder; (** a tag used in signal expressions for a spcial usage of a signal*)
+    bind : signal_binder; (** a tag used in signal expressions for a special usage of a signal*)
     gatherer : gatherer (** gathering function *)
   }
 
@@ -126,18 +126,19 @@ module type S = sig
 
   module Tagged : sig
 
+    type tlabel = TLabel of ident * int
     type t = {id : int; st : tagged}
     and test = signal * atom option
     and tagged_ast =
       | Loop of t
       | Seq of t * t
-      | Par of t * t
+      | Par of t list
       | Emit of valued_signal
       | Nothing
       | Pause
       | Suspend of t * test
-      | Trap of label * t
-      | Exit of label
+      | Trap of tlabel * t
+      | Exit of tlabel
       | Present of test * t * t
       | Atom of atom
       | Signal of valued_signal * t
@@ -149,6 +150,7 @@ module type S = sig
    type env = {
       pname : ident;
       args_signals : (signal * core_type option) list;
+      nlabels : int ref;
       (** inputs and outputs signals *)
       labels : int IdentMap.t;
       (** scoped preemption labels *)

@@ -49,7 +49,7 @@ let remove_ident_renaming s =
 type ml_test_expr =
   | MLsig of Ast.signal
   | MLselect of int
-  | MLor of ml_test_expr * ml_test_expr
+  | MLor of ml_test_expr list
   | MLand of ml_test_expr * ml_test_expr
   | MLboolexpr of Ast.atom
   | MLfinished
@@ -76,7 +76,8 @@ let rec pp_ml_test_expr fmt = Format.(function
   | MLsig s -> fprintf fmt "present %s" s.ident.content
   | MLselect i -> fprintf fmt "select %d" i
   | MLfinished -> fprintf fmt "finished"
-  | MLor (mlt1, mlt2) -> fprintf fmt "%a || %a" pp_ml_test_expr mlt1 pp_ml_test_expr mlt2
+  | MLor l ->
+    fprintf fmt "%a" (MList.pp_iter ~sep:" || " pp_ml_test_expr) l
   | MLand (mlt1, mlt2) -> fprintf fmt "%a && %a" pp_ml_test_expr mlt1 pp_ml_test_expr mlt2
   | MLboolexpr e -> fprintf fmt "%a" Ast.printexp e.exp
   | MLis_pause mle -> fprintf fmt "%a == Pause" (pp_ml_ast 0) mle
@@ -226,7 +227,7 @@ let mk_test_expr mr tv =
   | Signal (vs, Some at) ->
     mr := SignalSet.add vs !mr; MLand (MLsig vs, MLboolexpr at)
   | Selection i -> MLselect i
-  | Sync (i1, i2) -> MLor (MLselect i1, MLselect i2)
+  | Sync (lid, _) -> MLor (List.map (fun x -> MLselect x) lid)
   | Finished -> MLfinished
   | Is_paused (id, sigs, loc) -> MLis_pause (MLcall (id, sigs, loc))
 
@@ -243,7 +244,7 @@ let grc2ml dep_array fg =
         | Test (tv, t1, t2, endt) ->
           let res =
             match endt with
-            | None -> Schedule.find_join true t1 t2
+            | None -> Schedule.find_join t1 t2
             | Some _ -> endt
           in
           begin
@@ -260,7 +261,7 @@ let grc2ml dep_array fg =
               mls @@ MLif
                 (mk_test_expr sigs tv, mk None t1, mk None t2)
           end
-        | Fork (_, _, _) -> assert false
+        | Fork (_, _) -> assert false
         | Pause -> mls MLpause
         | Finish -> mls MLfinish
       end
@@ -358,7 +359,7 @@ module ML_optimize = struct
   let rm_useless_let_bindings mlseq =
     let rec aux_rm_test texp = match texp with
       | MLboolexpr atom -> MLboolexpr (rm_atom_deps atom)
-      | MLor (texp1, texp2) -> MLor (aux_rm_test texp1, aux_rm_test texp2)
+      | MLor l -> MLor (List.map aux_rm_test l)
       | MLand (texp1, texp2) -> MLand (aux_rm_test texp1, aux_rm_test texp2)
       | texp -> texp
     and aux_rm_ml ml = match ml with

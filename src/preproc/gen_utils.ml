@@ -27,7 +27,7 @@ let mk_pat_var ?t s =
     Pat.((constraint_ ~loc:s.loc pvar t))
 
 let signaltype_of_type t =
-  [%type: ([%t t], _) Pendulum.Signal.signal]
+  [%type: ([%t t], [%t t]) Pendulum.Signal.signal]
 
 
 let mk_ident s = Exp.ident ~loc:s.loc
