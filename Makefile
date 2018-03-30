@@ -3,7 +3,11 @@ default: build
 
 .PHONY: test
 test: build
-	jbuilder runtest --dev -j 1 --no-buffer
+	jbuilder runtest --dev -j 7 tests/ppx
+
+.PHONY: testjs
+testjs: build
+	jbuilder runtest --dev -j 7 tests/ppx_js
 
 .PHONY: build
 build:

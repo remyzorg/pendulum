@@ -2,12 +2,12 @@
 
 (executable
  ((name test_ppx)
-  (libraries (ppx pendulum js_of_ocaml react))
-  (preprocess (pps (ppx js_of_ocaml.ppx)))
+  (libraries (oUnit ppx pendulum react))
+  (preprocess (pps (ppx)))
 ))
 
 (alias
- ((name   runtest)
+ ((name runtest)
   (action (run ./test_ppx.exe))))
 
 ; (alias

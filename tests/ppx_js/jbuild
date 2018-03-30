@@ -1,0 +1,13 @@
+(jbuild_version 1)
+
+(executable
+ ((name js_events_test)
+  (libraries (oUnit ppx pendulum js_of_ocaml react))
+  (preprocess (pps (ppx js_of_ocaml.ppx)))
+))
+
+
+(alias
+ ((name runtest)
+  (deps (js_events_test.bc.js))
+ ))
