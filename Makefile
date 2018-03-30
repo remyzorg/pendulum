@@ -9,6 +9,14 @@ test: build
 build:
 	jbuilder build --dev
 
+.PHONY: install
+install: build
+	jbuilder install
+
+.PHONY: uninstall
+uninstall:
+	jbuilder uninstall
+
 .PHONY: clean
 clean:
 	jbuilder clean

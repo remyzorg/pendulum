@@ -10,7 +10,6 @@ depends: [
   "jbuilder"
   "ppx_tools"
 ]
-install: [make "install"]
 build: [
   ["jbuilder" "build" "-p" name "-j" jobs]
 ]

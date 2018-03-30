@@ -7,11 +7,11 @@ authors: "Rémy El Sibaie <remy.el-sibaie@lip6.fr>"
 homepage: "http://github.com/remyzorg/pendulum"
 bug-reports: "http://github.com/remyzorg/pendulum/issues"
 dev-repo: "https://github.com/remyzorg/pendulum.git"
+
 depends: [
   "jbuilder"
   "ppx_tools"
 ]
-install: [make "install"]
 build: [
   ["jbuilder" "build" "-p" name "-j" jobs]
 ]
