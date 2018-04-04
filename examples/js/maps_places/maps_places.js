@@ -16,11 +16,12 @@ var loc_options = {
 function createMarker () {
     var myloc = new google.maps.Marker({
         clickable: false,
-        icon: new google.maps.MarkerImage(
-            '//maps.gstatic.com/mapfiles/mobile/mobileimgs2.png',
-            new google.maps.Size(22,22),
-            new google.maps.Point(0,18),
-            new google.maps.Point(11,11)),
+        icon: {
+            path: google.maps.SymbolPath.FORWARD_CLOSED_ARROW,
+            strokeColor : '#3333FF',
+            strokeWeight : 5,
+            scale: 2.5
+        },
         shadow: null,
         zIndex: 999,
         map
@@ -41,6 +42,7 @@ function refresh_current (position) {
     lng = position.coords.longitude;
 
     myloc.setPosition({lat, lng});
+    map.setCenter({lat, lng});
 
     console.log(position.coords.latitude + " ",
                 position.coords.longitude  + " ",
@@ -55,6 +57,27 @@ function refresh_error (err) {
 }
 
 
+function enableOrientationArrow() {
+
+    if (window.DeviceOrientationEvent) {
+
+        window.addEventListener('deviceorientation', function(event) {
+            var alpha = null;
+            //Check for iOS property
+            if (event.webkitCompassHeading) {
+                alpha = event.webkitCompassHeading;
+            }
+            //non iOS
+            else {
+                alpha = event.alpha;
+            }
+            var locationIcon = myloc.get('icon');
+            locationIcon.rotation = 360 - alpha;
+            myloc.set('icon', locationIcon);
+        }, false);
+    }
+}
+
 function initMap () {
     map = new google.maps.Map(document.getElementById('map'), {
         zoom: 15
@@ -67,6 +90,7 @@ function initMap () {
     navigator.geolocation.watchPosition(refresh_current, refresh_error, loc_options);
 
     init ();
+    enableOrientationArrow();
 
 }
 
@@ -114,7 +138,7 @@ function init() {
         }
         map.fitBounds(bounds);
         searchBox.set('map', map);
-        map.setZoom(Math.min(map.getZoom(),17));
+        map.setZoom(Math.min(map.getZoom(),26));
 
     });
 }
