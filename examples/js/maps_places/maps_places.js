@@ -126,15 +126,11 @@ function initMap () {
         zoom: 15
     });
     locate_btn = document.getElementById('locate');
-
     infowindow = new google.maps.InfoWindow();
     myloc = createSelfMarker ();
-
     navigator.geolocation.watchPosition(refresh_current, refresh_error, loc_options);
-
     init ();
     enableOrientationArrow();
-
     locate.addEventListener('click', function () {
         state = 'follow';
         map.setCenter({lat, lng});
