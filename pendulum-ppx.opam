@@ -8,9 +8,9 @@ bug-reports: "http://github.com/remyzorg/pendulum/issues"
 dev-repo: "https://github.com/remyzorg/pendulum.git"
 depends: [
   "jbuilder"
-  "ppx_tools"
   "pendulum-lib"
   "pendulum-compiler"
+  "ppx_tools_versioned"
 ]
 build: [
   ["jbuilder" "build" "-p" name "-j" jobs]

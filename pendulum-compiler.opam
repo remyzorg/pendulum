@@ -10,6 +10,7 @@ dev-repo: "https://github.com/remyzorg/pendulum.git"
 depends: [
   "jbuilder"
   "ppx_tools"
+  "ppx_tools_versioned"
 ]
 
 build: [
