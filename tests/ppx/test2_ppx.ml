@@ -20,17 +20,32 @@ let%sync p1 =
  *   end
  *   || loop (emit b; pause) *)
 
-let%sync incr =
-  input s;
-  input s2;
-  emit s (!!s + 1 + !!s2);
-  atom (Format.printf "%d" !!s)
+(* let%sync incr =
+ *   input s;
+ *   input s2;
+ *   emit s (!!s + 1 + !!s2);
+ *   atom (Format.printf "%d" !!s)
+ * 
+ * let%sync crazy s x =
+ *   loop (
+ *     !(Format.printf "%d" !!x)
+ *     ; pause
+ *     ) *)
 
-let%sync crazy s x =
+let%sync p loaded ~print:pdf =
+  let already_loaded = () in
   loop (
-    !(Format.printf "%d" !!x)
-    ; pause
-    )
+    present loaded (
+      pause;
+      loop (
+        emit already_loaded;
+        pause)
+    ); pause)
+  (* ||
+   * loop (present already_loaded (
+   *     !(print_endline "We don't load again")
+   *   ;pause
+   *   )) *)
 
 (* let%sync reset ~print:pdf ~animate =
  *   trap reset (

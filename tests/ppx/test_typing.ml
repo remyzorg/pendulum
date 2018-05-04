@@ -18,7 +18,7 @@ let () = p#a 10; ignore @@ p#react
 let%sync p2 = loop pause
 let _ : < react : unit; status : state> = p2#create
 let _ : < react : unit; status : state> = p2#create_run
-let%sync p2' ~dsource s = loop begin
+let%sync p2' s = loop begin
     run p2
   ; pause
   end
