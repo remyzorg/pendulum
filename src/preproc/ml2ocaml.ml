@@ -73,7 +73,8 @@ let mk_machine_instantiation machine_ident inst_int_id args =
 let mk_local_signals_definitions env e = List.fold_left (fun acc vs ->
     let atom = Grc2ml.ML_optimize.rm_atom_deps vs.svalue in
     let rebinds = rebind_locals_let atom.locals
-        [%expr ref (make_signal [%e vs.svalue.exp])]
+        [%expr ref (make_signal (Obj.magic 0))]
+        (* [%expr ref (make_signal [%e vs.svalue.exp])] *)
     in
     [%expr let [%p mk_pat_var vs.signal.ident] = [%e rebinds] in [%e acc]]
   ) e !(env.Tagged.local_only_env)
