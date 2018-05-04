@@ -1051,6 +1051,7 @@ module Schedule = struct
             (if b then pp_dline ~wr:(extract_emits_tests_sets l) () else pp_dline ()) (a, ts) ;
           f fmt l'
       in f fmt l
+    let _pp_destruct = pp_destruct
 
 (* L ← Empty list that will contain the sorted elements *)
 (* S ← Set of all nodes with no incoming edge *)
@@ -1229,32 +1230,32 @@ module Schedule = struct
 
               (* action_topological_sort env sync (List.hd visited); *)
 
-              let t0 = Unix.gettimeofday () in
-              Format.printf "Init @\n";
-
-              Format.printf "stop : %a\n" Fg.pp_head sync;
-              Format.printf "start : %a\n" Fg.pp_head (List.hd visited);
+              (* let t0 = Unix.gettimeofday () in
+               * Format.printf "Init @\n";
+               * 
+               * Format.printf "stop : %a\n" Fg.pp_head sync;
+               * Format.printf "start : %a\n" Fg.pp_head (List.hd visited); *)
 
               let destruct d = List.rev @@ destruct env sync d in
 
 
               let destructed = List.map destruct visited in
 
-              let t1 = Unix.gettimeofday () in
-              Format.printf "Destruct %f@\n" (t1 -. t0);
+              (* let t1 = Unix.gettimeofday () in
+               * Format.printf "Destruct %f@\n" (t1 -. t0); *)
               let inter_r_l = List.fold_left (interleave_lists env) [] destructed in
 
 
-              let t2 = Unix.gettimeofday () in
-              Format.printf "Interleave %f@\n" (t2 -. t1);
+              (* let t2 = Unix.gettimeofday () in
+               * Format.printf "Interleave %f@\n" (t2 -. t1);
+               * 
+               * Format.printf "%a" (MList.pp_iter ~sep:"---\n" (pp_destruct true)) destructed; *)
 
-              Format.printf "%a" (MList.pp_iter ~sep:"---\n" (pp_destruct true)) destructed;
-
-              Format.printf "----------\n%a#########\n\n" (pp_destruct false) inter_r_l;
+              (* Format.printf "----------\n%a#########\n\n" (pp_destruct false) inter_r_l; *)
 
               let r = rebuild_destruct env sync inter_r_l in
-              let t3 = Unix.gettimeofday () in
-              Format.printf "Rebuild %f@\n" (t3 -. t2);
+              (* let t3 = Unix.gettimeofday () in
+               * Format.printf "Rebuild %f@\n" (t3 -. t2); *)
               r
 
             | Pause -> Pause
