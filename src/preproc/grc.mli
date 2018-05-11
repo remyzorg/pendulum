@@ -59,6 +59,7 @@ module Flowgraph : sig
       | Atom of Ast.atom
       | Enter of int
       | Exit of int
+      | Return_code of int
       | Local_signal of Ast.valued_signal
       | Instantiate_run of Ast.ident * Ast.signal Ast.run_param list * Ast.loc
       | Compressed of action * action
@@ -66,14 +67,14 @@ module Flowgraph : sig
     type test_value =
       | Signal of Ast.signal * Ast.atom option
       | Selection of int
-      | Sync of (int list * t list Utils.IntMap.t)
+      | Sync of (int list * (t * Ast.ident) Utils.IntMap.t)
       | Is_paused of Ast.ident * Ast.signal Ast.run_param list * Ast.loc
       | Finished
 
     and t =
       | Call of action * t
       | Test of test_value * t * t * t option (* then * else *)
-      | Fork of t list * t (* left * right * sync *)
+      | Fork of t list * t
       | Pause
       | Finish
 
@@ -91,7 +92,7 @@ module Flowgraph : sig
     module TestValueSet : Set.S with type elt = test_value
 
     type env = {
-      exits : flowgraph list Utils.IntMap.t;
+      exits : (flowgraph * Ast.ident) Utils.IntMap.t;
       exit_nodes : flowgraph Fgtblid.t;
       under_suspend : bool;
       synctbl : flowgraph Synctbl.t;

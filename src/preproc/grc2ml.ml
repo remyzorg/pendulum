@@ -41,7 +41,8 @@ let remove_ident_renaming s =
   try
     let content = String.sub s.content 0 ((String.rindex s.content '~')) in
     let int = int_of_string @@
-      String.sub s.content (String.length content + 1) (String.length s.content - String.length content - 1)
+      String.sub s.content (String.length content + 1)
+        (String.length s.content - String.length content - 1)
     in
     int, Ast.({s with content})
   with Not_found -> 0, s
@@ -63,6 +64,7 @@ and ml_ast =
   | MLif of ml_test_expr * ml_sequence * ml_sequence
   | MLassign_signal of Ast.ident * ml_ast
   | MLassign_machine of int * (Ast.ident * Ast.signal Ast.run_param list * Ast.loc)
+  | MLreturn_code of int
   | MLenter of int
   | MLexit of int
   | MLenters_exits of (Bitset.t * Bitset.t)
@@ -111,6 +113,7 @@ and pp_type_ml_ast lvl fmt =
       pp_type_ml_ast lvl fmt (MLassign_signal (id, MLcall (id, sigs, loc)))
     | MLenter i -> fprintf fmt "%sEnter %d" indent i
     | MLexit i -> fprintf fmt "%sExit %d" indent i
+    | MLreturn_code i -> fprintf fmt "%sReturn_code %d" indent i
     | MLenters_exits (bs_add, bs_rem) ->
       fprintf fmt "%s Entexs (%a, %a)" indent Bitset.pp bs_add Bitset.pp bs_rem
     | MLexpr e -> fprintf fmt "%s%s" indent (asprintf "%a" Ast.printexp e.exp)
@@ -161,6 +164,7 @@ and pp_ml_ast lvl fmt =
 
     | MLenter i -> fprintf fmt "%senter %d" indent i
     | MLexit i -> fprintf fmt "%sexit %d" indent i
+    | MLreturn_code i -> fprintf fmt "%sreturn_code %d" indent i
     | MLenters_exits (bs_add, bs_rem) ->
       fprintf fmt "%s union %a, inter %a" indent Bitset.pp bs_add Bitset.pp bs_rem
     | MLexpr e -> fprintf fmt "%s%s" indent (asprintf "%a" Ast.printexp e.exp)
@@ -190,12 +194,13 @@ let rec mk_ml_action deps mr a =
   | Atom e -> mls @@ MLunitexpr e
   | Enter i -> mls @@ MLenter i
   | Exit i -> ml @@ MLexit i :: List.map (fun x -> MLexit x) deps.(i)
+  | Return_code i -> mls @@ MLreturn_code i
   | Local_signal vs -> mls @@ MLassign_signal (vs.signal.ident, MLexpr vs.svalue)
   | Instantiate_run (id, sigs, loc) ->
     let inst_int_id, machine_id = remove_ident_renaming id in
     mls @@ MLassign_machine (inst_int_id, (machine_id, sigs, loc))
   | Compressed (la, ra) ->
-    mk_ml_action deps mr la ++ mk_ml_action deps mr ra
+    Seq (mk_ml_action deps mr la, mk_ml_action deps mr ra)
 
 
 let (<::) sel l =
@@ -232,7 +237,6 @@ let mk_test_expr mr tv =
   | Is_paused (id, sigs, loc) -> MLis_pause (MLcall (id, sigs, loc))
 
 
-
 let grc2ml dep_array fg =
   let open Flowgraph in
   let tbl = Fgtbl.create 19 in
@@ -240,7 +244,7 @@ let grc2ml dep_array fg =
   let rec mk stop fg =
     let aux stop fg =
       let res = begin match fg with
-        | Call (a, t) -> mk_ml_action dep_array sigs a ++ mk stop t
+        | Call (a, t) -> Seq (mk_ml_action dep_array sigs a, mk stop t)
         | Test (tv, t1, t2, endt) ->
           let res =
             match endt with
@@ -250,13 +254,13 @@ let grc2ml dep_array fg =
           begin
             match res with
             | Some j when j <> Finish && j <> Pause ->
-              (mls @@ MLif
-                 (mk_test_expr sigs tv,
-                  mk (Some j) t1,
-                  mk (Some j) t2))
-              ++ (match stop with
-                  | Some fg' when fg' == j -> nop
-                  | _ -> mk stop j)
+              Seq (
+                mls @@ MLif
+                  (mk_test_expr sigs tv,
+                   mk (Some j) t1,
+                   mk (Some j) t2)
+              , match stop with Some fg' when fg' == j -> nop | _ -> mk stop j
+              )
             | _ ->
               mls @@ MLif
                 (mk_test_expr sigs tv, mk None t1, mk None t2)
