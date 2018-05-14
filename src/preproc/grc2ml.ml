@@ -50,6 +50,7 @@ let remove_ident_renaming s =
 type ml_test_expr =
   | MLsig of Ast.signal
   | MLselect of int
+  | MLnot_code of int
   | MLor of ml_test_expr list
   | MLand of ml_test_expr * ml_test_expr
   | MLboolexpr of Ast.atom
@@ -77,6 +78,7 @@ and ml_ast =
 let rec pp_ml_test_expr fmt = Format.(function
   | MLsig s -> fprintf fmt "present %s" s.ident.content
   | MLselect i -> fprintf fmt "select %d" i
+  | MLnot_code i -> fprintf fmt "code %d" i
   | MLfinished -> fprintf fmt "finished"
   | MLor l ->
     fprintf fmt "%a" (MList.pp_iter ~sep:" || " pp_ml_test_expr) l
@@ -235,6 +237,49 @@ let mk_test_expr mr tv =
   | Sync (lid, _) -> MLor (List.map (fun x -> MLselect x) lid)
   | Finished -> MLfinished
   | Is_paused (id, sigs, loc) -> MLis_pause (MLcall (id, sigs, loc))
+
+
+
+(* [0; 1; 2] -> *)
+
+(* let ex =
+ *   let p0 = mk None (exits) fg0 in
+ *   if not 0 then begin
+ *     let p1 = mk (Some p0) fg1 in
+ *     if not 1 then begin
+ *       let p2 = mk (Some p1) fg2 in
+ *       if not 2 then begin
+ *         if MLor [MLselect 5, MLselect 15] then
+ *           mk p2 r
+ *         else mk stop l
+ *       end; p2
+ *     end; p1
+ *   end; p0 *)
+
+let build_codes mk _sigs (lid, exits) t1 t2 stop =
+  let codes =
+    List.(sort compare @@ fst @@ split @@ IntMap.bindings exits)
+  in
+  let seq_prev prev ml = match prev with
+    | None -> ml
+    | Some prev -> Seq (ml, prev)
+  in
+  let rec iter prev l =
+    match l with
+    | [] ->
+      seq_prev prev @@ mls @@
+      MLif (MLor (List.map (fun x -> MLselect x) lid)
+           , (mk (Some stop) t1)
+           , (mk (Some prev) t2))
+    | h :: t ->
+      let p = mk (Some prev) @@ IntMap.find h exits in
+      Seq (
+        mls @@
+        MLif (MLnot_code h
+             , iter (Some p) t
+             , nop)
+      , p)
+  in iter None codes
 
 
 let grc2ml dep_array fg =

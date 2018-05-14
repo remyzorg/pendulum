@@ -431,6 +431,7 @@ let rec mk_test env depl test =
   match test with
   | MLsig s -> [%expr !?[%e add_deref_local s]]
   | MLselect i -> [%expr Bitset.mem [%e select_env_ident] [%e int_const i]]
+  | MLnot_code i -> [%expr not Bitset.mem [%e return_codes_ident] [%e int_const i]]
   | MLor [] -> [%expr true]
   | MLor (h :: mltes) ->
     List.fold_left (fun acc mlt ->

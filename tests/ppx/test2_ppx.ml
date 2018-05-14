@@ -8,16 +8,22 @@ let dummyatom () = Format.printf "Hello\n"
 
 let%sync bug_exit_par_nested ~dsource ~print:(pdf,dot) i =
   trap pouet (
-    (* trap pouet2 (
-     *   !(print_endline "Ok0")
-     *   || *)
-      (!(print_endline "Ok1");
-       loop (present i (exit pouet))
-       ||
-       (!(print_endline "Ok2"); (* exit pouet2 *))
-      )
-    (* ) *)
-  )
+    trap pouet2 (
+      trap pouet3 (
+        !(print_endline "Ok0")
+        ||
+        (
+          !(print_endline "Ok1");
+          (loop (present i (exit pouet))
+          ||
+          (!(print_endline "Ok2")); (* exit pouet2 *));
+          !(print_endline "Ok2.5")
+        )
+      );!(print_endline "Ok3")
+
+    );!(print_endline "Ok4")
+
+  ); !(print_endline "Ok5")
 
 
 (* TODO : Check never returns *)
