@@ -256,27 +256,34 @@ let mk_test_expr mr tv =
  *     end; p1
  *   end; p0 *)
 
-let build_codes mk _sigs (lid, exits) t1 t2 stop =
+let build_codes
+    (mk : Flowgraph.t option -> Flowgraph.t -> ml_sequence)
+    (lid, exits) t1 t2 stop =
+
   let codes =
     List.(sort compare @@ fst @@ split @@ IntMap.bindings exits)
   in
+  Format.printf "LOLLOLOLL %d" @@ List.length codes;
   let seq_prev prev ml = match prev with
     | None -> ml
-    | Some prev -> Seq (ml, prev)
+    | Some (_, prev) -> Seq (ml, prev)
   in
   let rec iter prev l =
     match l with
     | [] ->
       seq_prev prev @@ mls @@
       MLif (MLor (List.map (fun x -> MLselect x) lid)
-           , (mk (Some stop) t1)
-           , (mk (Some prev) t2))
+           , (mk stop t1)
+           , (mk stop t2))
     | h :: t ->
-      let p = mk (Some prev) @@ IntMap.find h exits in
+      let fg_p = fst @@ IntMap.find h exits in
+      let fg_prev : Flowgraph.t option =
+        match prev with Some (fg, _) -> Some fg | _ -> stop in
+      let p = mk fg_prev fg_p  in
       Seq (
         mls @@
         MLif (MLnot_code h
-             , iter (Some p) t
+             , iter (Some (fg_p, p)) t
              , nop)
       , p)
   in iter None codes
@@ -299,13 +306,20 @@ let grc2ml dep_array fg =
           begin
             match res with
             | Some j when j <> Finish && j <> Pause ->
-              Seq (
-                mls @@ MLif
-                  (mk_test_expr sigs tv,
-                   mk (Some j) t1,
-                   mk (Some j) t2)
-              , match stop with Some fg' when fg' == j -> nop | _ -> mk stop j
-              )
+              let last =
+                match stop with Some fg' when fg' == j -> nop | _ -> mk stop j
+              in
+              begin match tv with
+                | Sync s ->
+                  build_codes mk s t1 t2 None
+                | _ ->
+                  Seq (
+                    mls @@ MLif
+                      (mk_test_expr sigs tv,
+                       mk (Some j) t1,
+                       mk (Some j) t2)
+                  , last)
+              end
             | _ ->
               mls @@ MLif
                 (mk_test_expr sigs tv, mk None t1, mk None t2)

@@ -234,6 +234,7 @@ function init() {
         longpress = (end - start < 500) ? false : true;
     });
 
+
     google.maps.event.addListener(searchBox, 'places_changed', function() {
         searchBox.set('map', null);
 
@@ -268,4 +269,4 @@ function init() {
 
     });
 }
-// google.maps.event.addDomListener(window, 'load', init);
+ // google.maps.event.addDomListener(window, 'load', init);
