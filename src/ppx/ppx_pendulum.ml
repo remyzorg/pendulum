@@ -53,6 +53,7 @@ let generate pname options env tast =
 
   let t_inter = Sys.time () -. t_check in
   let maxid, _ = Grc2ml.deplist selection_tree in
+  let maxcode = !(env.nlabels) in
   let dep_array = Array.make (maxid + 1) [] in
   let ml_ast = Grc2ml.grc2ml dep_array interleaved_cfg in
   let t_ml = Sys.time () -. t_inter in
@@ -70,7 +71,7 @@ let generate pname options env tast =
       |> Grc2ml.ML_optimize.rm_useless_let_bindings
     else ml_ast
   in
-  mk_constructor options maxid env @@ mk_sequence env dep_array ml_ast'
+  mk_constructor options maxcode maxid env @@ mk_sequence env dep_array ml_ast'
 
 
 

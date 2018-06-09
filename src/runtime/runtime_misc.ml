@@ -17,6 +17,8 @@ module Bitset = struct
     let id = e / max_value in
     t.(id) <- (1 lsl (e mod max_value) lxor t.(id))
 
+  let remove_all t = for i = 0 to Array.length t - 1 do t.(i) <- 0 done
+
   let min_length t1 t2 =
     min (Array.length t1) (Array.length t2)
 
@@ -44,7 +46,6 @@ module Linked = struct
     mutable previous : 'a elt;
     value : 'a;
     mutable next : 'a elt;
-
   }
 
   type 'a head = Nil | Head of 'a elt

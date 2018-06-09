@@ -162,6 +162,8 @@ let mk_set_all_absent_definition env e =
 
 let select_env_var = Location.(mkloc select_env_name (Ast.dummy_loc ()))
 let select_env_ident = mk_ident (Ast.mk_loc select_env_name)
+let return_codes_var = Location.(mkloc return_codes_name (Ast.dummy_loc ()))
+let return_codes_ident = mk_ident (Ast.mk_loc return_codes_name)
 
 let mk_method loc str expr =
   Asttypes.(Cf.method_ {txt = str; loc}
@@ -284,23 +286,39 @@ let mk_animate_mutex animate body =
     [%expr let [%p mk_pat_var @@ Ast.mk_loc animated_state_var_name] = ref false in [%e body]]
 
 
-let mk_running_env debug nstmts body =
-  let body = [%expr
+let mk_running_env debug ncodes nstmts body =
+  let ret_codes e =
+    if ncodes > 0 then
+      [%expr let [%p Pat.var return_codes_var] =
+               Bitset.make [%e int_const (1 + ncodes)]
+        in [%e e ]]
+    else e
+  in
+  let body = ret_codes [%expr
     let [%p Pat.var select_env_var] =
       Bitset.make [%e int_const (1 + nstmts)]
-    in [%e body ]]
+    in
+    [%e body ]
+  ]
   in
   if debug then
     [%expr let [%p mk_pat_var @@ Ast.mk_loc debug_instant_cnt_name] =
              ref 0 in [%e body]]
   else body
 
-let mk_constructor_reactfun _env animate d body =
+let mk_constructor_reactfun animate d ncodes body =
+  let retcodes e = if ncodes > 0 then
+      [%expr Bitset.remove_all [%e return_codes_ident]; [%e e]]
+      else e
+  in
   let reactfun = [%expr
-    fun () -> try [%e body] with
-      | Pause_exc -> set_absent ()
-      | Finish_exc -> set_absent ();
-        Bitset.add [%e select_env_ident] 0 ] in
+    fun () ->
+      [%e retcodes @@
+        [%expr try [%e body] with
+          | Pause_exc -> set_absent ()
+          | Finish_exc -> set_absent ();
+            Bitset.add [%e select_env_ident] 0 ]]
+  ] in
   let reactfun_ident = mk_loc reactfun_name in
   let reactfun_var_expr = mk_ident reactfun_ident in
   let recparam, anim, reactfun_var =
@@ -373,11 +391,11 @@ let mk_constructor_create_fun env =
      createfun_expr, createfun_run_expr
 
 
-let mk_constructor options nstmts env reactfun_body =
+let mk_constructor options ncodes nstmts env reactfun_body =
   let animate = StringSet.mem "animate" options in
   let d = StringSet.mem "debug" options in
   let mk_reactfun_let, reactfun_ident =
-    mk_constructor_reactfun env animate d reactfun_body
+    mk_constructor_reactfun animate d ncodes reactfun_body
   in
   let createfun_run_inputs_pat,
       createfun_run_outputs_pat,
@@ -392,7 +410,7 @@ let mk_constructor options nstmts env reactfun_body =
     let create_local [%p createfun_run_inputs_pat]
         [%p createfun_run_outputs_pat] =
       [%e
-        mk_running_env d nstmts
+        mk_running_env d ncodes nstmts
         @@ mk_args_signals_definitions env
         @@ mk_set_all_absent_definition env
         @@ mk_machine_registers_definitions env
@@ -413,6 +431,7 @@ let rec mk_test env depl test =
   match test with
   | MLsig s -> [%expr !?[%e add_deref_local s]]
   | MLselect i -> [%expr Bitset.mem [%e select_env_ident] [%e int_const i]]
+  | MLcode i -> [%expr Bitset.mem [%e return_codes_ident] [%e int_const i]]
   | MLor [] -> [%expr true]
   | MLor (h :: mltes) ->
     List.fold_left (fun acc mlt ->
@@ -500,6 +519,11 @@ and mk_ml_ast env depl ast =
   | MLexit i ->
     [%expr Bitset.remove
         [%e select_env_ident]
+        [%e int_const i]]
+
+  | MLreturn_code i ->
+    [%expr Bitset.add
+        [%e return_codes_ident]
         [%e int_const i]]
 
   | MLenters_exits (bs_union, bs_inter as bs) ->

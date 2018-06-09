@@ -6,11 +6,43 @@ open Pendulum.Runtime_ast
 
 let dummyatom () = Format.printf "Hello\n"
 
-let%sync p1 =
-  input s;
-  let s' = !!s + 1 in
-  let s'' = !!s' + 1 in
-  (loop (pause))
+
+let%sync bug_exit_par_nested ~dsource ~print:(pdf,dot) i =
+  trap pouet (
+    trap pouet2 (
+      !(print_endline "Ok0")
+      ||
+      (!(print_endline "Ok1");
+       loop (present i (exit pouet))
+       ||
+       (!(print_endline "Ok2"); (* exit pouet2 *))
+      )
+    )
+  )
+
+
+
+(* TODO : Check never returns *)
+(* let%sync reincarnation2 o1 o2 (\* ~dsource *\) =
+ *   loop (
+ *     let s = () in
+ *     trap t (
+ *       (pause;
+ *        emit s;
+ *        exit t)
+ *       ||
+ *       loop (
+ *         present s (emit o1) (emit o2);
+ *         pause)
+ *     )
+ *   ) *)
+
+
+(* let%sync p1 =
+ *   input s;
+ *   let s' = !!s + 1 in
+ *   let s'' = !!s' + 1 in
+ *   (loop (pause)) *)
 
 (* let%sync p2 a b =
  *   loop begin
@@ -32,20 +64,22 @@ let%sync p1 =
  *     ; pause
  *     ) *)
 
-let%sync p loaded ~print:pdf =
-  let already_loaded = () in
-  loop (
-    present loaded (
-      pause;
-      loop (
-        emit already_loaded;
-        pause)
-    ); pause)
-  (* ||
-   * loop (present already_loaded (
-   *     !(print_endline "We don't load again")
-   *   ;pause
-   *   )) *)
+
+
+(* let%sync p loaded =
+ *   let already_loaded = () in
+ *   loop (
+ *     present loaded (
+ *       pause;
+ *       loop (
+ *         emit already_loaded;
+ *         pause)
+ *     ); pause)
+ *   ||
+ *   loop (present already_loaded (
+ *       !(print_endline "We don't load again")
+ *     ;pause
+ *     )) *)
 
 (* let%sync reset ~print:pdf ~animate =
  *   trap reset (
@@ -320,21 +354,6 @@ let%sync reincarnation1 o1 o2 =
  *     method create_run ins = create_local ins ()
  *   end *)
 
-(* (\* TODO : Check never returns *\)
- * let%sync reincarnation2 o1 o2 (\* ~dsource *\) =
- *   loop (
- *     let s = () in
- *     trap t (
- *       (pause;
- *        emit s;
- *        exit t)
- *       ||
- *       loop (
- *         present s (emit o1) (emit o2);
- *         pause)
- *     )
- *   ) *)
-
 (* let%sync reactive_player = *)
 (*   loop begin *)
 (*     trap t ( *)
@@ -518,7 +537,7 @@ let%sync p =
 
 
 
-let%sync test_sched2 ~print:(pdf,dot) s1 s2 s3 s4 =
+let%sync test_sched2 s1 s2 s3 s4 =
   let slol = 0 in
   (* loop begin *)
   (*   present s1 ( *)

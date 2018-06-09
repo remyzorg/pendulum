@@ -344,8 +344,9 @@ module Make (E : Exp) = struct
 
 
     let add_label env (Label s) = IdentMap.(
-        let n = !+(env.nlabels) in
-        { env with labels = add s n env.labels },
+        let n = !(env.nlabels) in
+        incr env.nlabels;
+        { env with labels = add s n env.labels},
         TLabel ({s with content = Format.sprintf "%s%d" s.content n}, n)
       )
 
