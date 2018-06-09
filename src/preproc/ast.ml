@@ -689,6 +689,72 @@ module Make (E : Exp) = struct
 
       in
       snd @@ aux t
+
+    let can_term env t =
+      let rec can_term t =
+        let open Tagged in
+        match t.st.content with
+        | Loop t -> can_term t
+        | Seq (t1,t2) -> can_term t1 && can_term t2
+        | Par ts -> List.for_all can_term ts
+        | Emit _ -> true
+        | Nothing  -> true
+        | Pause  -> false
+        | Present ((s, _), t, u) ->
+          begin match SignalMap.find s env with
+            | true -> can_term t
+            | false -> can_term u
+            | exception Not_found -> can_term t || can_term u
+          end
+        (* others *)
+        | Suspend (t,_) -> can_term t
+        | Trap (_,t) -> can_term t
+        | Exit _ -> true
+        | Atom _ -> true
+        | Signal (_,t) -> can_term t
+        | Await _  -> false
+        | Run _ -> false
+      in can_term t
+
+
+   let _causality_WIP t =
+     let open Tagged in
+     let open SignalSet in
+     let rec visit env emitted t =
+       match t.st.content with
+       | Emit s -> add s.signal emitted
+       | Nothing | Pause -> empty
+       | Par ts ->
+         List.fold_left (fun acc t ->
+             union acc @@ visit env emitted t
+           ) empty ts
+       | Seq (t, u) ->
+         if can_term env t then
+           union (visit env emitted t) (visit env emitted u)
+         else visit env emitted t
+       | Present ((s, _), t, u) ->
+         begin match SignalMap.find s env with
+           | true -> visit env emitted t
+           | false -> visit env emitted u
+           | exception Not_found ->
+             union (visit env emitted t) (visit env emitted u)
+         end
+       | Await _  -> assert false
+        (* others *)
+       | Loop t -> visit env emitted t
+       | Suspend (t,_) -> visit env emitted t
+       | Trap (_,t) -> visit env emitted t
+       | Exit _ -> empty
+       | Atom _ -> empty
+       | Signal (_,t) -> visit env emitted t
+       | Run _ -> empty
+     in
+     visit t
+
+
+
+
+
   end
 
 

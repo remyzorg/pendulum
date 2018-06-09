@@ -7,7 +7,7 @@ open Pendulum.Runtime_ast
 let dummyatom () = Format.printf "Hello\n"
 
 
-let%sync bug_exit_par_nested ~dsource ~print:(pdf,dot) i =
+let%sync bug_exit_par_nested i =
   trap pouet (
     trap pouet2 (
       !(print_endline "Ok0")
