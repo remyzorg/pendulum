@@ -98,6 +98,7 @@ module Flowgraph = struct
       | Exit of int
       | Return_code of int
       | Local_signal of Ast.valued_signal
+      | Sync_a of int list
       | Instantiate_run of Ast.ident * Ast.signal Ast.run_param list * Ast.loc
       | Compressed of action * action
 
@@ -105,6 +106,7 @@ module Flowgraph = struct
       | Signal of Ast.signal * Ast.atom option
       | Selection of int
       | Sync of (int list * (t * Ast.ident) Utils.IntMap.t)
+      | Code of int
       | Is_paused of Ast.ident * Ast.signal Ast.run_param list * Ast.loc
       | Finished
 
@@ -185,6 +187,7 @@ module Flowgraph = struct
       | Exit of int
       | Return_code of int
       | Local_signal of valued_signal
+      | Sync_a of int list
       | Instantiate_run of ident * signal run_param list * loc
       | Compressed of action * action
 
@@ -192,6 +195,7 @@ module Flowgraph = struct
       | Signal of signal * atom option
       | Selection of int
       | Sync of (int list * (t * Ast.ident) IntMap.t)
+      | Code of int
       | Is_paused of ident * signal run_param list * loc
       | Finished
 
@@ -208,7 +212,7 @@ module Flowgraph = struct
     module Fgtbl = Hashtbl.Make(struct
         type t = flowgraph
         let hash = Hashtbl.hash
-        let equal = (==)
+        let equal = (=)
       end)
 
     module Synctbl = Hashtbl.Make(struct
@@ -351,7 +355,7 @@ module Flowgraph = struct
       match act with
       | Emit vs when vs.signal.ident.content = s.ident.content -> true
       | Compressed (a1, a2) -> emits s a1 || emits s a2
-      | Atom _ | Emit _ | Enter _ | Exit _
+      | Atom _ | Emit _ | Enter _ | Exit _ | Sync_a _
       | Return_code _ | Local_signal _ | Instantiate_run _ -> false
 
     let compress ?env fg =
@@ -396,7 +400,9 @@ module Flowgraph = struct
             Dot_pp.(font blue (fun fmt x -> fprintf fmt "%s ?" x)) s.ident.content
           | Selection i -> fprintf fmt "%d ?" i
           | Finished -> fprintf fmt "finished ?"
-          | Sync (lid, _c) -> fprintf fmt "sync(%a)" (MList.pp_iter ~sep:", " Format.pp_print_int) lid
+          | Code i -> fprintf fmt "code %d" i
+          | Sync (lid, _c) ->
+            fprintf fmt "sync(%a)" (MList.pp_iter ~sep:", " Format.pp_print_int) lid
           | Is_paused (id, _, _) -> fprintf fmt "paused %s ?" id.content
         end)
 
@@ -411,6 +417,8 @@ module Flowgraph = struct
       | Enter i -> fprintf fmt "%a" (bold @@ font darkgreen int) i
       | Return_code i -> fprintf fmt "ret %d" i
       | Exit i -> fprintf fmt "%a" (bold @@ font red int) i
+      | Sync_a lid ->
+        fprintf fmt "sync_a(%a)" (MList.pp_iter ~sep:", " Format.pp_print_int) lid
       | Instantiate_run (id, _, _) ->
         fprintf fmt "instantiate %a" (font darkgreen str) id.content
       | Local_signal vs ->
@@ -434,7 +442,9 @@ module Flowgraph = struct
           | Signal (s, Some at) ->
             fprintf fmt "Signal (%s, %a) " s.ident.content printexp at.exp
           | Selection i -> fprintf fmt "Selection %d" i
-          | Sync (lid, _) -> fprintf fmt "Sync(%a)" (MList.pp_iter ~sep:", " Format.pp_print_int) lid
+          | Code i -> fprintf fmt "Code %d" i
+          | Sync (lid, _) ->
+            fprintf fmt "Sync(%a)" (MList.pp_iter ~sep:", " Format.pp_print_int) lid
           | Finished -> fprintf fmt "Finished"
           | Is_paused (id, _, _) -> fprintf fmt "Is_paused %s" id.content
         end)
@@ -446,7 +456,9 @@ module Flowgraph = struct
           | Signal (s, Some at) ->
             fprintf fmt "(%s, %a)?" s.ident.content printexp at.exp
           | Selection i -> fprintf fmt "%d" i
-          | Sync (lid, _) -> fprintf fmt "(%a)" (MList.pp_iter ~sep:", " Format.pp_print_int) lid
+          | Code i -> fprintf fmt "c%d" i
+          | Sync (lid, _) ->
+            fprintf fmt "(%a)" (MList.pp_iter ~sep:", " Format.pp_print_int) lid
           | Finished -> fprintf fmt "f"
           | Is_paused (id, _, _) -> fprintf fmt "p(%s)?" id.content
         end)
@@ -458,6 +470,8 @@ module Flowgraph = struct
           | Atom _ -> fprintf fmt "Atom"
           | Enter i -> fprintf fmt "Enter %d" i
           | Exit i -> fprintf fmt "Exit %d" i
+          | Sync_a lid -> 
+            fprintf fmt "sa(%a)" (MList.pp_iter ~sep:", " Format.pp_print_int) lid
           | Return_code i -> fprintf fmt "Return_code %d" i
           | Instantiate_run (id, _, _) -> fprintf fmt "Instantiate_run %s" id.content
           | Local_signal vs -> fprintf fmt "Local_signal %s" vs.signal.ident.content
@@ -647,6 +661,17 @@ module Of_ast = struct
     let enter_node env p next = call env (Fg.Enter p.Tagged.id) next
     let sync_node env c (t1, t2, endt) = test_node env (Fg.Sync (c)) (t1, t2, endt)
 
+    let gen_codes ({ Fg.exits; _ } as env) lid fg =
+      if not @@ IntMap.is_empty exits then
+        let l = List.sort (fun (kx, _) (ky, _) -> compare ky kx)
+          @@ IntMap.bindings exits
+        in
+        call env (Fg.Sync_a lid) @@
+        List.fold_left (fun acc (code, (ex, _)) ->
+            test_node env (Code code) (ex, acc, Some ex)
+          ) fg l
+      else fg
+
 
     (* Both surface and depth use a hashconsing function memo_rec : The result
        of S(p) and D(p) is stored in a hashtbl indexed by p where p is the
@@ -661,7 +686,6 @@ module Of_ast = struct
           let y = f g env x p e in
           Fg.Grctbl.add h (x, p, e) y; y
       in g
-
 
     (** See the compiling rules in documentation *)
     let surface _o h =
@@ -733,6 +757,7 @@ module Of_ast = struct
             with
             | Not_found ->
               let n = sync_node env (lid, env.exits) (pause, exit_node env p endp, None) in
+              let n = gen_codes env lid n in
               Synctbl.add env.synctbl lid n; n
           in
           let exits = IntMap.(fold (fun k (_, lbl) m ->
@@ -793,6 +818,7 @@ module Of_ast = struct
           let syn = try Synctbl.find env.synctbl lid with
             | Not_found ->
               let n = sync_node env (lid, env.exits) (pause, exit_node env p endp, None) in
+              let n = gen_codes env lid n in
               Synctbl.add env.synctbl lid n; n
           in
           let exits = IntMap.(fold (fun k (_, lbl) m ->

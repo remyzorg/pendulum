@@ -6,18 +6,20 @@ open Pendulum.Runtime_ast
 
 let dummyatom () = Format.printf "Hello\n"
 
+
 let%sync bug_exit_par_nested ~dsource ~print:(pdf,dot) i =
   trap pouet (
-    (* trap pouet2 (
-     *   !(print_endline "Ok0")
-     *   || *)
+    trap pouet2 (
+      !(print_endline "Ok0")
+      ||
       (!(print_endline "Ok1");
        loop (present i (exit pouet))
        ||
        (!(print_endline "Ok2"); (* exit pouet2 *))
       )
-    (* ) *)
+    )
   )
+
 
 
 (* TODO : Check never returns *)

@@ -61,6 +61,7 @@ module Flowgraph : sig
       | Exit of int
       | Return_code of int
       | Local_signal of Ast.valued_signal
+      | Sync_a of int list
       | Instantiate_run of Ast.ident * Ast.signal Ast.run_param list * Ast.loc
       | Compressed of action * action
 
@@ -68,6 +69,7 @@ module Flowgraph : sig
       | Signal of Ast.signal * Ast.atom option
       | Selection of int
       | Sync of (int list * (t * Ast.ident) Utils.IntMap.t)
+      | Code of int
       | Is_paused of Ast.ident * Ast.signal Ast.run_param list * Ast.loc
       | Finished
 

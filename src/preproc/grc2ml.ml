@@ -50,6 +50,7 @@ let remove_ident_renaming s =
 type ml_test_expr =
   | MLsig of Ast.signal
   | MLselect of int
+  | MLcode of int
   | MLor of ml_test_expr list
   | MLand of ml_test_expr * ml_test_expr
   | MLboolexpr of Ast.atom
@@ -77,6 +78,7 @@ and ml_ast =
 let rec pp_ml_test_expr fmt = Format.(function
   | MLsig s -> fprintf fmt "present %s" s.ident.content
   | MLselect i -> fprintf fmt "select %d" i
+  | MLcode i -> fprintf fmt "code %d" i
   | MLfinished -> fprintf fmt "finished"
   | MLor l ->
     fprintf fmt "%a" (MList.pp_iter ~sep:" || " pp_ml_test_expr) l
@@ -194,6 +196,7 @@ let rec mk_ml_action deps mr a =
   | Atom e -> mls @@ MLunitexpr e
   | Enter i -> mls @@ MLenter i
   | Exit i -> ml @@ MLexit i :: List.map (fun x -> MLexit x) deps.(i)
+  | Sync_a _ -> nop
   | Return_code i -> mls @@ MLreturn_code i
   | Local_signal vs -> mls @@ MLassign_signal (vs.signal.ident, MLexpr vs.svalue)
   | Instantiate_run (id, sigs, loc) ->
@@ -232,6 +235,7 @@ let mk_test_expr mr tv =
   | Signal (vs, Some at) ->
     mr := SignalSet.add vs !mr; MLand (MLsig vs, MLboolexpr at)
   | Selection i -> MLselect i
+  | Code i -> MLcode i
   | Sync (lid, _) -> MLor (List.map (fun x -> MLselect x) lid)
   | Finished -> MLfinished
   | Is_paused (id, sigs, loc) -> MLis_pause (MLcall (id, sigs, loc))
