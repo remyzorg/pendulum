@@ -96,19 +96,24 @@ which is basically the execution of a list iterator.
 
 ### with opam (easier)
 
-opam `1.2` with `switch 4.02.2` (minimum) is required
+opam `1.2` with `switch 4.05.0` (minimum) is required
 
-* `opam pin add pendulum git://github.com/remyzorg/pendulum.git`
+```
+opam pin add -y pendulum-compiler git://github.com/remyzorg/pendulum.git
+opam pin add -y pendulum-lib git://github.com/remyzorg/pendulum.git
+opam pin add -y pendulum-ppx git://github.com/remyzorg/pendulum.git
+```
 
 * an example to use pendulum as syntax extension with ocamlbuild
 
-`ocamlbuild -package pendulum -cflags "-ppx ppx_pendulum" <file-without-ext>.byte`
+`ocamlbuild -use-ocamlfind -pkgs pendulum,pendulum.ppx \ <file-without-ext>.byte`
 
 ### without opam
 
+dependencies: jbuilder, ppx_tools
+
 1. `git clone git://github.com/remyzorg/pendulum.git`
 2. `cd pendulum`
-3. `./configure`
 4. `make`
 5. `make install `
 
