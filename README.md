@@ -77,7 +77,7 @@ see [this example](examples/player) for the full code
 
 ### TodoMVC benchmark
 
-Check out [example](examples/todomvc) and the 
+Check out [example](examples/todomvc) and the
 [benchmark results](https://github.com/remyzorg/todomvc-perf-comparison)
 
 ![Sample of pendulum execution in Chrome, Fedora 19](examples/todomvc/sample.png)
@@ -87,7 +87,7 @@ Check out [example](examples/todomvc) and the
 3. Remove 100 items (one by one)
 
 The reason why it's so fast, is that adding 100 items runs between two request
-animation frames. Ids of items are gathered in signals as lists and 
+animation frames. Ids of items are gathered in signals as lists and
 the instant function just apply the action to all elements of the list
 in the following requestAnimationFrame. So it takes only one logical instant
 which is basically the execution of a list iterator.
@@ -106,7 +106,7 @@ opam pin add -y pendulum-ppx git://github.com/remyzorg/pendulum.git
 
 * an example to use pendulum as syntax extension with ocamlbuild
 
-`ocamlbuild -use-ocamlfind -pkgs pendulum,pendulum.ppx \ <file-without-ext>.byte`
+`ocamlbuild -use-ocamlfind -pkgs pendulum-lib,pendulum-ppx \ <file-without-ext>.byte`
 
 ### without opam
 
@@ -121,4 +121,3 @@ dependencies: jbuilder, ppx_tools
 ### Licensing and context
 
 This project is under MIT public license. It started in the context of UCF project.
-
