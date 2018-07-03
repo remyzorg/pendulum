@@ -14,9 +14,9 @@ let (@>) s coerce =
 
 open Dom_html
 let%sync machine =
-  input (cb : inputElement Js.t);
-  input (sub : buttonElement Js.t);
-  input (field : inputElement Js.t);
+  element (cb : inputElement Js.t);
+  element (sub : buttonElement Js.t);
+  element (field : inputElement Js.t);
   output reset;
 
   loop begin

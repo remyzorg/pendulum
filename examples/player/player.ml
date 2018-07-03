@@ -154,7 +154,7 @@ let main _ =
      Signals and _react function are implicitely triggered by the generated code
      of the program
   *)
-  reactive_player#create (play_button, progress_bar, media, time, range_value);
+  ignore @@ reactive_player#create (play_button, progress_bar, media, time, range_value);
   Js._false
 
 

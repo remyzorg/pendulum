@@ -1,7 +1,8 @@
 
 all: main.ml
 	ocamlbuild -use-ocamlfind \
-		-package pendulum -cflags "-ppx ppx_pendulum" \
+		-package pendulum-lib  \
+		-package pendulum-ppx  \
 		-package js_of_ocaml -package js_of_ocaml.ppx main.byte
 	js_of_ocaml main.byte
 

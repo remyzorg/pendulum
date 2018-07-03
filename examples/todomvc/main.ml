@@ -331,7 +331,7 @@ end
 module Controller = struct
   open Dom_html
 
-  let%sync machine ~animate ~print:pdf =
+  let%sync machine ~animate =
     input (items_ul : element Js.t);
     input (newit : inputElement Js.t) {
       onkeydown = [], fun acc ev ->
@@ -427,4 +427,3 @@ let main _ =
 
 
 let () = Dom_html.(window##.onload := handler main)
-

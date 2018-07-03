@@ -212,7 +212,7 @@ module Flowgraph = struct
     module Fgtbl = Hashtbl.Make(struct
         type t = flowgraph
         let hash = Hashtbl.hash
-        let equal = (=)
+        let equal = (==)
       end)
 
     module Synctbl = Hashtbl.Make(struct
@@ -470,7 +470,7 @@ module Flowgraph = struct
           | Atom _ -> fprintf fmt "Atom"
           | Enter i -> fprintf fmt "Enter %d" i
           | Exit i -> fprintf fmt "Exit %d" i
-          | Sync_a lid -> 
+          | Sync_a lid ->
             fprintf fmt "sa(%a)" (MList.pp_iter ~sep:", " Format.pp_print_int) lid
           | Return_code i -> fprintf fmt "Return_code %d" i
           | Instantiate_run (id, _, _) -> fprintf fmt "Instantiate_run %s" id.content
@@ -913,7 +913,7 @@ module Schedule = struct
     module St : Selection_tree.S
 
     (** The scheduling and cycle checking only happens here
-        when the flowgraph has been already built. 
+        when the flowgraph has been already built.
     *)
 
     val tag_tested_stmts : St.t -> Fg.t -> unit
@@ -1253,7 +1253,7 @@ module Schedule = struct
 
               (* let t0 = Unix.gettimeofday () in
                * Format.printf "Init @\n";
-               * 
+               *
                * Format.printf "stop : %a\n" Fg.pp_head sync;
                * Format.printf "start : %a\n" Fg.pp_head (List.hd visited); *)
 
@@ -1269,7 +1269,7 @@ module Schedule = struct
 
               (* let t2 = Unix.gettimeofday () in
                * Format.printf "Interleave %f@\n" (t2 -. t1);
-               * 
+               *
                * Format.printf "%a" (MList.pp_iter ~sep:"---\n" (pp_destruct true)) destructed; *)
 
               (* Format.printf "----------\n%a#########\n\n" (pp_destruct false) inter_r_l; *)
