@@ -6,7 +6,7 @@ all: main.ml
 		-pkgs ppx_deriving,ppx_deriving.std \
 		-pkgs pendulum-lib,pendulum-ppx \
 		main.byte
-	js_of_ocaml main.byte
+	js_of_ocaml +weak.js main.byte
 
 clean:
 	ocamlbuild -clean

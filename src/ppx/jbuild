@@ -1,7 +1,7 @@
 (jbuild_version 1)
 
 (library
- ((name        ppx)
+ ((name        pendulum_ppx)
   (public_name pendulum-ppx)
   (libraries (
     compiler-libs.common

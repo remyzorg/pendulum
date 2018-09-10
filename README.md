@@ -96,7 +96,12 @@ which is basically the execution of a list iterator.
 
 ### with opam (easier)
 
-opam `1.2` with `switch 4.05.0` (minimum) is required
+opam `1.2` with `switch 4.05.0` (minimum) 
+
+```
+sh pin.sh
+```
+
 
 ```
 opam pin add -y pendulum-compiler git://github.com/remyzorg/pendulum.git
